@@ -181,20 +181,26 @@ class DocumentProcessor:
                 page = doc[page_num]
                 text = page.get_text()
                 
-                # テキストが少ない場合はOCRを実行
-                if len(text.strip()) < 50:
+                # テキストが少ない場合やOCRが必要な場合はOCRを実行
+                if len(text.strip()) < 100:  # 閾値を上げてOCRを積極的に使用
                     try:
-                        # ページを画像に変換
-                        mat = fitz.Matrix(2.0, 2.0)  # 解像度を上げる
+                        # ページを画像に変換（高解像度）
+                        mat = fitz.Matrix(3.0, 3.0)  # 解像度をさらに上げる
                         pix = page.get_pixmap(matrix=mat)
                         img_data = pix.tobytes("png")
                         
                         # PILでImage作成
                         img = Image.open(io.BytesIO(img_data))
                         
-                        # OCR実行
-                        ocr_text = pytesseract.image_to_string(img, lang='jpn')
-                        text = ocr_text if len(ocr_text.strip()) > len(text.strip()) else text
+                        # OCR設定を最適化
+                        custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンーッャュョァィゥェォ一二三四五六七八九十百千万億兆京垓都道府県市町村区長事務所税法人住民消費地方特別申告書受信通知納付情報'
+                        
+                        # OCR実行（設定を最適化）
+                        ocr_text = pytesseract.image_to_string(img, lang='jpn', config=custom_config)
+                        
+                        # OCR結果を常に追加（既存テキストと組み合わせ）
+                        combined_text = text + "\n" + ocr_text
+                        text = combined_text if len(combined_text.strip()) > len(text.strip()) else text
                         
                     except Exception as ocr_error:
                         logging.warning(f"OCR処理エラー (page {page_num}): {str(ocr_error)}")
@@ -238,28 +244,68 @@ class DocumentProcessor:
         return '不明', []
     
     def extract_prefecture_city(self, text: str) -> Tuple[str, str]:
-        """都道府県と市町村を抽出"""
+        """都道府県と市町村を抽出（強化版）"""
         prefecture = ''
         city = ''
         
-        # 都道府県抽出（長い文字列を優先でマッチング）
-        matched_prefs = []
-        for pref in self.prefecture_patterns:
-            if pref in text:
-                matched_prefs.append(pref)
+        # 税事務所パターンによる都道府県抽出（最優先）
+        tax_office_patterns = {
+            r'愛知県[^県]*県税事務所': '愛知県',
+            r'福岡県[^県]*県税事務所': '福岡県',
+            r'東京都[^都]*都税事務所': '東京都',
+            r'大阪府[^府]*府税事務所': '大阪府',
+            r'京都府[^府]*府税事務所': '京都府',
+            r'北海道[^道]*道税事務所': '北海道',
+            r'([^県府道都]{2,4}県)[^県]*県税事務所': None,  # 汎用県パターン
+            r'([^県府道都]{2,4}府)[^府]*府税事務所': None,  # 汎用府パターン
+        }
         
-        # 最も長い（具体的な）都道府県名を選択
-        if matched_prefs:
-            prefecture = max(matched_prefs, key=len)
+        for pattern, pref_name in tax_office_patterns.items():
+            matches = re.findall(pattern, text)
+            if matches:
+                if pref_name:
+                    prefecture = pref_name
+                    break
+                else:
+                    # 汎用パターンの場合、マッチした内容から都道府県名を抽出
+                    if isinstance(matches[0], str):
+                        prefecture = matches[0]
+                        break
         
-        # 市町村抽出（都道府県が見つかった場合）
-        if prefecture and prefecture != '東京都':
-            # 市町村のパターンマッチング（より厳密に）
+        # 税事務所パターンで見つからない場合、直接的な都道府県名検索
+        if not prefecture:
+            matched_prefs = []
+            for pref in self.prefecture_patterns:
+                if pref in text:
+                    matched_prefs.append(pref)
+            
+            # 最も長い（具体的な）都道府県名を選択
+            if matched_prefs:
+                prefecture = max(matched_prefs, key=len)
+        
+        # 市町村長パターンによる市町村抽出（最優先）
+        mayor_patterns = [
+            r'([^県府道都]{2,10}市)長',
+            r'([^県府道都]{2,10}町)長', 
+            r'([^県府道都]{2,10}村)長',
+            r'([^県府道都]{2,10}区)長'
+        ]
+        
+        for pattern in mayor_patterns:
+            matches = re.findall(pattern, text)
+            if matches:
+                # 都道府県名を含まない市町村名を選択
+                for match in matches:
+                    if not any(pref_name[:-1] in match for pref_name in self.prefecture_patterns):
+                        city = match
+                        break
+                if city:
+                    break
+        
+        # 市町村長パターンで見つからない場合、一般的な市町村パターン
+        if not city and prefecture and prefecture != '東京都':
             city_patterns = [
-                r'([^県府道都\s]{1,10}[市町村区])',
-                r'([^県府道都\s]{1,10}市)',
-                r'([^県府道都\s]{1,10}町)',
-                r'([^県府道都\s]{1,10}村)'
+                r'([^県府道都\s]{2,10}[市町村区])',
             ]
             
             for pattern in city_patterns:
@@ -834,6 +880,10 @@ class TaxDocumentGUI:
         
         try:
             total_files = len(self.files)
+            # 書類種別カウンター
+            prefecture_doc_count = 0
+            municipality_doc_count = 0
+            
             for i, file_path in enumerate(self.files):
                 file_name = os.path.basename(file_path)
                 self.log_text.insert(tk.END, f"\n[{i+1}/{total_files}] 処理中: {file_name}\n")
@@ -897,8 +947,8 @@ class TaxDocumentGUI:
                         
                         # 都道府県申告書の場合：入力された全ての都道府県を順番に処理
                         if doc_type_str == '1001_都道府県申告':
-                            if current_doc_index < len(active_municipalities):
-                                municipality = active_municipalities[current_doc_index]
+                            if prefecture_doc_count < len(active_municipalities):
+                                municipality = active_municipalities[prefecture_doc_count]
                                 
                                 if municipality['prefecture']:  # 手動入力がある場合
                                     use_pref = municipality['prefecture']
@@ -908,7 +958,7 @@ class TaxDocumentGUI:
                                     use_year_month = self.year_month_var.get() or auto_year_month
                                     
                                     self.log_text.insert(tk.END, f"  🏛️ 都道府県申告書 - 手動入力適用: ", 'success')
-                                    self.log_text.insert(tk.END, f"書類{current_doc_index + 1} → 自治体{current_doc_index + 1}「{use_pref}」\n", 'success')
+                                    self.log_text.insert(tk.END, f"都道府県書類{prefecture_doc_count + 1} → 自治体{prefecture_doc_count + 1}「{use_pref}」\n", 'success')
                                     
                                     # 補助的な確認：自動抽出結果との比較
                                     if auto_pref:
@@ -923,7 +973,7 @@ class TaxDocumentGUI:
                                         doc_type_str, 
                                         use_pref, 
                                         use_city, 
-                                        current_doc_index, 
+                                        prefecture_doc_count, 
                                         use_year_month
                                     )
                                     
@@ -940,55 +990,59 @@ class TaxDocumentGUI:
                                     self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
                                     self.log_text.insert(tk.END, f"{new_filename}\n", 'success')
                                     matched = True
+                                    prefecture_doc_count += 1  # カウンターをインクリメント
                         
                         # 市町村申告書の場合：市町村が入力されているもののみ処理
                         elif doc_type_str == '2001_市町村申告':
-                            # 市町村が入力されている自治体を検索
-                            municipality_count = 0
-                            for j, municipality in enumerate(active_municipalities):
-                                if municipality['prefecture'] and municipality['city']:  # 都道府県と市町村が両方入力されている場合のみ
-                                    if municipality_count == current_doc_index:  # 現在の書類に対応する市町村を選択
-                                        use_pref = municipality['prefecture']
-                                        use_city = municipality['city']
-                                        
-                                        # 手動年月を優先
-                                        use_year_month = self.year_month_var.get() or auto_year_month
-                                        
-                                        self.log_text.insert(tk.END, f"  🏛️ 市町村申告書 - 手動入力適用: ", 'success')
-                                        self.log_text.insert(tk.END, f"書類{current_doc_index + 1} → 自治体{j + 1}「{use_pref}{use_city}」\n", 'success')
-                                        
-                                        # 補助的な確認：自動抽出結果との比較
-                                        if auto_pref:
-                                            if auto_pref == use_pref:
-                                                self.log_text.insert(tk.END, f"    ✅ 自動抽出と一致: {auto_pref}\n", 'success')
-                                            else:
-                                                self.log_text.insert(tk.END, f"    ⚠️ 自動抽出と相違: 自動「{auto_pref}」vs 手動「{use_pref}」\n", 'warning')
-                                        else:
-                                            self.log_text.insert(tk.END, f"    ℹ️ 自動抽出なし（手動入力を使用）\n", 'info')
-                                        
-                                        new_filename = self.generate_filename(
-                                            doc_type_str, 
-                                            use_pref, 
-                                            use_city, 
-                                            municipality_count,  # 市町村のカウンターを使用
-                                            use_year_month
-                                        )
-                                        
-                                        result = {
-                                            'original': file_name,
-                                            'new': new_filename,
-                                            'type': '市町村申告',
-                                            'prefecture': use_pref,
-                                            'city': use_city,
-                                            'status': '成功',
-                                            'file_path': file_path
-                                        }
-                                        self.results.append(result)
-                                        self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
-                                        self.log_text.insert(tk.END, f"{new_filename}\n", 'success')
-                                        matched = True
-                                        break
-                                    municipality_count += 1
+                            # 市町村が入力されている自治体リストを作成
+                            municipalities_with_city = []
+                            for municipality in active_municipalities:
+                                if municipality['prefecture'] and municipality['city']:
+                                    municipalities_with_city.append(municipality)
+                            
+                            # 現在の市町村申告書に対応する自治体を選択
+                            if municipality_doc_count < len(municipalities_with_city):
+                                municipality = municipalities_with_city[municipality_doc_count]
+                                use_pref = municipality['prefecture']
+                                use_city = municipality['city']
+                                
+                                # 手動年月を優先
+                                use_year_month = self.year_month_var.get() or auto_year_month
+                                
+                                self.log_text.insert(tk.END, f"  🏛️ 市町村申告書 - 手動入力適用: ", 'success')
+                                self.log_text.insert(tk.END, f"市町村書類{municipality_doc_count + 1} → 自治体「{use_pref}{use_city}」\n", 'success')
+                                
+                                # 補助的な確認：自動抽出結果との比較
+                                if auto_pref:
+                                    if auto_pref == use_pref:
+                                        self.log_text.insert(tk.END, f"    ✅ 自動抽出と一致: {auto_pref}\n", 'success')
+                                    else:
+                                        self.log_text.insert(tk.END, f"    ⚠️ 自動抽出と相違: 自動「{auto_pref}」vs 手動「{use_pref}」\n", 'warning')
+                                else:
+                                    self.log_text.insert(tk.END, f"    ℹ️ 自動抽出なし（手動入力を使用）\n", 'info')
+                                
+                                new_filename = self.generate_filename(
+                                    doc_type_str, 
+                                    use_pref, 
+                                    use_city, 
+                                    municipality_doc_count,  # 市町村のカウンターを使用
+                                    use_year_month
+                                )
+                                
+                                result = {
+                                    'original': file_name,
+                                    'new': new_filename,
+                                    'type': '市町村申告',
+                                    'prefecture': use_pref,
+                                    'city': use_city,
+                                    'status': '成功',
+                                    'file_path': file_path
+                                }
+                                self.results.append(result)
+                                self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
+                                self.log_text.insert(tk.END, f"{new_filename}\n", 'success')
+                                matched = True
+                                municipality_doc_count += 1  # カウンターをインクリメント
                         
                         # マッチしなかった場合は補完的に自動抽出を使用
                         if not matched:
