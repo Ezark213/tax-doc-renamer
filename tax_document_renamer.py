@@ -576,13 +576,14 @@ class TaxDocumentGUI:
         ttk.Label(info_frame, text="YYMM形式:").grid(row=0, column=0, padx=(0, 10))
         
         self.year_month_var = tk.StringVar()
+        self.year_month_var.set("2507")  # デフォルト値を設定
         year_month_entry = ttk.Entry(info_frame, textvariable=self.year_month_var, width=10)
         year_month_entry.grid(row=0, column=1, padx=(0, 10))
         
         ttk.Label(info_frame, text="例: 2507 (2025年7月)").grid(row=0, column=2, padx=(0, 20))
         
-        ttk.Label(info_frame, text="※ 空欄の場合、PDFから自動抽出を試行", 
-                 font=('Arial', 9), foreground='gray').grid(row=0, column=3)
+        ttk.Label(info_frame, text="※ 手動入力が優先、空欄の場合は自動抽出", 
+                 font=('Meiryo UI', 9), foreground='gray').grid(row=0, column=3)
     
     def setup_process_section(self, parent):
         """処理ボタンセクション"""
@@ -765,14 +766,14 @@ class TaxDocumentGUI:
         
         # 都道府県申告書の連番処理
         if '1001_' in doc_type and prefecture:
-            prefix_map = ['1001', '1011', '1021', '1031', '1041']
-            prefix = prefix_map[min(index, 4)]
+            # 都道府県申告書は1001から開始（1001、1002、1003...）
+            prefix = f"100{index + 1}"
             return f"{prefix}_{prefecture}_法人都道府県民税・事業税・特別法人事業税_{ym}.pdf"
         
         # 市町村申告書の連番処理
         if '2001_' in doc_type:
-            prefix_map = ['2001', '2011', '2021', '2031', '2041']
-            prefix = prefix_map[min(index, 4)]
+            # 市町村申告書は2001から開始（2001、2002、2003...）
+            prefix = f"200{index + 1}"
             if prefecture and city:
                 return f"{prefix}_{prefecture}{city}_法人市民税_{ym}.pdf"
             else:
@@ -876,33 +877,74 @@ class TaxDocumentGUI:
                 # 複数自治体対応の書類
                 if doc_type in ['1001_都道府県申告', '2001_市町村申告', '2003_受信通知']:
                     if active_municipalities:
+                        # 自動抽出結果と手動入力をマッチング
+                        matched = False
+                        
+                        # 自動抽出された都道府県と手動入力をマッチング
                         for j, municipality in enumerate(active_municipalities):
-                            # 手動入力を優先、なければ自動抽出を使用
-                            use_pref = municipality['prefecture'] or auto_pref
-                            use_city = municipality['city'] or auto_city
+                            if municipality['prefecture']:  # 手動入力がある場合のみ処理
+                                # 自動抽出された都道府県と手動入力が一致するかチェック
+                                if auto_pref and auto_pref == municipality['prefecture']:
+                                    # マッチした場合は手動入力を使用
+                                    use_pref = municipality['prefecture']
+                                    use_city = municipality['city'] if municipality['city'] else ''
+                                    
+                                    # 手動年月を優先
+                                    use_year_month = self.year_month_var.get() or auto_year_month
+                                    
+                                    self.log_text.insert(tk.END, f"  🏛️ マッチング成功: ", 'success')
+                                    self.log_text.insert(tk.END, f"自動抽出「{auto_pref}」→ 手動入力「{use_pref}」", 'success')
+                                    if use_city:
+                                        self.log_text.insert(tk.END, f" {use_city}", 'success')
+                                    self.log_text.insert(tk.END, f"\n")
+                                    
+                                    new_filename = self.generate_filename(
+                                        doc_type, 
+                                        use_pref, 
+                                        use_city, 
+                                        j, 
+                                        use_year_month
+                                    )
+                                    
+                                    result = {
+                                        'original': file_name,
+                                        'new': new_filename,
+                                        'type': doc_type.split('_')[1] if '_' in doc_type and isinstance(doc_type, str) else str(doc_type),
+                                        'prefecture': use_pref,
+                                        'city': use_city or '(なし)',
+                                        'status': '成功',
+                                        'file_path': file_path
+                                    }
+                                    self.results.append(result)
+                                    self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
+                                    self.log_text.insert(tk.END, f"{new_filename}\n", 'success')
+                                    matched = True
+                                    break
+                        
+                        # マッチしなかった場合は自動抽出結果を使用
+                        if not matched:
+                            self.log_text.insert(tk.END, f"  ⚠️ マッチング失敗: ", 'warning')
+                            self.log_text.insert(tk.END, f"自動抽出「{auto_pref or '(なし)'}」が手動入力と一致しません\n", 'warning')
                             
-                            new_filename = self.generate_filename(
-                                doc_type, 
-                                use_pref, 
-                                use_city, 
-                                j, 
-                                auto_year_month
-                            )
-                            
+                            # 手動年月を優先
+                            use_year_month = self.year_month_var.get() or auto_year_month
+                            new_filename = self.generate_filename(doc_type, auto_pref, auto_city, 0, use_year_month)
                             result = {
                                 'original': file_name,
                                 'new': new_filename,
                                 'type': doc_type.split('_')[1] if '_' in doc_type and isinstance(doc_type, str) else str(doc_type),
-                                'prefecture': use_pref or '(検出失敗)',
-                                'city': use_city or '(なし)',
-                                'status': '成功' if use_pref else '要確認',
+                                'prefecture': auto_pref or '(自動検出失敗)',
+                                'city': auto_city or '(なし)',
+                                'status': '要確認',
                                 'file_path': file_path
                             }
                             self.results.append(result)
-                            self.log_text.insert(tk.END, f"    生成: {new_filename}\n")
+                            self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
+                            self.log_text.insert(tk.END, f"{new_filename}\n", 'warning')
                     else:
-                        # 自動抽出結果を使用
-                        new_filename = self.generate_filename(doc_type, auto_pref, auto_city, 0, auto_year_month)
+                        # 自動抽出結果を使用（手動年月を優先）
+                        use_year_month = self.year_month_var.get() or auto_year_month
+                        new_filename = self.generate_filename(doc_type, auto_pref, auto_city, 0, use_year_month)
                         result = {
                             'original': file_name,
                             'new': new_filename,
@@ -913,10 +955,12 @@ class TaxDocumentGUI:
                             'file_path': file_path
                         }
                         self.results.append(result)
-                        self.log_text.insert(tk.END, f"    生成: {new_filename}\n")
+                        self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
+                        self.log_text.insert(tk.END, f"{new_filename}\n", 'success')
                 else:
-                    # 単一書類
-                    new_filename = self.generate_filename(doc_type, auto_pref, auto_city, 0, auto_year_month)
+                    # 単一書類（手動年月を優先）
+                    use_year_month = self.year_month_var.get() or auto_year_month
+                    new_filename = self.generate_filename(doc_type, auto_pref, auto_city, 0, use_year_month)
                     result = {
                         'original': file_name,
                         'new': new_filename,
@@ -927,7 +971,8 @@ class TaxDocumentGUI:
                         'file_path': file_path
                     }
                     self.results.append(result)
-                    self.log_text.insert(tk.END, f"    生成: {new_filename}\n")
+                    self.log_text.insert(tk.END, f"    📝 生成: ", 'info')
+                    self.log_text.insert(tk.END, f"{new_filename}\n", 'success')
                 
                 self.root.update()
         
