@@ -13,7 +13,8 @@
       "Bash(git clone:*)",
       "Bash(cp:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(python:*)"
     ],
     "additionalDirectories": [
       "C:\\Users\\mayum\\Desktop\\TaxDocumentRenamer",

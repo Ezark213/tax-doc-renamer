@@ -90,11 +90,50 @@ class DocumentProcessor:
     def setup_patterns(self):
         """判定キーワードパターンの設定"""
         self.document_patterns = {
+            # 都道府県申告書パターン（強化）
+            '1001_都道府県申告': [
+                '法人都道府県民税・事業税・特別法人事業税',
+                '都道府県民税',
+                '法人事業税',
+                '特別法人事業税',
+                '県税事務所',
+                '都税事務所',
+                '道税事務所',
+                '府税事務所'
+            ],
+            
+            # 市町村申告書パターン（2001番台強化）
+            '2001_市町村申告': [
+                '法人市町村民税',
+                '法人市民税',
+                '市町村民税',
+                '市民税',
+                '市役所',
+                '市税事務所',
+                '町役場',
+                '村役場'
+            ],
+            
+            # 固定資産関連（6002/6003番台強化）
+            '6002_一括償却資産明細表': [
+                '一括償却資産明細表',
+                '一括償却資産明細',
+                '一括償却明細表',
+                '一括償却'
+            ],
+            
+            '6003_少額減価償却資産明細表': [
+                '少額減価償却資産明細表',
+                '少額減価償却資産明細',
+                '少額減価償却明細表',
+                '少額減価償却',
+                '少額'
+            ],
+            
             # 地方税関連
-            '2004_納付情報': ['税目:法人住民税'],
-            '1004_納付情報': ['税目:法人二税・特別税'],
-            '2003_受信通知': ['法人市町村民税 確定申告'],
-            '1001_都道府県申告': ['法人都道府県民税・事業税・特別法人事業税又は地方法人特別税 確定申告'],
+            '2004_納付情報': ['税目:法人住民税', '法人住民税'],
+            '1004_納付情報': ['税目:法人二税・特別税', '法人二税'],
+            '2003_受信通知': ['法人市町村民税 確定申告', '市町村民税 確定申告'],
             
             # 国税関連
             '3003_受信通知': ['種目 消費税申告書'],
@@ -179,19 +218,24 @@ class DocumentProcessor:
         
         return pages_text
     
-    def detect_document_type(self, text: str) -> str:
-        """書類種別を判定"""
+    def detect_document_type(self, text: str) -> tuple:
+        """書類種別を判定（マッチしたキーワードも返す）"""
+        matched_keywords = []
+        
         # 完全一致を優先
         for doc_type, keywords in self.document_patterns.items():
             if all(keyword in text for keyword in keywords):
-                return doc_type
+                matched_keywords = [k for k in keywords if k in text]
+                return doc_type, matched_keywords
         
         # 部分一致で判定
         for doc_type, keywords in self.document_patterns.items():
-            if any(keyword in text for keyword in keywords):
-                return doc_type
+            for keyword in keywords:
+                if keyword in text:
+                    matched_keywords.append(keyword)
+                    return doc_type, matched_keywords
         
-        return '不明'
+        return '不明', []
     
     def extract_prefecture_city(self, text: str) -> Tuple[str, str]:
         """都道府県と市町村を抽出"""
@@ -305,58 +349,141 @@ class TaxDocumentGUI:
         self.setup_styles()
     
     def setup_styles(self):
-        """スタイル設定"""
+        """弥生会計風スタイル設定"""
         style = ttk.Style()
         style.theme_use('clam')
         
+        # 弥生会計風カラー（青系ビジネステーマ）
+        # メインカラー: #2E5984 (ダークブルー)
+        # アクセント: #4A90C2 (ライトブルー)
+        # 背景: #F8F9FA (明るいグレー)
+        
         # カスタムスタイル
-        style.configure('Title.TLabel', font=('Arial', 16, 'bold'))
-        style.configure('Heading.TLabel', font=('Arial', 12, 'bold'))
-        style.configure('Success.TLabel', foreground='green')
-        style.configure('Error.TLabel', foreground='red')
+        style.configure('Title.TLabel', 
+                       font=('Meiryo UI', 18, 'bold'), 
+                       foreground='#2E5984',
+                       background='#F8F9FA')
+        style.configure('Heading.TLabel', 
+                       font=('Meiryo UI', 12, 'bold'),
+                       foreground='#2E5984')
+        style.configure('Success.TLabel', foreground='#28A745')
+        style.configure('Warning.TLabel', foreground='#FFC107')
+        style.configure('Error.TLabel', foreground='#DC3545')
+        
+        # ノートブック（タブ）スタイル
+        style.configure('TNotebook', background='#F8F9FA')
+        style.configure('TNotebook.Tab', 
+                       font=('Meiryo UI', 10, 'bold'),
+                       padding=[12, 8],
+                       focuscolor='none')
+        
+        # ボタンスタイル
+        style.configure('Action.TButton',
+                       font=('Meiryo UI', 10, 'bold'),
+                       foreground='white',
+                       background='#2E5984')
+        
+        # フレームスタイル
+        style.configure('TLabelFrame', background='#F8F9FA')
+        style.configure('TLabelFrame.Label', 
+                       font=('Meiryo UI', 11, 'bold'),
+                       foreground='#2E5984')
     
     def setup_gui(self):
         """GUI構築"""
         # メインフレーム
-        main_frame = ttk.Frame(self.root, padding="15")
+        main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # ウィンドウのリサイズ対応
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(5, weight=1)
-        main_frame.rowconfigure(6, weight=1)
+        main_frame.rowconfigure(1, weight=1)
         
         # タイトル
-        title_label = ttk.Label(main_frame, text="税務書類リネームシステム", 
+        title_frame = ttk.Frame(main_frame)
+        title_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        title_frame.columnconfigure(1, weight=1)
+        
+        title_label = ttk.Label(title_frame, text="税務書類リネームシステム", 
                                style='Title.TLabel')
-        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+        title_label.grid(row=0, column=0, sticky=tk.W)
         
-        # バージョン情報
-        version_label = ttk.Label(main_frame, text="Version 2.0 - OCR対応版")
-        version_label.grid(row=0, column=1, columnspan=2, pady=(25, 0), sticky=tk.E)
+        version_label = ttk.Label(title_frame, text="Version 2.1 - 弥生風デザイン版",
+                                 font=('Meiryo UI', 10), foreground='#6C757D')
+        version_label.grid(row=0, column=1, sticky=tk.E)
         
-        # ファイル選択セクション
-        self.setup_file_section(main_frame)
+        # タブノートブック
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # 自治体情報セクション
-        self.setup_municipality_section(main_frame)
-        
-        # 年月入力セクション
-        self.setup_datetime_section(main_frame)
-        
-        # 処理ボタン
-        self.setup_process_section(main_frame)
-        
-        # 結果表示セクション
-        self.setup_results_section(main_frame)
-        
-        # ログ表示セクション
-        self.setup_log_section(main_frame)
+        # 各タブの作成
+        self.setup_input_tab()
+        self.setup_results_tab()
+        self.setup_debug_tab()
         
         # ステータスバー
         self.setup_statusbar()
+    
+    def setup_input_tab(self):
+        """入力タブの設定"""
+        input_frame = ttk.Frame(self.notebook, padding="15")
+        self.notebook.add(input_frame, text="📁 ファイル選択・設定")
+        
+        # ウィンドウのリサイズ対応
+        input_frame.columnconfigure(0, weight=1)
+        input_frame.rowconfigure(0, weight=1)
+        
+        # スクロール可能フレーム
+        canvas = tk.Canvas(input_frame)
+        scrollbar = ttk.Scrollbar(input_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # ファイル選択セクション
+        self.setup_file_section(scrollable_frame)
+        
+        # 自治体情報セクション
+        self.setup_municipality_section(scrollable_frame)
+        
+        # 年月入力セクション
+        self.setup_datetime_section(scrollable_frame)
+        
+        # 処理ボタン
+        self.setup_process_section(scrollable_frame)
+    
+    def setup_results_tab(self):
+        """結果タブの設定"""
+        results_frame = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(results_frame, text="📊 処理結果")
+        
+        results_frame.columnconfigure(0, weight=1)
+        results_frame.rowconfigure(0, weight=1)
+        
+        # 結果表示セクション
+        self.setup_results_section(results_frame)
+    
+    def setup_debug_tab(self):
+        """デバッグタブの設定"""
+        debug_frame = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(debug_frame, text="🔧 開発者ログ")
+        
+        debug_frame.columnconfigure(0, weight=1)
+        debug_frame.rowconfigure(0, weight=1)
+        
+        # ログ表示セクション
+        self.setup_log_section(debug_frame)
     
     def setup_file_section(self, parent):
         """ファイル選択セクション"""
@@ -466,20 +593,21 @@ class TaxDocumentGUI:
         self.progress = ttk.Progressbar(process_frame, mode='indeterminate')
         self.progress.grid(row=0, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        # ボタン
-        self.process_btn = ttk.Button(process_frame, text="処理実行", 
+        # ボタン（弥生会計風）
+        self.process_btn = ttk.Button(process_frame, text="■ 処理実行", 
+                                     style='Action.TButton',
                                      command=self.process_documents)
         self.process_btn.grid(row=1, column=0, padx=(0, 10))
         
-        self.save_btn = ttk.Button(process_frame, text="結果保存", 
+        self.save_btn = ttk.Button(process_frame, text="💾 結果保存", 
                                   command=self.save_results, state='disabled')
         self.save_btn.grid(row=1, column=1, padx=(0, 10))
         
-        self.rename_btn = ttk.Button(process_frame, text="ファイルリネーム実行", 
+        self.rename_btn = ttk.Button(process_frame, text="📁 ファイルリネーム実行", 
                                     command=self.execute_rename, state='disabled')
         self.rename_btn.grid(row=1, column=2, padx=(0, 10))
         
-        ttk.Button(process_frame, text="ヘルプ", 
+        ttk.Button(process_frame, text="❓ ヘルプ", 
                   command=self.show_help).grid(row=1, column=3)
     
     def setup_results_section(self, parent):
@@ -534,8 +662,21 @@ class TaxDocumentGUI:
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=8, width=80)
+        # ログ表示エリア（弥生会計風）
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=12, width=100,
+                                                 font=('Consolas', 10),
+                                                 background='#FFFFFF',
+                                                 foreground='#333333',
+                                                 wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # ログテキストのタグ設定（色分け）
+        self.log_text.tag_configure('header', foreground='#2E5984', font=('Consolas', 10, 'bold'))
+        self.log_text.tag_configure('success', foreground='#28A745')
+        self.log_text.tag_configure('warning', foreground='#FFC107')
+        self.log_text.tag_configure('error', foreground='#DC3545')
+        self.log_text.tag_configure('info', foreground='#17A2B8')
+        self.log_text.tag_configure('keyword', foreground='#6F42C1', font=('Consolas', 10, 'bold'))
         
         # ログクリアボタン
         ttk.Button(log_frame, text="ログクリア", 
@@ -612,9 +753,14 @@ class TaxDocumentGUI:
         
         return errors
     
-    def generate_filename(self, doc_type: str, prefecture: str = '', city: str = '', 
+    def generate_filename(self, doc_type, prefecture: str = '', city: str = '', 
                          index: int = 0, year_month: str = '') -> str:
         """ファイル名生成"""
+        # doc_typeがタプルの場合は最初の要素を使用
+        if isinstance(doc_type, tuple):
+            doc_type = doc_type[0]
+        doc_type = str(doc_type)
+        
         ym = year_month or self.year_month_var.get() or 'YYMM'
         
         # 都道府県申告書の連番処理
@@ -624,10 +770,13 @@ class TaxDocumentGUI:
             return f"{prefix}_{prefecture}_法人都道府県民税・事業税・特別法人事業税_{ym}.pdf"
         
         # 市町村申告書の連番処理
-        if '2001_' in doc_type and prefecture and city:
+        if '2001_' in doc_type:
             prefix_map = ['2001', '2011', '2021', '2031', '2041']
             prefix = prefix_map[min(index, 4)]
-            return f"{prefix}_{prefecture}{city}_法人市民税_{ym}.pdf"
+            if prefecture and city:
+                return f"{prefix}_{prefecture}{city}_法人市民税_{ym}.pdf"
+            else:
+                return f"{prefix}_市町村申告_{ym}.pdf"
         
         # 受信通知の連番処理
         if '2003_' in doc_type:
@@ -661,10 +810,13 @@ class TaxDocumentGUI:
             self.results_tree.delete(item)
         
         self.results = []
-        self.log_text.insert(tk.END, f"\n{'='*50}\n")
-        self.log_text.insert(tk.END, f"処理開始: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        self.log_text.insert(tk.END, f"対象ファイル数: {len(self.files)}\n")
-        self.log_text.insert(tk.END, f"{'='*50}\n")
+        self.log_text.insert(tk.END, f"\n", 'header')
+        self.log_text.insert(tk.END, f"{'🚀'*20} 処理開始 {'🚀'*20}\n", 'header')
+        self.log_text.insert(tk.END, f"📅 開始時刻: ", 'info')
+        self.log_text.insert(tk.END, f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n", 'success')
+        self.log_text.insert(tk.END, f"📊 対象ファイル数: ", 'info')
+        self.log_text.insert(tk.END, f"{len(self.files)}件\n", 'success')
+        self.log_text.insert(tk.END, f"{'='*60}\n", 'header')
         self.root.update()
         
         # 自治体情報取得
@@ -725,10 +877,14 @@ class TaxDocumentGUI:
                 if doc_type in ['1001_都道府県申告', '2001_市町村申告', '2003_受信通知']:
                     if active_municipalities:
                         for j, municipality in enumerate(active_municipalities):
+                            # 手動入力を優先、なければ自動抽出を使用
+                            use_pref = municipality['prefecture'] or auto_pref
+                            use_city = municipality['city'] or auto_city
+                            
                             new_filename = self.generate_filename(
                                 doc_type, 
-                                municipality['prefecture'], 
-                                municipality['city'], 
+                                use_pref, 
+                                use_city, 
                                 j, 
                                 auto_year_month
                             )
@@ -736,10 +892,10 @@ class TaxDocumentGUI:
                             result = {
                                 'original': file_name,
                                 'new': new_filename,
-                                'type': doc_type.split('_')[1] if '_' in doc_type else doc_type,
-                                'prefecture': municipality['prefecture'],
-                                'city': municipality['city'] or '(なし)',
-                                'status': '成功',
+                                'type': doc_type.split('_')[1] if '_' in doc_type and isinstance(doc_type, str) else str(doc_type),
+                                'prefecture': use_pref or '(検出失敗)',
+                                'city': use_city or '(なし)',
+                                'status': '成功' if use_pref else '要確認',
                                 'file_path': file_path
                             }
                             self.results.append(result)
@@ -750,7 +906,7 @@ class TaxDocumentGUI:
                         result = {
                             'original': file_name,
                             'new': new_filename,
-                            'type': doc_type.split('_')[1] if '_' in doc_type else doc_type,
+                            'type': doc_type.split('_')[1] if '_' in doc_type and isinstance(doc_type, str) else str(doc_type),
                             'prefecture': auto_pref or '(自動検出失敗)',
                             'city': auto_city or '(なし)',
                             'status': '要確認' if not auto_pref else '成功',
@@ -764,7 +920,7 @@ class TaxDocumentGUI:
                     result = {
                         'original': file_name,
                         'new': new_filename,
-                        'type': doc_type.split('_')[1] if '_' in doc_type else doc_type,
+                        'type': doc_type.split('_')[1] if '_' in doc_type and isinstance(doc_type, str) else str(doc_type),
                         'prefecture': auto_pref or '(検出なし)',
                         'city': auto_city or '(なし)',
                         'status': '成功' if doc_type != '不明' else '要確認',
@@ -815,10 +971,15 @@ class TaxDocumentGUI:
             self.results_tree.tag_configure('warning', background='#fff3cd')
             self.results_tree.tag_configure('error', background='#f8d7da')
             
-            self.log_text.insert(tk.END, f"\n{'='*50}\n")
-            self.log_text.insert(tk.END, f"処理完了: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            self.log_text.insert(tk.END, f"成功: {success_count}件, 要確認: {warning_count}件, エラー: {error_count}件\n")
-            self.log_text.insert(tk.END, f"{'='*50}\n")
+            self.log_text.insert(tk.END, f"\n", 'header')
+            self.log_text.insert(tk.END, f"{'🎉'*20} 処理完了 {'🎉'*20}\n", 'header')
+            self.log_text.insert(tk.END, f"📅 完了時刻: ", 'info')
+            self.log_text.insert(tk.END, f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n", 'success')
+            self.log_text.insert(tk.END, f"📈 処理結果: ", 'info')
+            self.log_text.insert(tk.END, f"✅成功: {success_count}件 ", 'success')
+            self.log_text.insert(tk.END, f"⚠️要確認: {warning_count}件 ", 'warning')
+            self.log_text.insert(tk.END, f"❌エラー: {error_count}件\n", 'error')
+            self.log_text.insert(tk.END, f"{'='*60}\n", 'header')
             self.log_text.see(tk.END)
             
             self.status_var.set(f"処理完了 - 成功: {success_count}, 要確認: {warning_count}, エラー: {error_count}")
