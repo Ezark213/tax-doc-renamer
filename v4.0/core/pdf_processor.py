@@ -141,46 +141,65 @@ class PDFProcessor:
         return matches >= 3
 
     def split_national_tax_notifications(self, pdf_path: str, output_dir: str, year_month: str = "YYMM") -> List[SplitResult]:
-        """国税受信通知一式を4つに分割"""
-        if not self.is_national_tax_notification_bundle(pdf_path):
-            return [SplitResult("", [], "unknown", False, "国税受信通知一式ではありません")]
-            
-        pages_content = self.analyze_pdf_content(pdf_path)
+        """国税受信通知一式を4つに分割（完全再実装）"""
         split_results = []
         
         try:
             doc = fitz.open(pdf_path)
+            total_pages = doc.page_count
             
-            # 各書類の分割ロジック
-            splits = self._identify_national_tax_splits(pages_content)
+            print(f"DEBUG: 国税受信通知分割開始 - 総ページ数: {total_pages}")
             
-            for split_info in splits:
-                if split_info['pages']:
-                    # 新しいPDFを作成
+            # 空白ページを除外して有効ページを特定
+            valid_pages = []
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                text = page.get_text().strip()
+                if len(text) > 50:  # 50文字以上を有効ページとみなす
+                    valid_pages.append(page_num)
+            
+            print(f"DEBUG: 有効ページ: {valid_pages}")
+            
+            # 固定の4分割を実行（最初の4ページ）
+            if len(valid_pages) >= 4:
+                split_configs = [
+                    {"page": valid_pages[0], "code": "0003", "name": "受信通知_法人税", "type": "法人税_受信通知"},
+                    {"page": valid_pages[1], "code": "0004", "name": "納付情報_法人税", "type": "法人税_納付情報"},
+                    {"page": valid_pages[2], "code": "3003", "name": "受信通知_消費税", "type": "消費税_受信通知"},
+                    {"page": valid_pages[3], "code": "3004", "name": "納付情報_消費税", "type": "消費税_納付情報"}
+                ]
+                
+                for config in split_configs:
+                    page_num = config["page"]
+                    
+                    # 1ページのPDFを作成
                     new_doc = fitz.open()
-                    for page_num in split_info['pages']:
-                        if page_num < doc.page_count:
-                            new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                    new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
                     
                     # ファイル名生成
-                    output_filename = f"{split_info['code']}_{split_info['name']}_{year_month}.pdf"
+                    output_filename = f"{config['code']}_{config['name']}_{year_month}.pdf"
                     output_path = os.path.join(output_dir, output_filename)
                     
                     # 保存
                     new_doc.save(output_path)
                     new_doc.close()
                     
+                    print(f"DEBUG: 分割完了 - {output_filename} (ページ{page_num})")
+                    
                     split_results.append(SplitResult(
                         filename=output_filename,
-                        pages=split_info['pages'],
-                        content_type=split_info['type'],
+                        pages=[page_num],
+                        content_type=config['type'],
                         success=True
                     ))
+            else:
+                return [SplitResult("", [], "error", False, f"有効ページが不足: {len(valid_pages)}ページ（4ページ必要）")]
             
             doc.close()
             return split_results
             
         except Exception as e:
+            print(f"DEBUG: 国税分割エラー - {str(e)}")
             return [SplitResult("", [], "error", False, f"分割処理エラー: {e}")]
 
     def _identify_national_tax_splits(self, pages_content: List[PageContent]) -> List[Dict]:
@@ -257,47 +276,105 @@ class PDFProcessor:
         return names.get(doc_type, "unknown")
 
     def split_local_tax_notifications(self, pdf_path: str, output_dir: str, year_month: str = "YYMM") -> List[SplitResult]:
-        """地方税受信通知一式を7つに分割"""
-        if not self.is_local_tax_notification_bundle(pdf_path):
-            return [SplitResult("", [], "unknown", False, "地方税受信通知一式ではありません")]
-            
-        pages_content = self.analyze_pdf_content(pdf_path)
+        """地方税受信通知一式を1ページごとに分割（完全再実装）"""
         split_results = []
         
         try:
             doc = fitz.open(pdf_path)
+            total_pages = doc.page_count
             
-            # 地方税分割ロジック
-            splits = self._identify_local_tax_splits(pages_content)
+            print(f"DEBUG: 地方税受信通知分割開始 - 総ページ数: {total_pages}")
             
-            for split_info in splits:
-                if split_info['pages']:
-                    # 新しいPDFを作成
-                    new_doc = fitz.open()
-                    for page_num in split_info['pages']:
-                        if page_num < doc.page_count:
-                            new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-                    
-                    # ファイル名生成
-                    output_filename = f"{split_info['code']}_{split_info['name']}_{year_month}.pdf"
-                    output_path = os.path.join(output_dir, output_filename)
-                    
-                    # 保存
-                    new_doc.save(output_path)
-                    new_doc.close()
-                    
-                    split_results.append(SplitResult(
-                        filename=output_filename,
-                        pages=split_info['pages'],
-                        content_type=split_info['type'],
-                        success=True
-                    ))
+            # 全ページを1ページずつ分割
+            prefecture_notification_count = 0
+            municipality_notification_count = 0
+            
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                text = page.get_text().strip()
+                
+                # 空白ページをスキップ
+                if len(text) < 50:
+                    print(f"DEBUG: ページ{page_num}をスキップ（空白ページ）")
+                    continue
+                
+                # ページ内容による分類
+                page_type = self._classify_local_tax_page(text)
+                
+                if page_type == "都道府県_納付情報":
+                    code = "1004"
+                    name = "納付情報_都道府県"
+                elif page_type == "市町村_納付情報":
+                    code = "2004"
+                    name = "納付情報_市町村"
+                elif page_type == "都道府県_受信通知":
+                    # 連番生成: 1003, 1013, 1023, 1033...
+                    code = f"10{3 + prefecture_notification_count * 10:02d}"
+                    name = "受信通知_都道府県"
+                    prefecture_notification_count += 1
+                elif page_type == "市町村_受信通知":
+                    # 連番生成: 2003, 2013, 2023, 2033...
+                    code = f"20{3 + municipality_notification_count * 10:02d}"
+                    name = "受信通知_市町村"
+                    municipality_notification_count += 1
+                else:
+                    # デフォルト：受信通知として処理
+                    if "都道府県" in text or "県" in text:
+                        code = f"10{3 + prefecture_notification_count * 10:02d}"
+                        name = "受信通知_都道府県"
+                        prefecture_notification_count += 1
+                    else:
+                        code = f"20{3 + municipality_notification_count * 10:02d}"
+                        name = "受信通知_市町村"
+                        municipality_notification_count += 1
+                
+                # 1ページのPDFを作成
+                new_doc = fitz.open()
+                new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                
+                # ファイル名生成
+                output_filename = f"{code}_{name}_{year_month}.pdf"
+                output_path = os.path.join(output_dir, output_filename)
+                
+                # 保存
+                new_doc.save(output_path)
+                new_doc.close()
+                
+                print(f"DEBUG: 分割完了 - {output_filename} (ページ{page_num}, 種別: {page_type})")
+                
+                split_results.append(SplitResult(
+                    filename=output_filename,
+                    pages=[page_num],
+                    content_type=page_type,
+                    success=True
+                ))
             
             doc.close()
             return split_results
             
         except Exception as e:
+            print(f"DEBUG: 地方税分割エラー - {str(e)}")
             return [SplitResult("", [], "error", False, f"地方税分割処理エラー: {e}")]
+
+    def _classify_local_tax_page(self, text: str) -> str:
+        """地方税ページの種別を分類"""
+        text_lower = text.lower()
+        
+        if "納付情報" in text or "納付書" in text:
+            if "都道府県" in text or "県税" in text or "事業税" in text:
+                return "都道府県_納付情報"
+            elif "市町村" in text or "市民税" in text or "市長" in text:
+                return "市町村_納付情報"
+            else:
+                return "都道府県_納付情報"  # デフォルト
+        else:
+            # 受信通知
+            if "都道府県" in text or "県税" in text or "事業税" in text or "県知事" in text:
+                return "都道府県_受信通知"
+            elif "市町村" in text or "市民税" in text or "市長" in text:
+                return "市町村_受信通知"
+            else:
+                return "都道府県_受信通知"  # デフォルト
 
     def _identify_local_tax_splits(self, pages_content: List[PageContent]) -> List[Dict]:
         """地方税受信通知の分割ポイントを特定"""

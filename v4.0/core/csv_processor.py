@@ -31,8 +31,8 @@ class CSVProcessor:
         """初期化"""
         # CSV書類分類パターン
         self.csv_patterns = {
-            '5005_仕訳帳': {
-                'filename_patterns': [r'仕訳帳', r'journal', r'仕訳'],
+            '5006_仕訳データ': {
+                'filename_patterns': [r'仕訳帳', r'journal', r'仕訳', r'仕訳データ'],
                 'column_patterns': [
                     ['日付', '借方科目', '貸方科目', '金額'],
                     ['date', 'debit', 'credit', 'amount'],
@@ -275,7 +275,7 @@ class CSVProcessor:
                 doc_type = self.classify_csv_by_content(df)
             
             if not doc_type:
-                doc_type = "5005_仕訳帳"  # デフォルト
+                doc_type = "5006_仕訳データ"  # デフォルト
             
             # 年月抽出
             year_month = self.extract_year_month_from_csv(file_path, df)

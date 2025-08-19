@@ -60,7 +60,7 @@ class OCREngine:
         self.ocr_config = '--psm 6 --oem 3 -c preserve_interword_spaces=1'
 
     def extract_municipality_from_pdf(self, pdf_path: str, page_num: int = 0) -> MunicipalityInfo:
-        """PDFから自治体情報を抽出"""
+        """PDFから自治体情報を抽出（強化版）"""
         try:
             doc = fitz.open(pdf_path)
             
@@ -73,6 +73,8 @@ class OCREngine:
             # ページサイズを取得
             page_rect = page.rect
             
+            print(f"DEBUG: OCR処理開始 - ページサイズ: {page_rect.width}x{page_rect.height}")
+            
             # 中央上部エリアを定義（ページの上部1/3、左右中央2/3）
             crop_rect = fitz.Rect(
                 page_rect.width * 0.17,  # 左端から17%
@@ -81,30 +83,80 @@ class OCREngine:
                 page_rect.height * 0.33   # 上部33%
             )
             
-            # 画像として描画
-            mat = fitz.Matrix(2.0, 2.0)  # 2倍に拡大（OCR精度向上）
+            print(f"DEBUG: OCR対象領域: ({crop_rect.x0}, {crop_rect.y0}, {crop_rect.x1}, {crop_rect.y1})")
+            
+            # 高解像度で画像として描画
+            mat = fitz.Matrix(3.0, 3.0)  # 3倍に拡大（OCR精度向上）
             pix = page.get_pixmap(matrix=mat, clip=crop_rect)
             img_data = pix.tobytes("png")
             img = Image.open(io.BytesIO(img_data))
             
+            # 画像前処理
+            img = self._preprocess_image_for_ocr(img)
+            
             doc.close()
             
-            # OCR実行
-            extracted_text = pytesseract.image_to_string(
-                img, 
-                lang='jpn', 
-                config=self.ocr_config
-            )
+            # OCR実行（複数の設定で試行）
+            extracted_text = self._perform_enhanced_ocr(img)
+            
+            print(f"DEBUG: OCR抽出結果: '{extracted_text}'")
             
             # 自治体情報を解析
             municipality_info = self._parse_municipality_text(extracted_text)
             municipality_info.raw_text = extracted_text
             municipality_info.position = (crop_rect.x0, crop_rect.y0, crop_rect.x1, crop_rect.y1)
             
+            print(f"DEBUG: 自治体認識結果 - 都道府県: {municipality_info.prefecture}, 市町村: {municipality_info.municipality}")
+            
             return municipality_info
             
         except Exception as e:
+            print(f"DEBUG: OCR処理エラー - {str(e)}")
             return MunicipalityInfo(raw_text=f"OCR処理エラー: {e}")
+
+    def _preprocess_image_for_ocr(self, img: Image) -> Image:
+        """OCR精度向上のための画像前処理"""
+        try:
+            # グレースケール変換
+            img = img.convert('L')
+            
+            # コントラスト調整
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2.0)
+            
+            # 鮮明化
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(2.0)
+            
+            return img
+        except Exception as e:
+            print(f"DEBUG: 画像前処理エラー - {str(e)}")
+            return img
+
+    def _perform_enhanced_ocr(self, img: Image) -> str:
+        """強化されたOCR処理"""
+        ocr_configs = [
+            '--psm 6 --oem 3',
+            '--psm 7 --oem 3', 
+            '--psm 8 --oem 3',
+            '--psm 13 --oem 3'
+        ]
+        
+        best_result = ""
+        best_length = 0
+        
+        for config in ocr_configs:
+            try:
+                result = pytesseract.image_to_string(img, lang='jpn', config=config)
+                if len(result.strip()) > best_length:
+                    best_result = result
+                    best_length = len(result.strip())
+            except Exception as e:
+                print(f"DEBUG: OCR設定 {config} でエラー - {str(e)}")
+                continue
+        
+        return best_result
 
     def _parse_municipality_text(self, text: str) -> MunicipalityInfo:
         """抽出されたテキストから自治体情報を解析"""

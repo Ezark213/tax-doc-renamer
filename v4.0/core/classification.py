@@ -31,21 +31,30 @@ class DocumentClassifier:
                 "exclude_keywords": []
             },
             "0001_法人税及び地方法人税申告書": {
-                "priority": 10,
+                "priority": 12,
                 "exact_keywords": [
                     "法人税及び地方法人税申告書",
                     "内国法人の確定申告",
+                    "内国法人の確定申告(青色)",
                     "法人税申告書別表一",
                     "申告書第一表"
                 ],
-                "partial_keywords": ["法人税申告", "内国法人", "確定申告"],
-                "exclude_keywords": ["添付資料", "資料", "別添", "参考"]
+                "partial_keywords": ["法人税申告", "内国法人", "確定申告", "青色申告"],
+                "exclude_keywords": ["添付資料", "資料", "別添", "参考", "イメージ添付"],
+                "filename_keywords": ["内国法人", "確定申告", "青色"]
             },
             "0002_添付資料_法人税": {
-                "priority": 8,
-                "exact_keywords": ["法人税 添付資料", "添付資料 法人税"],
-                "partial_keywords": ["添付資料", "法人税 資料", "申告資料"],
-                "exclude_keywords": ["消費税", "地方税"]
+                "priority": 10,
+                "exact_keywords": [
+                    "法人税 添付資料", 
+                    "添付資料 法人税",
+                    "イメージ添付書類(法人税申告)",
+                    "イメージ添付書類 法人税",
+                    "添付書類 法人税"
+                ],
+                "partial_keywords": ["添付資料", "法人税 資料", "申告資料", "イメージ添付"],
+                "exclude_keywords": ["消費税申告", "法人消費税", "消費税"],
+                "filename_keywords": ["法人税申告", "法人税", "内国法人"]
             },
             "0003_受信通知_法人税": {
                 "priority": 9,
@@ -106,16 +115,29 @@ class DocumentClassifier:
             
             # 消費税関連（3000番台）
             "3001_消費税申告書": {
-                "priority": 10,
-                "exact_keywords": ["消費税申告書", "消費税及び地方消費税申告書"],
-                "partial_keywords": ["消費税申告", "地方消費税"],
-                "exclude_keywords": ["法人税", "添付資料"]
+                "priority": 12,
+                "exact_keywords": [
+                    "消費税申告書", 
+                    "消費税及び地方消費税申告書",
+                    "消費税及び地方消費税申告(一般・法人)",
+                    "消費税申告(一般・法人)"
+                ],
+                "partial_keywords": ["消費税申告", "地方消費税申告", "消費税申告書"],
+                "exclude_keywords": ["添付資料", "イメージ添付", "資料"],
+                "filename_keywords": ["消費税及び地方消費税申告", "消費税申告", "地方消費税申告"]
             },
             "3002_添付資料_消費税": {
-                "priority": 8,
-                "exact_keywords": ["消費税 添付資料", "添付資料 消費税"],
-                "partial_keywords": ["添付資料", "消費税 資料"],
-                "exclude_keywords": ["法人税", "地方税", "勘定科目別", "税区分集計表"]
+                "priority": 10,
+                "exact_keywords": [
+                    "消費税 添付資料", 
+                    "添付資料 消費税",
+                    "イメージ添付書類(法人消費税申告)",
+                    "イメージ添付書類 消費税",
+                    "添付書類 消費税"
+                ],
+                "partial_keywords": ["添付資料", "消費税 資料", "イメージ添付", "添付書類"],
+                "exclude_keywords": ["消費税及び地方消費税申告", "消費税申告書", "申告(一般・法人)", "法人税申告", "内国法人", "確定申告"],
+                "filename_keywords": ["イメージ添付書類", "添付書類", "法人消費税"]
             },
             "3003_受信通知_消費税": {
                 "priority": 9,
@@ -202,7 +224,6 @@ class DocumentClassifier:
         # テキストの前処理
         text_cleaned = self._preprocess_text(text)
         filename_cleaned = self._preprocess_text(filename)
-        combined_text = f"{text_cleaned} {filename_cleaned}"
         
         best_match = None
         best_score = 0
@@ -211,15 +232,21 @@ class DocumentClassifier:
         
         # 各分類ルールに対してスコア計算
         for doc_type, rules in self.classification_rules.items():
-            score, matched_keywords = self._calculate_score(combined_text, rules)
+            # テキストとファイル名を分けてスコア計算
+            text_score, text_keywords = self._calculate_score(text_cleaned, rules)
+            filename_score, filename_keywords = self._calculate_filename_score(filename_cleaned, rules)
             
-            if score > best_score:
-                best_score = score
+            # 総合スコア（ファイル名を重視）
+            total_score = text_score + (filename_score * 1.5)
+            combined_keywords = text_keywords + filename_keywords
+            
+            if total_score > best_score:
+                best_score = total_score
                 best_match = doc_type
-                best_keywords = matched_keywords
+                best_keywords = combined_keywords
         
         # 信頼度を計算（0.0-1.0）
-        confidence = min(best_score / 10.0, 1.0)
+        confidence = min(best_score / 15.0, 1.0)
         
         # 分類できない場合のデフォルト
         if not best_match or confidence < 0.3:
@@ -271,6 +298,31 @@ class DocumentClassifier:
             if partial_keyword in text:
                 score += rules.get("priority", 5) * 1
                 matched_keywords.append(partial_keyword)
+        
+        return score, matched_keywords
+
+    def _calculate_filename_score(self, filename: str, rules: Dict) -> Tuple[float, List[str]]:
+        """ファイル名に基づいてスコアを計算"""
+        score = 0
+        matched_keywords = []
+        
+        # 除外キーワードチェック（ファイル名でも重要）
+        for exclude_keyword in rules.get("exclude_keywords", []):
+            if exclude_keyword in filename:
+                return 0, []  # 除外キーワードが含まれている場合はスコア0
+        
+        # ファイル名専用キーワードがある場合
+        filename_keywords = rules.get("filename_keywords", [])
+        for keyword in filename_keywords:
+            if keyword in filename:
+                score += rules.get("priority", 5) * 3  # ファイル名マッチは最高スコア
+                matched_keywords.append(f"[ファイル名]{keyword}")
+        
+        # 通常のキーワードもファイル名でチェック
+        for exact_keyword in rules.get("exact_keywords", []):
+            if exact_keyword in filename:
+                score += rules.get("priority", 5) * 2
+                matched_keywords.append(f"[ファイル名]{exact_keyword}")
         
         return score, matched_keywords
 
