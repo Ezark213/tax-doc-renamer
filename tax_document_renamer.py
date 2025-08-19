@@ -192,8 +192,8 @@ class DocumentProcessor:
                         # PILでImage作成
                         img = Image.open(io.BytesIO(img_data))
                         
-                        # OCR設定を最適化
-                        custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンーッャュョァィゥェォ一二三四五六七八九十百千万億兆京垓都道府県市町村区長事務所税法人住民消費地方特別申告書受信通知納付情報'
+                        # OCR設定を最適化（シンプル版）
+                        custom_config = r'--oem 3 --psm 6'
                         
                         # OCR実行（設定を最適化）
                         ocr_text = pytesseract.image_to_string(img, lang='jpn', config=custom_config)
