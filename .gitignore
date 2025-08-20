@@ -57,3 +57,10 @@ error.log
 # Backup files
 *.bak
 *.backup
+
+# Old/deprecated files are kept in old/ folder for reference
+# Current active files:
+# - tax_document_renamer_v4.2_regional.py (main source)
+# - TaxDocumentRenamer_v4.2_Regional.spec (build config)
+# - README.md (documentation)
+# - TAX_DOCUMENT_ISSUES_v4.1_SPECIFICATION.md (spec)
