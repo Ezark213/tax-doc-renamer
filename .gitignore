@@ -1,7 +1,11 @@
 # PyInstaller関連ファイル
 build/
 dist/
+# Allow v4.0 dist folder for distribution
+!v4.0/dist/
 *.spec
+# Allow v4.0 spec file for building
+!v4.0/*.spec
 
 # Python関連
 __pycache__/

@@ -1,8 +1,10 @@
-# 税務書類リネームシステム v2.1
+# 税務書類リネームシステム (Tax Document Renamer)
 
 PDFファイルからテキストを自動抽出し、OCR機能により書類種別を判定して適切なファイル名にリネームするシステムです。
 
-## 🚀 主な機能
+A Python-based application that automatically extracts text from PDF files, uses OCR to classify document types, and renames files with appropriate naming conventions for Japanese tax documents.
+
+## 🚀 主な機能 (Main Features)
 
 ### 📁 自動書類判定・リネーム
 - **法人税関連書類**：申告書、受信通知、納付情報
@@ -27,24 +29,50 @@ PDFファイルからテキストを自動抽出し、OCR機能により書類�
 - **2001番台判定強化**：市町村申告書の認識精度向上
 - **固定資産書類対応**：6002/6003番台書類の判定追加
 
-## 📦 インストール・実行
+## 📦 インストール・実行 (Installation & Usage)
 
-### 方法1: 実行ファイル（推奨）
+### 方法1: 実行ファイル（推奨）/ Method 1: Executable (Recommended)
 ```
-dist/TaxDocumentRenamer_v2.1_Tabbed.exe
+v4.0/dist/TaxDocumentRenamer_v4.0_Final.exe
 ```
-をダウンロードして実行
+最新のv4.0実行ファイルをダウンロードして実行
+Download and run the latest v4.0 executable
 
-### 方法2: Pythonから実行
+### 方法2: Pythonから実行 / Method 2: Run from Python
 ```bash
-# 必要なライブラリのインストール
+# 必要なライブラリのインストール / Install required libraries
 pip install -r requirements.txt
 
-# 実行
+# v4.0実行 / Run v4.0
+python v4.0/main.py
+
+# またはレガシー版実行 / Or run legacy version
 python tax_document_renamer.py
 ```
 
-## 🎯 対応書類一覧
+## 🆕 v4.0 新機能 (v4.0 New Features)
+
+v4.0では完全にゼロベースで再構築され、以下の新機能が追加されました：
+v4.0 has been completely rebuilt from the ground up with the following new features:
+
+### 🏗️ モジュラー設計 (Modular Architecture)
+- **コア機能分離**: PDFプロセッサ、OCRエンジン、文書分類器、CSVプロセッサの分離
+- **UI分離**: ドラッグ&ドロップ機能の独立コンポーネント化
+- **設定管理**: 自治体設定とマッチングロジックの分離
+
+### 📊 強化されたUI (Enhanced UI)
+- **3タブ構成**: ファイル選択・設定、処理結果、ログ・デバッグ
+- **ドラッグ&ドロップ**: 直接ファイルをドロップして追加可能
+- **リアルタイム進捗**: プログレスバーとステータス表示
+- **自動タブ切り替え**: 処理完了後に結果タブに自動切り替え
+
+### 🔧 技術的改善 (Technical Improvements)
+- **PDF分割機能**: 国税・地方税受信通知一式の自動分割対応
+- **OCR強化モード**: より高精度な文書認識
+- **エラーハンドリング**: 詳細なエラー情報とログ出力
+- **マルチスレッド処理**: UIブロックを防ぐバックグラウンド処理
+
+## 🎯 対応書類一覧 (Supported Document Types)
 
 ### 申告書類（0000番台）
 | ファイル名 | 判定キーワード |
@@ -263,13 +291,81 @@ pyinstaller==6.15.0 # exe化
    - 市役所、市税事務所等のキーワードを追加
    - より幅広い市町村申告書を認識
 
-## 📄 ライセンス
+## 📁 プロジェクト構成 (Project Structure)
+
+```
+tax-doc-renamer/
+├── v4.0/                           # Latest version (v4.0)
+│   ├── core/                       # Core modules
+│   │   ├── classification.py       # Document classification engine
+│   │   ├── csv_processor.py        # CSV file processor
+│   │   ├── ocr_engine.py          # OCR and municipality matching
+│   │   └── pdf_processor.py        # PDF processing and splitting
+│   ├── ui/                         # User interface components
+│   │   └── drag_drop.py           # Drag & drop functionality
+│   ├── dist/                      # Built executable (gitignored)
+│   │   └── TaxDocumentRenamer_v4.0_Final.exe
+│   └── main.py                    # Main application entry point
+├── requirements.txt               # Python dependencies
+├── README.md                     # Project documentation
+├── tax_document_renamer.py       # Legacy v2.1 application
+└── tax_document_renamer_v3.py    # Legacy v3.0 application
+```
+
+## 🌐 English Summary
+
+This is a Japanese tax document processing application that:
+
+- **Automatically classifies** PDF documents based on content analysis
+- **Renames files** according to Japanese tax document naming conventions
+- **Supports OCR** for scanned documents using Tesseract
+- **Handles multiple municipalities** (up to 5 different locations)
+- **Processes various document types** including corporate tax, local tax, consumption tax, and accounting documents
+- **Provides a modern GUI** with drag & drop functionality and real-time progress tracking
+
+The application is specifically designed for Japanese accounting and tax professionals who need to organize large volumes of tax-related PDF documents with standardized naming conventions.
+
+## 🛠️ Development
+
+### For Developers
+```bash
+# Clone the repository
+git clone https://github.com/Ezark213/tax-rename-app.git
+cd tax-rename-app
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the latest version
+python v4.0/main.py
+```
+
+### Building Executable
+```bash
+# Install PyInstaller
+pip install pyinstaller
+
+# Build executable (from v4.0 directory)
+cd v4.0
+pyinstaller --onefile --windowed main.py
+```
+
+## 📄 ライセンス (License)
 
 MIT License
 
-## 🔄 更新履歴
+## 🔄 更新履歴 (Version History)
 
-### v2.1 (2025-08-19) ✨ 最新版
+### v4.0 (2025-08-20) ✨ 最新版 (Latest)
+**🔥 完全再構築**
+- ゼロベースでの完全リアーキテクチャ
+- モジュラー設計による保守性向上
+- 国税・地方税受信通知一式の自動分割機能
+- 強化されたOCRエンジンと自治体マッチング
+- CSVファイル対応
+- マルチスレッド処理によるUI応答性向上
+
+### v2.1 (2025-08-19)
 **🆕 新機能**
 - タブ形式UI実装（📁設定 📊結果 🔧ログ）
 - ドラッグ&ドロップ対応
