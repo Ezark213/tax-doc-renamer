@@ -1,13 +1,18 @@
-# PyInstaller関連ファイル
-build/
+# Build outputs
 dist/
 # Allow v4.0 dist folder for distribution
 !v4.0/dist/
+build/
+*.exe
+
+# PyInstaller
 *.spec
 # Allow v4.0 spec file for building
 !v4.0/*.spec
+*.manifest
+*.spec.bak
 
-# Python関連
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,26 +24,49 @@ ENV/
 env.bak/
 venv.bak/
 
-# IDE関連
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Test files
+test_*.pdf
+test_*.csv
+sample_*.pdf
+sample_*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS関連
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Output files
+output/
+結果/
+分割結果/
+リネーム結果/
 
-# ログファイル
+# Logs
 *.log
+debug.log
+error.log
 
-# 一時ファイル
-*.tmp
-*.temp
+# Backup files
 *.bak
+*.backup
+
+# Old/deprecated files are kept in old/ folder for reference
+# Current active files:
+# - tax_document_renamer_v4.5.2_enhanced.py (latest monolithic)
+# - v4.0/main.py (modular version)
+# - TaxDocumentRenamer_v4.5.2_Enhanced.spec (latest build config)
+# - v4.0/TaxDocumentRenamer_v4.0_Final.spec (modular build config)
+# - README.md (documentation)
