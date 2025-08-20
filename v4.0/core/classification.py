@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
 """
 書類分類エンジン v4.0
-高精度書類種別判定システム
+高精度書類種別判定システム（詳細ログ対応版）
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
+import logging
+from typing import Dict, List, Optional, Tuple, Callable
+from dataclasses import dataclass, field
+import datetime
+
+@dataclass
+class ClassificationStep:
+    """分類の1ステップを表すデータクラス"""
+    document_type: str
+    score: float
+    matched_keywords: List[str]
+    excluded: bool
+    exclude_reason: str = ""
 
 @dataclass
 class ClassificationResult:
@@ -15,31 +26,45 @@ class ClassificationResult:
     confidence: float
     matched_keywords: List[str]
     classification_method: str
+    debug_steps: List[ClassificationStep] = field(default_factory=list)
+    processing_log: List[str] = field(default_factory=list)
 
 class DocumentClassifier:
     """書類分類のメインクラス"""
     
-    def __init__(self):
-        """初期化"""
+    def __init__(self, debug_mode: bool = False, log_callback: Optional[Callable[[str], None]] = None):
+        """初期化
+        
+        Args:
+            debug_mode: デバッグモードの有効化
+            log_callback: ログ出力のコールバック関数
+        """
+        self.debug_mode = debug_mode
+        self.log_callback = log_callback
+        self.current_filename = ""
+        self.processing_log = []
         # 書類分類の優先度付きキーワード辞書
         self.classification_rules = {
             # 申告書類（0000番台）
             "0000_納付税額一覧表": {
-                "priority": 10,
+                "priority": 15,
                 "exact_keywords": ["納付税額一覧表", "税額一覧", "納付一覧"],
                 "partial_keywords": ["納付税額", "税額一覧"],
                 "exclude_keywords": []
             },
             "0001_法人税及び地方法人税申告書": {
-                "priority": 12,
+                "priority": 15,
                 "exact_keywords": [
                     "法人税及び地方法人税申告書",
                     "内国法人の確定申告",
                     "内国法人の確定申告(青色)",
                     "法人税申告書別表一",
-                    "申告書第一表"
+                    "申告書第一表",
+                    "事業年度分の法人税申告書",
+                    "税額控除超過額",
+                    "控除した金額"
                 ],
-                "partial_keywords": ["法人税申告", "内国法人", "確定申告", "青色申告"],
+                "partial_keywords": ["法人税申告", "内国法人", "確定申告", "青色申告", "事業年度分", "税額控除"],
                 "exclude_keywords": ["添付資料", "資料", "別添", "参考", "イメージ添付"],
                 "filename_keywords": ["内国法人", "確定申告", "青色"]
             },
@@ -71,14 +96,19 @@ class DocumentClassifier:
             
             # 都道府県関連（1000番台）
             "1001_都道府県_法人都道府県民税・事業税・特別法人事業税": {
-                "priority": 9,
+                "priority": 11,
                 "exact_keywords": [
                     "法人都道府県民税・事業税・特別法人事業税申告書",
                     "法人事業税申告書",
                     "都道府県民税申告書"
                 ],
-                "partial_keywords": ["都道府県民税", "法人事業税", "特別法人事業税"],
-                "exclude_keywords": ["市町村", "市民税"]
+                "partial_keywords": [
+                    "都道府県民税", "法人事業税", "特別法人事業税",
+                    "道府県民税", "事業税", "県税事務所",
+                    "都税事務所", "年400万円以下", "年月日から年月日までの"
+                ],
+                "exclude_keywords": ["市町村", "市民税", "市役所", "町役場", "村役場"],
+                "filename_keywords": ["県税事務所", "都税事務所"]
             },
             "1003_受信通知_都道府県": {
                 "priority": 8,
@@ -114,15 +144,18 @@ class DocumentClassifier:
             },
             
             # 消費税関連（3000番台）
-            "3001_消費税申告書": {
-                "priority": 12,
+            "3001_消費税及び地方消費税申告書": {
+                "priority": 15,
                 "exact_keywords": [
                     "消費税申告書", 
                     "消費税及び地方消費税申告書",
                     "消費税及び地方消費税申告(一般・法人)",
-                    "消費税申告(一般・法人)"
+                    "消費税申告(一般・法人)",
+                    "課税期間分の消費税及び",
+                    "基準期間の",
+                    "現金主義会計の適用"
                 ],
-                "partial_keywords": ["消費税申告", "地方消費税申告", "消費税申告書"],
+                "partial_keywords": ["消費税申告", "地方消費税申告", "消費税申告書", "課税期間分", "基準期間"],
                 "exclude_keywords": ["添付資料", "イメージ添付", "資料"],
                 "filename_keywords": ["消費税及び地方消費税申告", "消費税申告", "地方消費税申告"]
             },
@@ -160,7 +193,7 @@ class DocumentClassifier:
                 "exclude_keywords": []
             },
             "5002_総勘定元帳": {
-                "priority": 9,
+                "priority": 15,
                 "exact_keywords": ["総勘定元帳"],
                 "partial_keywords": ["総勘定", "元帳"],
                 "exclude_keywords": ["補助元帳", "補助"]
@@ -192,13 +225,13 @@ class DocumentClassifier:
                 "exclude_keywords": []
             },
             "6002_一括償却資産明細表": {
-                "priority": 9,
+                "priority": 15,
                 "exact_keywords": ["一括償却資産明細表"],
                 "partial_keywords": ["一括償却", "償却資産明細"],
                 "exclude_keywords": ["少額"]
             },
             "6003_少額減価償却資産明細表": {
-                "priority": 9,
+                "priority": 15,
                 "exact_keywords": ["少額減価償却資産明細表"],
                 "partial_keywords": ["少額減価償却", "少額償却"],
                 "exclude_keywords": ["一括"]
@@ -219,47 +252,259 @@ class DocumentClassifier:
             }
         }
 
+    def _log(self, message: str, level: str = "INFO"):
+        """ログ出力"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        log_entry = f"[{timestamp}] [{level}] {message}"
+        
+        # 内部ログリストに追加
+        self.processing_log.append(log_entry)
+        
+        # コールバックがあれば呼び出し
+        if self.log_callback:
+            self.log_callback(log_entry)
+        
+        # デバッグモードの場合はコンソール出力
+        if self.debug_mode:
+            print(log_entry)
+
+    def _log_debug(self, message: str):
+        """デバッグレベルのログ"""
+        if self.debug_mode:
+            self._log(message, "DEBUG")
+
+    def _log_classification_step(self, doc_type: str, score: float, keywords: List[str], excluded: bool = False, exclude_reason: str = ""):
+        """分類ステップのログ"""
+        status = "除外" if excluded else f"スコア:{score:.1f}"
+        keywords_str = ", ".join(keywords) if keywords else "なし"
+        reason_str = f" ({exclude_reason})" if exclude_reason else ""
+        
+        self._log_debug(f"  → {doc_type}: {status}, キーワード:[{keywords_str}]{reason_str}")
+
+    def _check_highest_priority_keywords(self, text: str, filename: str) -> Optional[ClassificationResult]:
+        """最優先キーワードをチェックして即座に分類を決定"""
+        combined_text = f"{text} {filename}"
+        
+        # 最優先分類キーワード（優先度順）
+        highest_priority_keywords = {
+            # 納付税額一覧表（最高優先度）
+            "納付税額一覧表": {
+                "document_type": "0000_納付税額一覧表",
+                "keywords": ["納付税額一覧表"],
+                "priority": 100
+            },
+            # 総勘定元帳（最高優先度）
+            "総勘定元帳": {
+                "document_type": "5002_総勘定元帳",
+                "keywords": ["総勘定元帳"],
+                "priority": 100
+            },
+            # 少額減価償却資産明細表（最高優先度）
+            "少額減価償却資産明細表": {
+                "document_type": "6003_少額減価償却資産明細表",
+                "keywords": ["少額減価償却資産明細表"],
+                "priority": 100
+            },
+            # 一括償却資産明細表（最高優先度）
+            "一括償却資産明細表": {
+                "document_type": "6002_一括償却資産明細表",
+                "keywords": ["一括償却資産明細表"],
+                "priority": 100
+            },
+            # 添付資料（最高優先度 - 法人税申告より優先）
+            "添付資料": {
+                "document_type": "0002_添付資料",
+                "keywords": ["添付書類送付書", "添付書類名称"],
+                "priority": 100
+            },
+            # 消費税申告書（高優先度 - 複数キーワードの組み合わせ）
+            "消費税申告": {
+                "document_type": "3001_消費税及び地方消費税申告書",
+                "keywords": [
+                    "課税期間分の消費税及び",
+                    "基準期間の",
+                    "現金主義会計の適用",
+                    "消費税及び地方消費税申告(一般・法人)",
+                    "消費税申告(一般・法人)"
+                ],
+                "priority": 90
+            },
+            # 法人税申告書（高優先度 - 複数キーワードの組み合わせ）
+            "法人税申告": {
+                "document_type": "0001_法人税及び地方法人税申告書",
+                "keywords": [
+                    "事業年度分の法人税申告書",
+                    "税額控除超過額",
+                    "控除した金額",
+                    "内国法人の確定申告(青色)",
+                    "内国法人の確定申告"
+                ],
+                "priority": 90
+            },
+            # 都道府県書類（10系統）
+            "都道府県書類": {
+                "document_type": "1001_都道府県_法人都道府県民税・事業税・特別法人事業税",
+                "keywords": [
+                    "県税事務所",
+                    "都税事務所", 
+                    "道府県民税",
+                    "法人事業税",
+                    "特別法人事業税",
+                    "年400万円以下",
+                    "年月日から年月日までの"
+                ],
+                "priority": 95
+            },
+            # 市町村書類（20系統）
+            "市町村書類": {
+                "document_type": "2001_市町村_法人市民税",
+                "keywords": [
+                    "市役所",
+                    "町役場",
+                    "村役場",
+                    "法人市民税",
+                    "市町村民税",
+                    "市民税申告書"
+                ],
+                "priority": 95
+            }
+        }
+        
+        self._log("最優先キーワード判定開始")
+        
+        # 優先度順でチェック
+        for rule_name, rule_info in sorted(highest_priority_keywords.items(), 
+                                         key=lambda x: x[1]["priority"], reverse=True):
+            
+            matched_keywords = []
+            for keyword in rule_info["keywords"]:
+                if keyword in combined_text:
+                    matched_keywords.append(keyword)
+            
+            # キーワードマッチした場合
+            if matched_keywords:
+                self._log(f"最優先キーワード検出: {rule_name} → {rule_info['document_type']}")
+                self._log_debug(f"マッチしたキーワード: {matched_keywords}")
+                
+                return ClassificationResult(
+                    document_type=rule_info["document_type"],
+                    confidence=1.0,  # 最優先なので信頼度100%
+                    matched_keywords=matched_keywords,
+                    classification_method="highest_priority_keyword",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+        
+        self._log_debug("最優先キーワードマッチなし - 通常分類処理に移行")
+        return None
+
     def classify_document(self, text: str, filename: str = "") -> ClassificationResult:
-        """書類を分類"""
+        """書類を分類（詳細ログ対応版）"""
+        self.processing_log = []  # ログをリセット
+        self.current_filename = filename
+        
+        self._log(f"書類分類開始: {filename}")
+        
         # テキストの前処理
         text_cleaned = self._preprocess_text(text)
         filename_cleaned = self._preprocess_text(filename)
+        
+        self._log_debug(f"入力テキスト長: {len(text)} → 前処理後: {len(text_cleaned)}")
+        self._log_debug(f"ファイル名: {filename} → 前処理後: {filename_cleaned}")
+        
+        # 抽出テキストの一部を表示（デバッグ用）
+        if text_cleaned:
+            preview = text_cleaned[:200] + "..." if len(text_cleaned) > 200 else text_cleaned
+            self._log_debug(f"テキスト内容: {preview}")
+        
+        # 最優先キーワード判定（新機能）
+        priority_result = self._check_highest_priority_keywords(text_cleaned, filename_cleaned)
+        if priority_result:
+            return priority_result
         
         best_match = None
         best_score = 0
         best_keywords = []
         best_method = "keyword_matching"
+        debug_steps = []
+        
+        self._log("分類ルール評価開始")
         
         # 各分類ルールに対してスコア計算
         for doc_type, rules in self.classification_rules.items():
+            self._log_debug(f"評価中: {doc_type} (優先度: {rules.get('priority', 5)})")
+            
             # テキストとファイル名を分けてスコア計算
-            text_score, text_keywords = self._calculate_score(text_cleaned, rules)
+            text_score, text_keywords = self._calculate_score(text_cleaned, rules, "テキスト")
             filename_score, filename_keywords = self._calculate_filename_score(filename_cleaned, rules)
             
             # 総合スコア（ファイル名を重視）
             total_score = text_score + (filename_score * 1.5)
             combined_keywords = text_keywords + filename_keywords
             
-            if total_score > best_score:
+            # 除外判定チェック
+            excluded = (text_score == 0 and len(rules.get("exclude_keywords", [])) > 0) or \
+                      (filename_score == 0 and len(rules.get("exclude_keywords", [])) > 0)
+            exclude_reason = ""
+            if excluded:
+                # 除外理由を特定
+                for exclude_keyword in rules.get("exclude_keywords", []):
+                    if exclude_keyword in text_cleaned or exclude_keyword in filename_cleaned:
+                        exclude_reason = f"除外キーワード '{exclude_keyword}' を検出"
+                        break
+            
+            # デバッグステップ記録
+            step = ClassificationStep(
+                document_type=doc_type,
+                score=total_score,
+                matched_keywords=combined_keywords,
+                excluded=excluded,
+                exclude_reason=exclude_reason
+            )
+            debug_steps.append(step)
+            
+            # ログ出力
+            if excluded:
+                self._log_classification_step(doc_type, 0, [], True, exclude_reason)
+            else:
+                self._log_classification_step(doc_type, total_score, combined_keywords)
+                if text_score > 0:
+                    self._log_debug(f"    - テキストスコア: {text_score:.1f} (キーワード: {text_keywords})")
+                if filename_score > 0:
+                    self._log_debug(f"    - ファイル名スコア: {filename_score:.1f} × 1.5 = {filename_score * 1.5:.1f} (キーワード: {filename_keywords})")
+            
+            # 最高スコア更新
+            if not excluded and total_score > best_score:
+                old_best = best_match
                 best_score = total_score
                 best_match = doc_type
                 best_keywords = combined_keywords
+                self._log_debug(f"    新たな最高スコア! {old_best} → {doc_type}")
         
         # 信頼度を計算（0.0-1.0）
         confidence = min(best_score / 15.0, 1.0)
         
+        self._log(f"最終結果: {best_match}, スコア: {best_score:.1f}, 信頼度: {confidence:.2f}")
+        
         # 分類できない場合のデフォルト
         if not best_match or confidence < 0.3:
+            old_match = best_match
             best_match = "0000_未分類"
             confidence = 0.0
             best_method = "default"
+            self._log(f"信頼度不足により未分類に変更: {old_match} → {best_match}")
         
-        return ClassificationResult(
+        result = ClassificationResult(
             document_type=best_match,
             confidence=confidence,
             matched_keywords=best_keywords,
-            classification_method=best_method
+            classification_method=best_method,
+            debug_steps=debug_steps,
+            processing_log=self.processing_log.copy()
         )
+        
+        self._log("書類分類完了")
+        return result
 
     def _preprocess_text(self, text: str) -> str:
         """テキストの前処理"""
@@ -277,78 +522,205 @@ class DocumentClassifier:
         
         return cleaned.strip()
 
-    def _calculate_score(self, text: str, rules: Dict) -> Tuple[float, List[str]]:
-        """分類ルールに基づいてスコアを計算"""
+    def _calculate_score(self, text: str, rules: Dict, source: str = "") -> Tuple[float, List[str]]:
+        """分類ルールに基づいてスコアを計算（詳細ログ対応版）"""
         score = 0
         matched_keywords = []
+        priority = rules.get("priority", 5)
         
         # 除外キーワードチェック（優先）
         for exclude_keyword in rules.get("exclude_keywords", []):
             if exclude_keyword in text:
+                self._log_debug(f"    除外: {source}除外キーワード検出: '{exclude_keyword}'")
                 return 0, []  # 除外キーワードが含まれている場合はスコア0
         
         # 完全一致キーワード（高スコア）
         for exact_keyword in rules.get("exact_keywords", []):
             if exact_keyword in text:
-                score += rules.get("priority", 5) * 2
+                points = priority * 2
+                score += points
                 matched_keywords.append(exact_keyword)
+                self._log_debug(f"    完全一致: {source}'{exact_keyword}' (+{points})")
         
         # 部分一致キーワード（中スコア）
         for partial_keyword in rules.get("partial_keywords", []):
             if partial_keyword in text:
-                score += rules.get("priority", 5) * 1
+                points = priority * 1
+                score += points
                 matched_keywords.append(partial_keyword)
+                self._log_debug(f"    部分一致: {source}'{partial_keyword}' (+{points})")
         
         return score, matched_keywords
 
     def _calculate_filename_score(self, filename: str, rules: Dict) -> Tuple[float, List[str]]:
-        """ファイル名に基づいてスコアを計算"""
+        """ファイル名に基づいてスコアを計算（詳細ログ対応版）"""
         score = 0
         matched_keywords = []
+        priority = rules.get("priority", 5)
         
         # 除外キーワードチェック（ファイル名でも重要）
         for exclude_keyword in rules.get("exclude_keywords", []):
             if exclude_keyword in filename:
+                self._log_debug(f"    除外: ファイル名除外キーワード検出: '{exclude_keyword}'")
                 return 0, []  # 除外キーワードが含まれている場合はスコア0
         
         # ファイル名専用キーワードがある場合
         filename_keywords = rules.get("filename_keywords", [])
         for keyword in filename_keywords:
             if keyword in filename:
-                score += rules.get("priority", 5) * 3  # ファイル名マッチは最高スコア
+                points = priority * 3  # ファイル名マッチは最高スコア
+                score += points
                 matched_keywords.append(f"[ファイル名]{keyword}")
+                self._log_debug(f"    ファイル名専用一致: '{keyword}' (+{points})")
         
         # 通常のキーワードもファイル名でチェック
         for exact_keyword in rules.get("exact_keywords", []):
             if exact_keyword in filename:
-                score += rules.get("priority", 5) * 2
+                points = priority * 2
+                score += points
                 matched_keywords.append(f"[ファイル名]{exact_keyword}")
+                self._log_debug(f"    ファイル名完全一致: '{exact_keyword}' (+{points})")
         
         return score, matched_keywords
 
     def classify_with_municipality_info(self, text: str, filename: str, 
                                       prefecture_code: Optional[int] = None,
-                                      municipality_code: Optional[int] = None) -> ClassificationResult:
-        """自治体情報を考慮した分類"""
+                                      municipality_code: Optional[int] = None,
+                                      available_sets: Optional[List[int]] = None) -> ClassificationResult:
+        """自治体情報を考慮した分類（セット優先順序対応版）"""
+        # 都道府県申告書の特別判定処理
+        prefecture_result = self._classify_prefecture_document(text, filename, prefecture_code)
+        if prefecture_result:
+            return prefecture_result
+        
         # 基本分類を実行
         base_result = self.classify_document(text, filename)
         
-        # 自治体関連書類の場合、連番を調整
-        if prefecture_code and base_result.document_type.startswith("1001_"):
-            # 都道府県番台の連番調整
-            base_code = base_result.document_type.split("_", 1)
-            if len(base_code) == 2:
-                new_code = f"{prefecture_code}_{base_code[1]}"
-                base_result.document_type = new_code
+        # セット優先順序による最終コード決定
+        final_code = self._determine_final_code_with_set_priority(
+            base_result.document_type, 
+            prefecture_code, 
+            municipality_code, 
+            available_sets
+        )
         
-        if municipality_code and base_result.document_type.startswith("2001_"):
-            # 市町村番台の連番調整
-            base_code = base_result.document_type.split("_", 1)
-            if len(base_code) == 2:
-                new_code = f"{municipality_code}_{base_code[1]}"
-                base_result.document_type = new_code
+        if final_code != base_result.document_type:
+            self._log(f"セット優先順序適用: {base_result.document_type} → {final_code}")
+            base_result.document_type = final_code
         
         return base_result
+
+    def _determine_final_code_with_set_priority(self, document_type: str, 
+                                              prefecture_code: Optional[int] = None,
+                                              municipality_code: Optional[int] = None,
+                                              available_sets: Optional[List[int]] = None) -> str:
+        """セット優先順序による最終コード決定
+        
+        Args:
+            document_type: 基本分類結果
+            prefecture_code: 都道府県コード
+            municipality_code: 市町村コード  
+            available_sets: 利用可能なセット番号リスト
+            
+        Returns:
+            最終的なドキュメントコード
+        """
+        # セット優先順序定義 (セット1 → セット2 → セット3 → セット4 → セット5)
+        set_priority = [1001, 1011, 1021, 1031, 1041]  # 都道府県用
+        municipality_set_priority = [2001, 2011, 2021, 2031, 2041]  # 市町村用
+        
+        # 都道府県関連書類の場合
+        if document_type.startswith("1001_"):
+            base_code = document_type.split("_", 1)
+            if len(base_code) == 2:
+                # セット優先順序で最適なコードを決定
+                if available_sets:
+                    # 利用可能なセットから最も優先度が高いものを選択
+                    for priority_code in set_priority:
+                        if priority_code in available_sets:
+                            self._log_debug(f"都道府県セット優先選択: {priority_code}")
+                            return f"{priority_code}_{base_code[1]}"
+                elif prefecture_code:
+                    # 指定されたコードを使用
+                    return f"{prefecture_code}_{base_code[1]}"
+                    
+        # 市町村関連書類の場合
+        elif document_type.startswith("2001_"):
+            base_code = document_type.split("_", 1)
+            if len(base_code) == 2:
+                # セット優先順序で最適なコードを決定
+                if available_sets:
+                    # 利用可能なセットから最も優先度が高いものを選択
+                    for priority_code in municipality_set_priority:
+                        if priority_code in available_sets:
+                            self._log_debug(f"市町村セット優先選択: {priority_code}")
+                            return f"{priority_code}_{base_code[1]}"
+                elif municipality_code:
+                    # 指定されたコードを使用
+                    return f"{municipality_code}_{base_code[1]}"
+        
+        # その他の場合は元のコードをそのまま返す
+        return document_type
+
+    def _classify_prefecture_document(self, text: str, filename: str, 
+                                    prefecture_code: Optional[int] = None) -> Optional[ClassificationResult]:
+        """都道府県申告書の特別判定処理"""
+        # 都道府県申告書判定キーワード群
+        prefecture_keywords = [
+            "県税事務所", "都税事務所", "道府県民税", "事業税", "特別法人事業税",
+            "年400万円以下", "年月日から年月日までの", "申告書"
+        ]
+        
+        # テキストとファイル名を結合して判定
+        combined_text = f"{text} {filename}".lower()
+        
+        # 東京都の特別処理
+        is_tokyo = "都税事務所" in combined_text or "東京都" in combined_text
+        
+        # 東京都でセット2-5の場合のエラー処理
+        if is_tokyo and prefecture_code and prefecture_code in [1011, 1021, 1031, 1041]:
+            self._log(f"東京都エラー処理: セット{(prefecture_code-1001)//10+1}は東京都では使用不可")
+            self._log_debug(f"東京都セット2-5エラー: prefecture_code={prefecture_code}")
+            
+            # 東京都の場合はセット1(1001)に強制変更
+            prefecture_code = 1001
+            self._log(f"東京都のためセット1(1001)に変更")
+        
+        # キーワードマッチング数をカウント
+        matched_keywords = []
+        for keyword in prefecture_keywords:
+            if keyword in combined_text:
+                matched_keywords.append(keyword)
+        
+        match_count = len(matched_keywords)
+        
+        # 3個以上のキーワードマッチで都道府県申告書と判定
+        if match_count >= 3:
+            # 優先度: セット1 > セット2 > セット3 > セット4 > セット5
+            prefecture_code_mapping = {
+                None: 1001,  # デフォルト
+                1011: 1011,  # セット2
+                1021: 1021,  # セット3
+                1031: 1031,  # セット4
+                1041: 1041   # セット5
+            }
+            
+            file_code = prefecture_code_mapping.get(prefecture_code, 1001)
+            confidence = min(match_count / len(prefecture_keywords), 1.0)
+            
+            self._log_debug(f"都道府県申告書判定: マッチ数={match_count}, 信頼度={confidence:.2f}, コード={file_code}")
+            self._log_debug(f"マッチキーワード: {matched_keywords}")
+            
+            return ClassificationResult(
+                document_type=f"{file_code}_都道府県_法人都道府県民税・事業税・特別法人事業税",
+                confidence=confidence,
+                matched_keywords=matched_keywords,
+                classification_method="prefecture_special_classification",
+                debug_steps=[],
+                processing_log=[]
+            )
+        
+        return None
 
     def get_document_category(self, document_type: str) -> str:
         """書類分類からカテゴリを取得"""

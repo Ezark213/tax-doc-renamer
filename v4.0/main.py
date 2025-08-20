@@ -34,11 +34,12 @@ class TaxDocumentRenamerV4:
         self.pdf_processor = PDFProcessor()
         self.ocr_engine = OCREngine()
         self.csv_processor = CSVProcessor()
-        self.classifier = DocumentClassifier()
+        self.classifier = DocumentClassifier(debug_mode=True, log_callback=self._log)
         
         # UI変数
         self.files_list = []
-        self.processing = False
+        self.split_processing = False
+        self.rename_processing = False
         self.municipality_sets = []
         
         # UI構築
@@ -147,17 +148,27 @@ class TaxDocumentRenamerV4:
         self.ocr_enhanced_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(options_frame, text="OCR強化モード", variable=self.ocr_enhanced_var).pack(anchor='w')
         
-        # 処理開始ボタン
+        # 処理ボタン（分割・リネーム独立化）
         process_frame = ttk.Frame(right_frame)
         process_frame.pack(fill='x', pady=20)
         
-        self.process_button = ttk.Button(
+        # 分割実行ボタン
+        self.split_button = ttk.Button(
             process_frame, 
-            text="🚀 処理開始", 
-            command=self._start_processing,
+            text="📄 分割実行", 
+            command=self._start_split_processing,
             style='Accent.TButton'
         )
-        self.process_button.pack(fill='x')
+        self.split_button.pack(fill='x', pady=(0, 5))
+        
+        # リネーム実行ボタン
+        self.rename_button = ttk.Button(
+            process_frame, 
+            text="✏️ リネーム実行", 
+            command=self._start_rename_processing,
+            style='Accent.TButton'
+        )
+        self.rename_button.pack(fill='x')
         
         # プログレスバー
         self.progress_var = tk.DoubleVar()
@@ -302,13 +313,39 @@ class TaxDocumentRenamerV4:
         self.files_listbox.delete(0, tk.END)
         self._log("ファイルリストをクリアしました")
 
-    def _start_processing(self):
-        """処理開始"""
+    def _start_split_processing(self):
+        """分割処理開始"""
         if not self.files_list:
             messagebox.showwarning("警告", "処理するファイルを選択してください")
             return
         
-        if self.processing:
+        if self.split_processing or self.rename_processing:
+            messagebox.showwarning("警告", "処理中です")
+            return
+        
+        # 出力フォルダ選択
+        output_folder = filedialog.askdirectory(title="分割ファイルの出力フォルダを選択")
+        if not output_folder:
+            return
+        
+        # バックグラウンド処理開始
+        self.split_processing = True
+        self._update_button_states()
+        
+        thread = threading.Thread(
+            target=self._split_files_background,
+            args=(output_folder,),
+            daemon=True
+        )
+        thread.start()
+    
+    def _start_rename_processing(self):
+        """リネーム処理開始"""
+        if not self.files_list:
+            messagebox.showwarning("警告", "処理するファイルを選択してください")
+            return
+        
+        if self.split_processing or self.rename_processing:
             messagebox.showwarning("警告", "処理中です")
             return
         
@@ -316,16 +353,16 @@ class TaxDocumentRenamerV4:
         self.municipality_sets = self._get_municipality_sets()
         
         # 出力フォルダ選択
-        output_folder = filedialog.askdirectory(title="出力フォルダを選択")
+        output_folder = filedialog.askdirectory(title="リネーム済みファイルの出力フォルダを選択")
         if not output_folder:
             return
         
         # バックグラウンド処理開始
-        self.processing = True
-        self.process_button.config(state='disabled', text="処理中...")
+        self.rename_processing = True
+        self._update_button_states()
         
         thread = threading.Thread(
-            target=self._process_files_background,
+            target=self._rename_files_background,
             args=(output_folder,),
             daemon=True
         )
@@ -343,30 +380,66 @@ class TaxDocumentRenamerV4:
         
         return sets
 
-    def _process_files_background(self, output_folder: str):
-        """バックグラウンドファイル処理"""
+    def _split_files_background(self, output_folder: str):
+        """分割処理のバックグラウンド処理"""
+        try:
+            total_files = len(self.files_list)
+            split_count = 0
+            
+            for i, file_path in enumerate(self.files_list):
+                progress = (i / total_files) * 100
+                self.root.after(0, lambda p=progress: self.progress_var.set(p))
+                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"分割処理中: {f}"))
+                
+                try:
+                    if self._is_split_target(file_path):
+                        split_results = self._split_single_file(file_path, output_folder)
+                        split_count += len(split_results)
+                        
+                        for result in split_results:
+                            self.root.after(0, lambda r=result: self._add_result_success(
+                                file_path, os.path.basename(r), "分割完了"
+                            ))
+                    else:
+                        self._log(f"分割対象外: {os.path.basename(file_path)}")
+                        
+                except Exception as e:
+                    self._log(f"分割エラー: {file_path} - {str(e)}")
+                    self.root.after(0, lambda f=file_path, e=str(e): self._add_result_error(f, f"分割エラー: {e}"))
+            
+            # 処理完了
+            self.root.after(0, lambda: self.progress_var.set(100))
+            self.root.after(0, lambda c=split_count: self.status_var.set(f"分割完了: {c}ページ処理"))
+            
+        except Exception as e:
+            self._log(f"分割処理エラー: {str(e)}")
+        finally:
+            self.root.after(0, self._split_processing_finished)
+    
+    def _rename_files_background(self, output_folder: str):
+        """リネーム処理のバックグラウンド処理"""
         try:
             total_files = len(self.files_list)
             
             for i, file_path in enumerate(self.files_list):
                 progress = (i / total_files) * 100
                 self.root.after(0, lambda p=progress: self.progress_var.set(p))
-                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"処理中: {f}"))
+                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"リネーム処理中: {f}"))
                 
                 try:
                     self._process_single_file(file_path, output_folder)
                 except Exception as e:
-                    self._log(f"エラー: {file_path} - {str(e)}")
-                    self.root.after(0, lambda f=file_path, e=str(e): self._add_result_error(f, e))
+                    self._log(f"リネームエラー: {file_path} - {str(e)}")
+                    self.root.after(0, lambda f=file_path, e=str(e): self._add_result_error(f, f"リネームエラー: {e}"))
             
             # 処理完了
             self.root.after(0, lambda: self.progress_var.set(100))
-            self.root.after(0, lambda: self.status_var.set(f"完了: {total_files}件処理"))
+            self.root.after(0, lambda: self.status_var.set(f"リネーム完了: {total_files}件処理"))
             
         except Exception as e:
-            self._log(f"処理エラー: {str(e)}")
+            self._log(f"リネーム処理エラー: {str(e)}")
         finally:
-            self.root.after(0, self._processing_finished)
+            self.root.after(0, self._rename_processing_finished)
 
     def _process_single_file(self, file_path: str, output_folder: str):
         """単一ファイルの処理"""
@@ -448,11 +521,36 @@ class TaxDocumentRenamerV4:
             municipality_code = match_result['municipality_code']
             
             self._log(f"自治体認識: 都道府県={prefecture_code}, 市町村={municipality_code}")
+        else:
+            # 自治体設定がない場合でも都道府県申告書を判定するため、
+            # デフォルトでセット2のコード（1011）を使用して特別判定を有効化
+            if self.municipality_sets and len(self.municipality_sets) >= 2:
+                prefecture_code = 1011  # セット2
+            elif self.municipality_sets and len(self.municipality_sets) >= 1:
+                prefecture_code = 1011  # セット2デフォルト
         
-        # 書類分類
+        # 書類分類（詳細ログ付き）
         classification_result = self.classifier.classify_with_municipality_info(
             text, filename, prefecture_code, municipality_code
         )
+        
+        # 分類詳細ログを出力
+        self._log(f"分類結果詳細:")
+        self._log(f"  - 書類種別: {classification_result.document_type}")
+        self._log(f"  - 信頼度: {classification_result.confidence:.2f}")
+        self._log(f"  - マッチキーワード: {classification_result.matched_keywords}")
+        
+        # デバッグステップ情報
+        if hasattr(classification_result, 'debug_steps') and classification_result.debug_steps:
+            self._log("全分類候補のスコア:")
+            sorted_steps = sorted(classification_result.debug_steps, key=lambda x: x.score, reverse=True)
+            for i, step in enumerate(sorted_steps[:5]):  # 上位5位まで表示
+                status = "除外" if step.excluded else f"{step.score:.1f}点"
+                self._log(f"  {i+1}位: {step.document_type} - {status}")
+                if step.matched_keywords:
+                    self._log(f"       キーワード: {step.matched_keywords}")
+                if step.exclude_reason:
+                    self._log(f"       除外理由: {step.exclude_reason}")
         
         # 年月決定
         year_month = self.year_month_var.get() or self._extract_year_month_from_pdf(text, filename)
@@ -524,13 +622,177 @@ class TaxDocumentRenamerV4:
     def _generate_filename(self, doc_type: str, year_month: str, ext: str) -> str:
         """ファイル名生成"""
         return f"{doc_type}_{year_month}.{ext}"
+    
+    def _is_split_target(self, file_path: str) -> bool:
+        """分割対象ファイルか判定"""
+        try:
+            # PDFファイルのみ対象
+            if not file_path.lower().endswith('.pdf'):
+                return False
+            
+            # ファイルのテキストを抽出
+            import fitz
+            doc = fitz.open(file_path)
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            
+            # 分割対象キーワードの定義
+            split_keywords = [
+                # 分割対象1: 申告受付関連書類
+                "申告受付完了通知",
+                "納付情報発行結果",
+                # 分割対象2: メール詳細関連書類
+                "メール詳細",
+                "納付区分番号通知"
+            ]
+            
+            # キーワードマッチング
+            for keyword in split_keywords:
+                if keyword in text:
+                    self._log(f"分割対象検出: {os.path.basename(file_path)} - キーワード: {keyword}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self._log(f"分割対象判定エラー: {file_path} - {str(e)}")
+            return False
+    
+    def _is_empty_page(self, doc, page_num: int) -> bool:
+        """ページが空かどうかを判定"""
+        try:
+            page = doc[page_num]
+            
+            # テキスト抽出による判定
+            text_content = page.get_text().strip()
+            if len(text_content) > 10:  # 10文字以上のテキストがある場合は有効ページ
+                return False
+            
+            # 画像・図形の有無による判定
+            image_list = page.get_images()
+            if len(image_list) > 0:  # 画像がある場合は有効ページ
+                return False
+            
+            # 描画オブジェクトの有無による判定
+            drawings = page.get_drawings()
+            if len(drawings) > 0:  # 描画がある場合は有効ページ
+                return False
+            
+            # フォントリストによる判定（テキストが少なくてもフォント情報があれば有効）
+            fonts = page.get_fonts()
+            if len(fonts) > 1:  # 基本フォント以外がある場合は有効ページ
+                return False
+            
+            # 複数の条件で空ページと判断
+            if len(text_content) <= 2 and len(image_list) == 0 and len(drawings) == 0:
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self._log(f"空ページ判定エラー - ページ{page_num + 1}: {str(e)}")
+            # エラーの場合は安全のため有効ページとして扱う
+            return False
+    
+    def _split_single_file(self, file_path: str, output_folder: str) -> List[str]:
+        """単一ファイルのページ分割（空ページ除外機能付き）"""
+        split_files = []
+        
+        try:
+            import fitz
+            doc = fitz.open(file_path)
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            
+            self._log(f"分割開始: {os.path.basename(file_path)} ({doc.page_count}ページ)")
+            
+            empty_pages = []
+            valid_pages = []
+            
+            for page_num in range(doc.page_count):
+                # 空ページチェック
+                if self._is_empty_page(doc, page_num):
+                    empty_pages.append(page_num + 1)
+                    self._log(f"空ページ検出 - ページ{page_num + 1}: スキップします")
+                    continue
+                
+                valid_pages.append(page_num)
+                
+                # 各ページを個別PDFとして保存
+                new_doc = fitz.open()
+                new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                
+                # 出力ファイル名生成
+                output_filename = f"{base_name}_ページ{page_num + 1:03d}.pdf"
+                output_path = os.path.join(output_folder, output_filename)
+                
+                # 重複ファイル名の対応
+                output_path = self._generate_unique_filename(output_path)
+                
+                # PDF保存
+                new_doc.save(output_path)
+                new_doc.close()
+                
+                split_files.append(output_path)
+                self._log(f"ページ{page_num + 1}分割完了: {os.path.basename(output_path)}")
+            
+            doc.close()
+            
+            # 結果ログ
+            if empty_pages:
+                self._log(f"空ページ除外: {len(empty_pages)}ページ ({empty_pages})")
+            self._log(f"分割完了: {len(split_files)}ページ生成（有効ページ: {len(valid_pages)}）")
+            
+        except Exception as e:
+            self._log(f"分割エラー: {file_path} - {str(e)}")
+            raise
+        
+        return split_files
+    
+    def _generate_unique_filename(self, filepath: str) -> str:
+        """重複しないファイル名を生成"""
+        if not os.path.exists(filepath):
+            return filepath
+        
+        dir_name = os.path.dirname(filepath)
+        base_name = os.path.splitext(os.path.basename(filepath))[0]
+        ext = os.path.splitext(filepath)[1]
+        
+        counter = 1
+        while True:
+            new_filename = f"{base_name}_{counter:03d}{ext}"
+            new_filepath = os.path.join(dir_name, new_filename)
+            if not os.path.exists(new_filepath):
+                return new_filepath
+            counter += 1
 
-    def _processing_finished(self):
-        """処理完了時の処理"""
-        self.processing = False
-        self.process_button.config(state='normal', text="🚀 処理開始")
+    def _split_processing_finished(self):
+        """分割処理完了時の処理"""
+        self.split_processing = False
+        self._update_button_states()
         self.notebook.select(1)  # 結果タブに切り替え
-        messagebox.showinfo("完了", "処理が完了しました")
+        messagebox.showinfo("完了", "分割処理が完了しました")
+    
+    def _rename_processing_finished(self):
+        """リネーム処理完了時の処理"""
+        self.rename_processing = False
+        self._update_button_states()
+        self.notebook.select(1)  # 結果タブに切り替え
+        messagebox.showinfo("完了", "リネーム処理が完了しました")
+    
+    def _update_button_states(self):
+        """ボタンの状態を更新"""
+        if self.split_processing:
+            self.split_button.config(state='disabled', text="分割処理中...")
+            self.rename_button.config(state='disabled')
+        elif self.rename_processing:
+            self.split_button.config(state='disabled')
+            self.rename_button.config(state='disabled', text="リネーム処理中...")
+        else:
+            # 両方とも処理中でない場合
+            self.split_button.config(state='normal', text="📄 分割実行")
+            self.rename_button.config(state='normal', text="✏️ リネーム実行")
 
     def _add_result_success(self, original_file: str, new_filename: str, doc_type: str):
         """成功結果を追加"""
