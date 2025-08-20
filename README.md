@@ -4,15 +4,15 @@
 
 税務書類のPDF/CSV画像認識による自動分割・リネームシステム
 
-## 🚀 最新版: v4.3 分割・リネーム修正版
+## 🚀 最新版: v4.4 機能拡張版
 
 ### 主要機能
+- **複数ファイル一括処理**: 複数のPDF/CSVファイルを一度に選択・処理
+- **出力先フォルダ指定**: 処理結果の保存先を自由に選択
+- **統合UI**: ファイル処理・地域設定を1つのタブに集約
 - **厳格な分割判定**: 分割対象を限定し、不要な分割を防止
 - **2段階処理システム**: 分割判定→リネーム処理の確実な実行
-- **一時ファイル管理**: 分割後の適切なリネーム処理
-- **分割不要書類の除外**: 単一書類の誤分割防止
 - **地域判定エンジン**: OCRによる都道府県・市町村自動判定
-- **CSVエンコーディング対応**: Shift_JIS等日本語エンコーディング自動判定
 
 ### 対応書類
 - 法人税申告書 → `0001_法人税及び地方法人税申告書_YYMM.pdf`
@@ -26,10 +26,11 @@
 ## 📁 ファイル構成
 
 ### 実行ファイル
-- `TaxDocumentRenamer_v4.3_SplitFix.exe` - **最新版実行ファイル**
+- `TaxDocumentRenamer_v4.4_Enhanced.exe` - **最新版実行ファイル（機能拡張版）**
 
 ### ソースコード（バージョン履歴）
-- `tax_document_renamer_v4.3_split_fix.py` - **最新版ソースコード（分割・リネーム修正）**
+- `tax_document_renamer_v4.4_enhanced.py` - **最新版ソースコード（機能拡張版）**
+- `tax_document_renamer_v4.3_split_fix.py` - v4.3分割・リネーム修正版
 - `tax_document_renamer_v4.2_regional.py` - v4.2地域対応版
 - `tax_document_renamer_v4.1_fixed.py` - v4.1修正版
 - `tax_document_renamer_v4.0_complete.py` - v4.0完全版
@@ -38,7 +39,8 @@
 - `tax_document_renamer_v3.1_stable.py` - v3.1安定版
 
 ### PyInstaller設定ファイル
-- `TaxDocumentRenamer_v4.3_SplitFix.spec` - **最新版ビルド設定**
+- `TaxDocumentRenamer_v4.4_Enhanced.spec` - **最新版ビルド設定**
+- `TaxDocumentRenamer_v4.3_SplitFix.spec` - v4.3ビルド設定
 - `TaxDocumentRenamer_v4.2_Regional.spec` - v4.2ビルド設定
 - `TaxDocumentRenamer_v4.1_Fixed.spec`
 - `TaxDocumentRenamer_v4.0_Complete.spec`
