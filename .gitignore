@@ -1,9 +1,9 @@
-# PyInstaller関連ファイル
-build/
+# Build outputs
 dist/
-*.spec
+build/
+*.exe
 
-# Python関連
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -15,26 +15,45 @@ ENV/
 env.bak/
 venv.bak/
 
-# IDE関連
+# PyInstaller
+*.manifest
+*.spec.bak
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Test files
+test_*.pdf
+test_*.csv
+sample_*.pdf
+sample_*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS関連
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Output files
+output/
+結果/
+分割結果/
+リネーム結果/
 
-# ログファイル
+# Logs
 *.log
+debug.log
+error.log
 
-# 一時ファイル
-*.tmp
-*.temp
+# Backup files
 *.bak
+*.backup
