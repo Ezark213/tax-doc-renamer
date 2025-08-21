@@ -47,9 +47,9 @@ class DocumentClassifier:
         self.classification_rules = {
             # 申告書類（0000番台）
             "0000_納付税額一覧表": {
-                "priority": 15,
-                "exact_keywords": ["納付税額一覧表", "税額一覧", "納付一覧"],
-                "partial_keywords": ["納付税額", "税額一覧"],
+                "priority": 2,  # 優先度を下げて最優先キーワードを優先
+                "exact_keywords": [],  # 通常分類では空にして最優先のみで検出
+                "partial_keywords": [],
                 "exclude_keywords": []
             },
             "0001_法人税及び地方法人税申告書": {
@@ -287,64 +287,78 @@ class DocumentClassifier:
         
         # 最優先分類キーワード（優先度順）
         highest_priority_keywords = {
-            # 納付税額一覧表（最高優先度）
+            # 納付税額一覧表（最高優先度 - 2つのキーワード要件）
             "納付税額一覧表": {
                 "document_type": "0000_納付税額一覧表",
-                "keywords": ["納付税額一覧表"],
+                "required_keywords": ["納付税額一覧表", "既納付額"],
+                "match_type": "all",  # すべてのキーワードが必要
                 "priority": 100
             },
             # 総勘定元帳（最高優先度）
             "総勘定元帳": {
                 "document_type": "5002_総勘定元帳",
-                "keywords": ["総勘定元帳"],
+                "required_keywords": ["総勘定元帳"],
+                "match_type": "any",  # いずれかのキーワードで可
                 "priority": 100
             },
             # 少額減価償却資産明細表（最高優先度）
             "少額減価償却資産明細表": {
                 "document_type": "6003_少額減価償却資産明細表",
-                "keywords": ["少額減価償却資産明細表"],
+                "required_keywords": ["少額減価償却資産明細表"],
+                "match_type": "any",
                 "priority": 100
             },
             # 一括償却資産明細表（最高優先度）
             "一括償却資産明細表": {
                 "document_type": "6002_一括償却資産明細表",
-                "keywords": ["一括償却資産明細表"],
+                "required_keywords": ["一括償却資産明細表"],
+                "match_type": "any",
                 "priority": 100
             },
-            # 添付資料（最高優先度 - 法人税申告より優先）
-            "添付資料": {
+            # 消費税添付資料（最高優先度 - 2つのキーワード要件）
+            "消費税添付資料": {
+                "document_type": "3002_添付資料",
+                "required_keywords": ["添付書類送付書", "消費税及び"],
+                "match_type": "all",  # 両方のキーワードが必要
+                "priority": 100
+            },
+            # 法人税添付資料（最高優先度 - 2つのキーワード要件）
+            "法人税添付資料": {
                 "document_type": "0002_添付資料",
-                "keywords": ["添付書類送付書", "添付書類名称"],
+                "required_keywords": ["添付書類送付書", "内国法人の確定申告"],
+                "match_type": "all",  # 両方のキーワードが必要
                 "priority": 100
             },
             # 消費税申告書（高優先度 - 複数キーワードの組み合わせ）
             "消費税申告": {
                 "document_type": "3001_消費税及び地方消費税申告書",
-                "keywords": [
+                "required_keywords": [
                     "課税期間分の消費税及び",
                     "基準期間の",
                     "現金主義会計の適用",
                     "消費税及び地方消費税申告(一般・法人)",
                     "消費税申告(一般・法人)"
                 ],
+                "match_type": "any",
                 "priority": 90
             },
             # 法人税申告書（高優先度 - 複数キーワードの組み合わせ）
             "法人税申告": {
                 "document_type": "0001_法人税及び地方法人税申告書",
-                "keywords": [
+                "required_keywords": [
                     "事業年度分の法人税申告書",
                     "税額控除超過額",
                     "控除した金額",
                     "内国法人の確定申告(青色)",
                     "内国法人の確定申告"
                 ],
+                "match_type": "any",
                 "priority": 90
             },
             # 都道府県書類（10系統）
             "都道府県書類": {
                 "document_type": "1001_都道府県_法人都道府県民税・事業税・特別法人事業税",
-                "keywords": [
+                "required_keywords": [
                     "県税事務所",
                     "都税事務所", 
                     "道府県民税",
@@ -353,12 +367,13 @@ class DocumentClassifier:
                     "年400万円以下",
                     "年月日から年月日までの"
                 ],
+                "match_type": "any",
                 "priority": 95
             },
             # 市町村書類（20系統）
             "市町村書類": {
                 "document_type": "2001_市町村_法人市民税",
-                "keywords": [
+                "required_keywords": [
                     "市役所",
                     "町役場",
                     "村役場",
@@ -366,6 +381,7 @@ class DocumentClassifier:
                     "市町村民税",
                     "市民税申告書"
                 ],
+                "match_type": "any",
                 "priority": 95
             }
         }
@@ -377,14 +393,38 @@ class DocumentClassifier:
                                          key=lambda x: x[1]["priority"], reverse=True):
             
             matched_keywords = []
-            for keyword in rule_info["keywords"]:
-                if keyword in combined_text:
-                    matched_keywords.append(keyword)
+            
+            # 新フォーマットの場合
+            if "required_keywords" in rule_info:
+                keywords_to_check = rule_info["required_keywords"]
+                match_type = rule_info.get("match_type", "any")
+                
+                for keyword in keywords_to_check:
+                    if keyword in combined_text:
+                        matched_keywords.append(keyword)
+                
+                # マッチ条件判定
+                match_success = False
+                if match_type == "all":
+                    # すべてのキーワードが必要
+                    match_success = len(matched_keywords) == len(keywords_to_check)
+                else:  # match_type == "any"
+                    # いずれかのキーワードで可
+                    match_success = len(matched_keywords) > 0
+                    
+            else:
+                # 旧フォーマットとの互換性
+                for keyword in rule_info.get("keywords", []):
+                    if keyword in combined_text:
+                        matched_keywords.append(keyword)
+                match_success = len(matched_keywords) > 0
             
             # キーワードマッチした場合
-            if matched_keywords:
+            if match_success:
                 self._log(f"最優先キーワード検出: {rule_name} → {rule_info['document_type']}")
                 self._log_debug(f"マッチしたキーワード: {matched_keywords}")
+                if "match_type" in rule_info:
+                    self._log_debug(f"マッチタイプ: {rule_info['match_type']}")
                 
                 return ClassificationResult(
                     document_type=rule_info["document_type"],
@@ -584,31 +624,263 @@ class DocumentClassifier:
         return score, matched_keywords
 
     def classify_with_municipality_info(self, text: str, filename: str, 
-                                      prefecture_code: Optional[int] = None,
-                                      municipality_code: Optional[int] = None,
-                                      available_sets: Optional[List[int]] = None) -> ClassificationResult:
-        """自治体情報を考慮した分類（セット優先順序対応版）"""
-        # 都道府県申告書の特別判定処理
-        prefecture_result = self._classify_prefecture_document(text, filename, prefecture_code)
-        if prefecture_result:
-            return prefecture_result
+                                      municipality_settings: Optional[Dict] = None) -> ClassificationResult:
+        """自治体情報を考慮した分類（自治体名付きコード対応版）
+        
+        Args:
+            text: OCRで抽出されたテキスト
+            filename: ファイル名
+            municipality_settings: {
+                "set1": {"prefecture": "東京都", "municipality": ""},
+                "set2": {"prefecture": "愛知県", "municipality": "蒲郡市"},
+                "set3": {"prefecture": "大阪府", "municipality": "大阪市"},
+                "set4": {"prefecture": "", "municipality": ""},
+                "set5": {"prefecture": "", "municipality": ""}
+            }
+        """
+        if not municipality_settings:
+            municipality_settings = {}
+        
+        # 東京都エラーチェック（セット1以外に東京都がある場合）
+        tokyo_error = self._check_tokyo_error(municipality_settings)
+        if tokyo_error:
+            self._log(f"東京都エラー: {tokyo_error}")
+            # エラーメッセージを含む結果を返す
+            return ClassificationResult(
+                document_type="エラー_東京都はセット1のみ設定可能",
+                confidence=0.0,
+                matched_keywords=[],
+                classification_method="tokyo_error_check",
+                debug_steps=[],
+                processing_log=[tokyo_error]
+            )
+        
+        # OCRテキストから検出された都道府県・市町村を特定
+        detected_set = self._detect_municipality_from_text(text, filename, municipality_settings)
         
         # 基本分類を実行
         base_result = self.classify_document(text, filename)
         
-        # セット優先順序による最終コード決定
-        final_code = self._determine_final_code_with_set_priority(
+        # 自治体名付きコード生成（検出されたセット情報を使用）
+        final_code = self._generate_municipality_code_with_detection(
             base_result.document_type, 
-            prefecture_code, 
-            municipality_code, 
-            available_sets
+            municipality_settings, 
+            detected_set
         )
         
         if final_code != base_result.document_type:
-            self._log(f"セット優先順序適用: {base_result.document_type} → {final_code}")
+            self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_code}")
             base_result.document_type = final_code
         
         return base_result
+    
+    def _detect_municipality_from_text(self, text: str, filename: str, municipality_settings: Dict) -> Optional[str]:
+        """OCRテキストから都道府県・市町村を検出してセットを特定"""
+        combined_text = f"{text} {filename}"
+        
+        # 各セットの都道府県・市町村をチェック
+        for set_name, settings in municipality_settings.items():
+            prefecture = settings.get("prefecture", "").strip()
+            municipality = settings.get("municipality", "").strip()
+            
+            if prefecture:
+                # 都道府県のキーワード検出
+                prefecture_keywords = [
+                    prefecture,
+                    prefecture.replace("都", "").replace("道", "").replace("府", "").replace("県", ""),
+                ]
+                
+                for keyword in prefecture_keywords:
+                    if keyword and keyword in combined_text:
+                        self._log_debug(f"都道府県検出: {keyword} → {set_name}")
+                        return set_name
+                        
+            if municipality:
+                # 市町村のキーワード検出
+                if municipality in combined_text:
+                    self._log_debug(f"市町村検出: {municipality} → {set_name}")
+                    return set_name
+        
+        return None
+    
+    def _check_tokyo_error(self, municipality_settings: Dict) -> Optional[str]:
+        """東京都エラーチェック"""
+        tokyo_sets = []
+        for set_name, settings in municipality_settings.items():
+            prefecture = settings.get("prefecture", "")
+            if "東京" in prefecture:
+                tokyo_sets.append(set_name)
+        
+        if len(tokyo_sets) > 1:
+            return f"エラー: 東京都が複数のセット({', '.join(tokyo_sets)})に設定されています。東京都はセット1のみ設定可能です。"
+        elif len(tokyo_sets) == 1 and tokyo_sets[0] != "set1":
+            return f"エラー: 東京都が{tokyo_sets[0]}に設定されています。東京都はセット1のみ設定可能です。"
+        
+        return None
+    
+    def _generate_municipality_code_with_detection(self, base_document_type: str, 
+                                                 municipality_settings: Dict, 
+                                                 detected_set: Optional[str] = None) -> str:
+        """検出されたセット情報を使用した自治体名付きドキュメントコード生成"""
+        # 都道府県書類の場合
+        if base_document_type.startswith("1001_都道府県"):
+            return self._generate_prefecture_code_with_detection(
+                base_document_type, municipality_settings, detected_set
+            )
+        
+        # 市町村書類の場合  
+        elif base_document_type.startswith("2001_市町村"):
+            return self._generate_municipality_specific_code_with_detection(
+                base_document_type, municipality_settings, detected_set
+            )
+        
+        # その他の書類はそのまま返す
+        return base_document_type
+    
+    def _generate_prefecture_code_with_detection(self, base_code: str, 
+                                               municipality_settings: Dict, 
+                                               detected_set: Optional[str] = None) -> str:
+        """検出されたセット情報を使用した都道府県書類のコード生成"""
+        set_codes = {
+            "set1": 1001, "set2": 1011, "set3": 1021, "set4": 1031, "set5": 1041
+        }
+        
+        # 検出されたセットがある場合、そのセットを使用
+        if detected_set and detected_set in municipality_settings:
+            settings = municipality_settings[detected_set]
+            prefecture = settings.get("prefecture", "").strip()
+            
+            if prefecture:
+                set_code = set_codes[detected_set]
+                parts = base_code.split("_", 2)
+                if len(parts) >= 3:
+                    return f"{set_code}_{prefecture}_{parts[2]}"
+                else:
+                    return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
+        
+        # 検出されなかった場合は従来のロジック（セット優先順序）
+        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+            if set_name in municipality_settings:
+                settings = municipality_settings[set_name]
+                prefecture = settings.get("prefecture", "").strip()
+                
+                if prefecture:
+                    set_code = set_codes[set_name]
+                    parts = base_code.split("_", 2)
+                    if len(parts) >= 3:
+                        return f"{set_code}_{prefecture}_{parts[2]}"
+                    else:
+                        return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
+        
+        # 設定がない場合はデフォルト
+        return base_code.replace("1001_都道府県", "1001_未設定")
+    
+    def _generate_municipality_specific_code_with_detection(self, base_code: str, 
+                                                          municipality_settings: Dict, 
+                                                          detected_set: Optional[str] = None) -> str:
+        """検出されたセット情報を使用した市町村書類のコード生成"""
+        set_codes = {
+            "set1": 2001, "set2": 2011, "set3": 2021, "set4": 2031, "set5": 2041  
+        }
+        
+        # 検出されたセットがある場合、そのセットを使用
+        if detected_set and detected_set in municipality_settings:
+            settings = municipality_settings[detected_set]
+            prefecture = settings.get("prefecture", "").strip()
+            municipality = settings.get("municipality", "").strip()
+            
+            # 東京都の場合は市町村書類は生成しない
+            if "東京" in prefecture:
+                self._log_debug(f"東京都のため市町村書類をスキップ: {detected_set}")
+                return base_code.replace("2001_市町村", "2001_東京都_市町村書類なし")
+                
+            if prefecture and municipality:
+                set_code = set_codes[detected_set]
+                parts = base_code.split("_", 2)
+                municipality_name = f"{prefecture}{municipality}"
+                if len(parts) >= 3:
+                    return f"{set_code}_{municipality_name}_{parts[2]}"
+                else:
+                    return f"{set_code}_{municipality_name}_法人市民税"
+        
+        # 検出されなかった場合は従来のロジック（セット優先順序）
+        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+            if set_name in municipality_settings:
+                settings = municipality_settings[set_name]
+                prefecture = settings.get("prefecture", "").strip()
+                municipality = settings.get("municipality", "").strip()
+                
+                # 東京都の場合は市町村書類は生成しない
+                if "東京" in prefecture:
+                    self._log_debug(f"東京都のため市町村書類をスキップ: {set_name}")
+                    continue
+                    
+                if prefecture and municipality:
+                    set_code = set_codes[set_name]
+                    parts = base_code.split("_", 2)
+                    municipality_name = f"{prefecture}{municipality}"
+                    if len(parts) >= 3:
+                        return f"{set_code}_{municipality_name}_{parts[2]}"
+                    else:
+                        return f"{set_code}_{municipality_name}_法人市民税"
+        
+        # 設定がない場合はデフォルト
+        return base_code.replace("2001_市町村", "2001_未設定")
+    
+    def _generate_prefecture_code(self, base_code: str, municipality_settings: Dict) -> str:
+        """都道府県書類のコード生成（連番付き）"""
+        # セット優先順序: set1 > set2 > set3 > set4 > set5
+        set_codes = {
+            "set1": 1001, "set2": 1011, "set3": 1021, "set4": 1031, "set5": 1041
+        }
+        
+        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+            if set_name in municipality_settings:
+                settings = municipality_settings[set_name]
+                prefecture = settings.get("prefecture", "").strip()
+                
+                if prefecture:
+                    set_code = set_codes[set_name]
+                    # 1001_都道府県_XXX → 1001_東京都_XXX のように変更
+                    parts = base_code.split("_", 2)
+                    if len(parts) >= 3:
+                        return f"{set_code}_{prefecture}_{parts[2]}"
+                    else:
+                        return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
+        
+        # 設定がない場合はデフォルト
+        return base_code.replace("1001_都道府県", "1001_未設定")
+    
+    def _generate_municipality_specific_code(self, base_code: str, municipality_settings: Dict) -> str:
+        """市町村書類のコード生成（連番付き）"""
+        # セット優先順序: set1 > set2 > set3 > set4 > set5
+        set_codes = {
+            "set1": 2001, "set2": 2011, "set3": 2021, "set4": 2031, "set5": 2041  
+        }
+        
+        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+            if set_name in municipality_settings:
+                settings = municipality_settings[set_name]
+                prefecture = settings.get("prefecture", "").strip()
+                municipality = settings.get("municipality", "").strip()
+                
+                # 東京都の場合は市町村書類は生成しない
+                if "東京" in prefecture:
+                    self._log_debug(f"東京都のため市町村書類をスキップ: {set_name}")
+                    continue
+                    
+                if prefecture and municipality:
+                    set_code = set_codes[set_name]
+                    # 2001_市町村_XXX → 2001_愛知県蒲郡市_XXX のように変更
+                    parts = base_code.split("_", 2)
+                    municipality_name = f"{prefecture}{municipality}"
+                    if len(parts) >= 3:
+                        return f"{set_code}_{municipality_name}_{parts[2]}"
+                    else:
+                        return f"{set_code}_{municipality_name}_法人市民税"
+        
+        # 設定がない場合はデフォルト
+        return base_code.replace("2001_市町村", "2001_未設定")
 
     def _determine_final_code_with_set_priority(self, document_type: str, 
                                               prefecture_code: Optional[int] = None,

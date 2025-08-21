@@ -37,7 +37,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='TaxDocumentRenamer_v4.0_NewFeaturesComplete',
+    name='TaxDocumentRenamer_v4.0_CorrectionPoints_1to5_Complete',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
