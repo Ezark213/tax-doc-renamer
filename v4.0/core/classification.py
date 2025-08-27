@@ -281,7 +281,7 @@ class DocumentClassifier:
         
         self._log_debug(f"  → {doc_type}: {status}, キーワード:[{keywords_str}]{reason_str}")
 
-    def _check_highest_priority_keywords(self, text: str, filename: str) -> Optional[ClassificationResult]:
+    def _check_highest_priority_keywords(self, text: str, filename: str, file_path: Optional[str] = None) -> Optional[ClassificationResult]:
         """最優先キーワードをチェックして即座に分類を決定"""
         combined_text = f"{text} {filename}"
         
@@ -294,12 +294,14 @@ class DocumentClassifier:
                 "match_type": "all",  # すべてのキーワードが必要
                 "priority": 100
             },
-            # 総勘定元帳（最高優先度）
+            # 総勘定元帳（最高優先度 - 1ページ目限定）
             "総勘定元帳": {
                 "document_type": "5002_総勘定元帳",
                 "required_keywords": ["総勘定元帳"],
                 "match_type": "any",  # いずれかのキーワードで可
-                "priority": 100
+                "priority": 100,
+                "page_specific": True,  # 1ページ目のみ適用
+                "target_page": 1
             },
             # 少額減価償却資産明細表（最高優先度）
             "少額減価償却資産明細表": {
@@ -327,7 +329,7 @@ class DocumentClassifier:
                 "document_type": "0002_添付資料",
                 "required_keywords": ["添付書類送付書", "内国法人の確定申告"],
                 "match_type": "all",  # 両方のキーワードが必要
-                "priority": 100
+                "priority": 115
             },
             # 消費税申告書（高優先度 - 複数キーワードの組み合わせ）
             "消費税申告": {
@@ -342,18 +344,21 @@ class DocumentClassifier:
                 "match_type": "any",
                 "priority": 90
             },
-            # 法人税申告書（高優先度 - 複数キーワードの組み合わせ）
+            # 法人税申告書（最高優先度 - 複数キーワードの組み合わせ）
             "法人税申告": {
                 "document_type": "0001_法人税及び地方法人税申告書",
                 "required_keywords": [
                     "事業年度分の法人税申告書",
-                    "税額控除超過額",
+                    "事業年度分の法人税",
                     "控除した金額",
-                    "内国法人の確定申告(青色)",
-                    "内国法人の確定申告"
+                    "控除しきれなかった金額",
+                    "課税留保金額",
+                    "適用額明細書",
+                    "中間申告分の地方法人税額",
+                    "中間申告分の法人税額"
                 ],
                 "match_type": "any",
-                "priority": 90
+                "priority": 110  # 総勘定元帳より高く設定
             },
             # 都道府県書類（10系統）
             "都道府県書類": {
@@ -368,7 +373,8 @@ class DocumentClassifier:
                     "年月日から年月日までの"
                 ],
                 "match_type": "any",
-                "priority": 95
+                "priority": 105,
+                "exclude_keywords": ["添付書類送付書"]  # 法人税添付資料との区別
             },
             # 市町村書類（20系統）
             "市町村書類": {
@@ -394,13 +400,25 @@ class DocumentClassifier:
             
             matched_keywords = []
             
+            # ページ特定ルールの場合、該当ページのテキストを取得
+            text_to_search = combined_text
+            if rule_info.get("page_specific", False) and file_path:
+                target_page = rule_info.get("target_page", 1)
+                page_text = self._extract_page_text(file_path, target_page)
+                if page_text:
+                    text_to_search = f"{page_text} {filename}"
+                    self._log_debug(f"ページ{target_page}特定ルール適用: {rule_name}")
+                else:
+                    self._log_debug(f"ページ{target_page}のテキスト抽出失敗 - ルールをスキップ: {rule_name}")
+                    continue
+            
             # 新フォーマットの場合
             if "required_keywords" in rule_info:
                 keywords_to_check = rule_info["required_keywords"]
                 match_type = rule_info.get("match_type", "any")
                 
                 for keyword in keywords_to_check:
-                    if keyword in combined_text:
+                    if keyword in text_to_search:
                         matched_keywords.append(keyword)
                 
                 # マッチ条件判定
@@ -438,7 +456,40 @@ class DocumentClassifier:
         self._log_debug("最優先キーワードマッチなし - 通常分類処理に移行")
         return None
 
-    def classify_document(self, text: str, filename: str = "") -> ClassificationResult:
+    def _extract_page_text(self, file_path: str, page_number: int) -> Optional[str]:
+        """指定されたページのテキストを抽出
+        
+        Args:
+            file_path: PDFファイルパス
+            page_number: ページ番号（1から開始）
+            
+        Returns:
+            ページのテキスト、エラーの場合はNone
+        """
+        try:
+            import fitz
+            doc = fitz.open(file_path)
+            
+            # ページ番号調整（1から開始 → 0から開始）
+            page_index = page_number - 1
+            
+            if page_index >= doc.page_count or page_index < 0:
+                doc.close()
+                self._log_debug(f"ページ{page_number}は存在しません（総ページ数: {doc.page_count}）")
+                return None
+                
+            page = doc[page_index]
+            text = page.get_text()
+            doc.close()
+            
+            self._log_debug(f"ページ{page_number}テキスト抽出成功（{len(text)}文字）")
+            return text
+            
+        except Exception as e:
+            self._log_debug(f"ページ{page_number}テキスト抽出エラー: {e}")
+            return None
+
+    def classify_document(self, text: str, filename: str = "", file_path: Optional[str] = None) -> ClassificationResult:
         """書類を分類（詳細ログ対応版）"""
         self.processing_log = []  # ログをリセット
         self.current_filename = filename
@@ -458,7 +509,7 @@ class DocumentClassifier:
             self._log_debug(f"テキスト内容: {preview}")
         
         # 最優先キーワード判定（新機能）
-        priority_result = self._check_highest_priority_keywords(text_cleaned, filename_cleaned)
+        priority_result = self._check_highest_priority_keywords(text_cleaned, filename_cleaned, file_path)
         if priority_result:
             return priority_result
         
@@ -624,7 +675,8 @@ class DocumentClassifier:
         return score, matched_keywords
 
     def classify_with_municipality_info(self, text: str, filename: str, 
-                                      municipality_settings: Optional[Dict] = None) -> ClassificationResult:
+                                      municipality_settings: Optional[Dict] = None,
+                                      file_path: Optional[str] = None) -> ClassificationResult:
         """自治体情報を考慮した分類（自治体名付きコード対応版）
         
         Args:
@@ -659,7 +711,7 @@ class DocumentClassifier:
         detected_set = self._detect_municipality_from_text(text, filename, municipality_settings)
         
         # 基本分類を実行
-        base_result = self.classify_document(text, filename)
+        base_result = self.classify_document(text, filename, file_path)
         
         # 自治体名付きコード生成（検出されたセット情報を使用）
         final_code = self._generate_municipality_code_with_detection(
@@ -674,32 +726,286 @@ class DocumentClassifier:
         
         return base_result
     
-    def _detect_municipality_from_text(self, text: str, filename: str, municipality_settings: Dict) -> Optional[str]:
-        """OCRテキストから都道府県・市町村を検出してセットを特定"""
-        combined_text = f"{text} {filename}"
+    def _detect_from_filename(self, filename: str, municipality_settings: Dict) -> Optional[str]:
+        """ファイル名から都道府県・市町村を検出（セット設定優先）"""
+        filename_lower = filename.lower()
         
-        # 各セットの都道府県・市町村をチェック
+        # セット設定から都道府県・市町村名を取得して照合
         for set_name, settings in municipality_settings.items():
             prefecture = settings.get("prefecture", "").strip()
             municipality = settings.get("municipality", "").strip()
             
+            # 都道府県名の照合（複数パターン）
             if prefecture:
-                # 都道府県のキーワード検出
+                prefecture_patterns = [
+                    prefecture,  # 完全名：愛知県
+                    prefecture.replace("県", "").replace("都", "").replace("府", "").replace("道", ""),  # 基本名：愛知
+                    f"{prefecture}税事務所",  # 税務事務所名
+                    f"{prefecture.replace('県', '').replace('都', '').replace('府', '').replace('道', '')}県税事務所"
+                ]
+                
+                for pattern in prefecture_patterns:
+                    if pattern and pattern in filename:
+                        self._log_debug(f"ファイル名で都道府県検出: {pattern} → {set_name}({prefecture})")
+                        return set_name
+            
+            # 市町村名の照合（複数パターン）
+            if municipality:
+                municipality_patterns = [
+                    municipality,  # 完全名：蒲郡市
+                    f"{municipality}役所",  # 役所名：蒲郡市役所
+                    f"{prefecture}{municipality}" if prefecture else municipality  # 組み合わせ：愛知県蒲郡市
+                ]
+                
+                for pattern in municipality_patterns:
+                    if pattern and pattern in filename:
+                        self._log_debug(f"ファイル名で市町村検出: {pattern} → {set_name}({prefecture}{municipality})")
+                        return set_name
+        
+        return None
+    
+    def _confirm_detection_with_ocr(self, text: str, detected_set: str, municipality_settings: Dict) -> bool:
+        """OCRテキストでファイル名検出を補完的に確認"""
+        if detected_set not in municipality_settings:
+            return False
+            
+        settings = municipality_settings[detected_set]
+        prefecture = settings.get("prefecture", "").strip()
+        municipality = settings.get("municipality", "").strip()
+        
+        # 都道府県名または市町村名がOCRテキストに含まれているかチェック
+        confirmation_keywords = []
+        if prefecture:
+            confirmation_keywords.extend([prefecture, prefecture.replace("県", "").replace("都", "").replace("府", "").replace("道", "")])
+        if municipality:
+            confirmation_keywords.append(municipality)
+            
+        for keyword in confirmation_keywords:
+            if keyword and keyword in text:
+                self._log_debug(f"OCR確認成功: {keyword}")
+                return True
+                
+        self._log_debug(f"OCR確認失敗: {confirmation_keywords}がテキストに見つからない")
+        return False
+    
+    def _detect_from_settings_with_ocr(self, text: str, filename: str, municipality_settings: Dict) -> Optional[str]:
+        """セット設定を基準にOCRテキストから検出"""
+        combined_text = f"{text} {filename}"
+        
+        # セット順序で確認（set1, set2, set3, set4, set5）
+        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+            if set_name in municipality_settings:
+                settings = municipality_settings[set_name]
+                prefecture = settings.get("prefecture", "").strip()
+                municipality = settings.get("municipality", "").strip()
+                
+                # 都道府県名での検出
+                if prefecture:
+                    prefecture_keywords = [
+                        prefecture,
+                        prefecture.replace("県", "").replace("都", "").replace("府", "").replace("道", ""),
+                        f"{prefecture}税事務所",
+                        f"{prefecture.replace('県', '').replace('都', '').replace('府', '').replace('道', '')}県税事務所"
+                    ]
+                    
+                    for keyword in prefecture_keywords:
+                        if keyword and keyword in combined_text:
+                            self._log_debug(f"セット設定ベース検出(都道府県): {keyword} → {set_name}")
+                            return set_name
+                
+                # 市町村名での検出
+                if municipality:
+                    municipality_keywords = [
+                        municipality,
+                        f"{municipality}役所",
+                        f"{prefecture}{municipality}" if prefecture else municipality
+                    ]
+                    
+                    for keyword in municipality_keywords:
+                        if keyword and keyword in combined_text:
+                            self._log_debug(f"セット設定ベース検出(市町村): {keyword} → {set_name}")
+                            return set_name
+        
+        return None
+    
+    def _detect_municipality_from_text(self, text: str, filename: str, municipality_settings: Dict) -> Optional[str]:
+        """セット設定優先で都道府県・市町村を検出（画像認識は補完的に使用）"""
+        # Stage 1: ファイル名から直接検出（最優先）
+        filename_detected = self._detect_from_filename(filename, municipality_settings)
+        if filename_detected:
+            self._log_debug(f"ファイル名から検出: {filename} → {filename_detected}")
+            # ファイル名で検出できた場合は、OCRテキストで補完的確認
+            is_confirmed = self._confirm_detection_with_ocr(text, filename_detected, municipality_settings)
+            if is_confirmed:
+                self._log_debug(f"OCRテキストで確認完了: {filename_detected}")
+                return filename_detected
+            else:
+                self._log_debug(f"OCRテキストでの確認失敗、ファイル名検出を採用: {filename_detected}")
+                return filename_detected  # ファイル名優先のため、確認失敗でも採用
+        
+        # Stage 2: セット設定を基準にOCRテキストから検出（フォールバック）
+        set_based_detected = self._detect_from_settings_with_ocr(text, filename, municipality_settings)
+        if set_based_detected:
+            self._log_debug(f"セット設定ベースで検出: {set_based_detected}")
+            return set_based_detected
+        
+        # Stage 3: 従来のOCRテキスト中心検出（最終フォールバック）
+        combined_text = f"{text} {filename}"
+        prefecture_keywords = ["付加価値割", "付加価値額総額", "合計事業税額", "県税事務所", "都税事務所", "道税事務所", "府税事務所"]
+        is_prefecture_document = any(keyword in combined_text for keyword in prefecture_keywords)
+        
+        if is_prefecture_document:
+            return self._detect_prefecture_from_addressee(combined_text, municipality_settings)
+        else:
+            return self._detect_municipality_from_content(combined_text, municipality_settings)
+    
+    def _detect_prefecture_from_addressee(self, text: str, municipality_settings: Dict) -> Optional[str]:
+        """宛先情報から都道府県を判定（セット優先のパターンベース検出）"""
+        
+        import re
+        
+        # セット順序で優先度決定（set1, set2, set3, set4, set5の順）
+        ordered_sets = [(f"set{i}", municipality_settings.get(f"set{i}", {})) 
+                       for i in range(1, 6) if f"set{i}" in municipality_settings]
+        
+        # Pattern 1: ●●[都道府県]事務所長 殿 のパターン検出（都道府県書類用）
+        prefecture_office_pattern = r'([^\s]+(?:都|道|府|県)).*?事務所長\s*殿?'
+        matches = re.findall(prefecture_office_pattern, text)
+        
+        if matches:
+            detected_prefecture_text = matches[0]
+            self._log_debug(f"都道府県事務所長パターン検出: {detected_prefecture_text}")
+            
+            # セット設定と照合（設定順序で優先）
+            for set_name, settings in ordered_sets:
+                set_prefecture = settings.get("prefecture", "").strip()
+                if set_prefecture and (set_prefecture in detected_prefecture_text or 
+                                     set_prefecture.replace("県", "").replace("都", "").replace("府", "").replace("道", "") in detected_prefecture_text):
+                    self._log_debug(f"セット照合成功: {detected_prefecture_text} → {set_name}({set_prefecture})")
+                    return set_name
+        
+        # Stage 2: 具体的な税務事務所名パターンで検索（補完的）
+        tax_office_patterns = [
+            # 福岡県（重要：テストケースに含まれる）
+            ("福岡県西福岡県税事務所長", "福岡県"),
+            ("福岡県東福岡県税事務所長", "福岡県"),
+            ("福岡県南福岡県税事務所長", "福岡県"),
+            ("福岡県北福岡県税事務所長", "福岡県"),
+            # 愛知県
+            ("愛知県東三河県税事務所長", "愛知県"),
+            ("愛知県西三河県税事務所長", "愛知県"), 
+            ("愛知県名古屋中村県税事務所長", "愛知県"),
+            ("愛知県豊橋県税事務所長", "愛知県"),
+            # 東京都
+            ("東京都港都税事務所長", "東京都"),
+            ("東京都新宿都税事務所長", "東京都"),
+            ("東京都渋谷都税事務所長", "東京都")
+        ]
+        
+        detected_prefecture = None
+        
+        # 具体的なパターンマッチング
+        for pattern, prefecture_name in tax_office_patterns:
+            if pattern in text:
+                detected_prefecture = prefecture_name
+                self._log_debug(f"税務事務所検出: {pattern} → {prefecture_name}")
+                break
+        
+        # 検出された都道府県から対応するセット検索（セット優先順序で）
+        if detected_prefecture:
+            for set_name, settings in ordered_sets:
+                set_prefecture = settings.get("prefecture", "").strip()
+                if set_prefecture == detected_prefecture:
+                    self._log_debug(f"都道府県マッチング: {detected_prefecture} → {set_name}")
+                    return set_name
+        
+        # Stage 3: 一般的な県税事務所パターンで検出（セット設定優先）
+        for set_name, settings in ordered_sets:
+            set_prefecture = settings.get("prefecture", "").strip()
+            if set_prefecture:
+                prefecture_base = set_prefecture.replace("都", "").replace("道", "").replace("府", "").replace("県", "")
+                
+                general_patterns = [
+                    f"{set_prefecture}事務所長",
+                    f"{prefecture_base}県税事務所長",
+                    f"{prefecture_base}都税事務所長",
+                    f"{prefecture_base}道税事務所長", 
+                    f"{prefecture_base}府税事務所長"
+                ]
+                
+                for pattern in general_patterns:
+                    if pattern in text:
+                        self._log_debug(f"一般的な税務事務所検出: {pattern} → {set_name}({set_prefecture})")
+                        return set_name
+        
+        # Stage 4: 都道府県名直接検出（最終フォールバック - セット優先順序で）
+        for set_name, settings in ordered_sets:
+            set_prefecture = settings.get("prefecture", "").strip()
+            if set_prefecture and set_prefecture in text:
+                self._log_debug(f"都道府県名直接検出: {set_prefecture} → {set_name}")
+                return set_name
+        
+        self._log_debug(f"都道府県検出失敗: text contains {text[:100]}...")
+        return None
+    
+    def _detect_municipality_from_content(self, text: str, municipality_settings: Dict) -> Optional[str]:
+        """テキスト内容から市町村を検出（パターンベース + セット優先）"""
+        
+        import re
+        
+        # セット順序で優先度決定（set1, set2, set3, set4, set5の順）
+        ordered_sets = [(f"set{i}", municipality_settings.get(f"set{i}", {})) 
+                       for i in range(1, 6) if f"set{i}" in municipality_settings]
+        
+        # Pattern 1: ●●[都道府県]●●[市町村]長 殿 のパターン検出（市町村書類用）
+        municipality_mayor_pattern = r'([^\s]+(?:都|道|府|県))([^\s]+(?:市|町|村))長\s*殿?'
+        matches = re.findall(municipality_mayor_pattern, text)
+        
+        if matches:
+            detected_prefecture_text, detected_municipality_text = matches[0]
+            self._log_debug(f"市町村長パターン検出: {detected_prefecture_text}{detected_municipality_text}長")
+            
+            # セット設定と照合（設定順序で優先）
+            for set_name, settings in ordered_sets:
+                set_prefecture = settings.get("prefecture", "").strip()
+                set_municipality = settings.get("municipality", "").strip()
+                
+                if set_prefecture and set_municipality:
+                    # 都道府県と市町村の両方をチェック
+                    prefecture_match = (set_prefecture in detected_prefecture_text or 
+                                      set_prefecture.replace("県", "").replace("都", "").replace("府", "").replace("道", "") in detected_prefecture_text)
+                    municipality_match = set_municipality in detected_municipality_text
+                    
+                    if prefecture_match and municipality_match:
+                        self._log_debug(f"セット照合成功: {detected_prefecture_text}{detected_municipality_text} → {set_name}({set_prefecture}{set_municipality})")
+                        return set_name
+        
+        # Stage 2: 市町村名直接検出（補完的）
+        for set_name, settings in ordered_sets:
+            prefecture = settings.get("prefecture", "").strip()
+            municipality = settings.get("municipality", "").strip()
+            
+            if municipality:
+                # 市町村のキーワード検出
+                if municipality in text:
+                    self._log_debug(f"市町村直接検出: {municipality} → {set_name}")
+                    return set_name
+        
+        # Stage 3: 都道府県名直接検出（最終フォールバック）
+        for set_name, settings in ordered_sets:
+            prefecture = settings.get("prefecture", "").strip()
+            
+            if prefecture:
+                # 都道府県のキーワード検出（市町村書類の場合の補助的判定）
                 prefecture_keywords = [
                     prefecture,
                     prefecture.replace("都", "").replace("道", "").replace("府", "").replace("県", ""),
                 ]
                 
                 for keyword in prefecture_keywords:
-                    if keyword and keyword in combined_text:
-                        self._log_debug(f"都道府県検出: {keyword} → {set_name}")
+                    if keyword and keyword in text:
+                        self._log_debug(f"都道府県直接検出: {keyword} → {set_name}")
                         return set_name
-                        
-            if municipality:
-                # 市町村のキーワード検出
-                if municipality in combined_text:
-                    self._log_debug(f"市町村検出: {municipality} → {set_name}")
-                    return set_name
         
         return None
     
@@ -740,50 +1046,72 @@ class DocumentClassifier:
     def _generate_prefecture_code_with_detection(self, base_code: str, 
                                                municipality_settings: Dict, 
                                                detected_set: Optional[str] = None) -> str:
-        """検出されたセット情報を使用した都道府県書類のコード生成"""
-        set_codes = {
-            "set1": 1001, "set2": 1011, "set3": 1021, "set4": 1031, "set5": 1041
-        }
+        """検出されたセット情報を使用した都道府県書類のコード生成（入力順序による連番付き）"""
+        # 入力順序連番コード: 1番目→1001, 2番目→1011, 3番目→1021, 4番目→1031, 5番目→1041
+        sequence_codes = [1001, 1011, 1021, 1031, 1041]
         
-        # 検出されたセットがある場合、そのセットを使用
+        # 実際に入力された自治体を順番で取得
+        ordered_sets = self._get_ordered_input_sets(municipality_settings)
+        
+        if not ordered_sets:
+            return base_code.replace("1001_都道府県", "1001_未設定")
+        
+        # 検出されたセットがある場合、その順序位置を特定
         if detected_set and detected_set in municipality_settings:
             settings = municipality_settings[detected_set]
             prefecture = settings.get("prefecture", "").strip()
             
             if prefecture:
-                set_code = set_codes[detected_set]
+                # 検出されたセットの順序位置を特定
+                set_index_mapping = {"set1": 0, "set2": 1, "set3": 2, "set4": 3, "set5": 4}
+                
+                if detected_set in set_index_mapping:
+                    # 実際に入力されている自治体のうち、検出されたセットが何番目かを計算
+                    actual_index = 0
+                    for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+                        if set_name in municipality_settings:
+                            set_prefecture = municipality_settings[set_name].get("prefecture", "").strip()
+                            if set_prefecture:  # 都道府県が入力されているセットのみカウント
+                                if set_name == detected_set:
+                                    break
+                                actual_index += 1
+                    
+                    set_code = sequence_codes[actual_index] if actual_index < len(sequence_codes) else sequence_codes[-1]
+                    parts = base_code.split("_", 2)
+                    if len(parts) >= 3:
+                        final_code = f"{set_code}_{prefecture}_{parts[2]}"
+                    else:
+                        final_code = f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
+                    
+                    self._log_debug(f"都道府県コード生成: {detected_set}({actual_index+1}番目) → {final_code}")
+                    return final_code
+        
+        # 検出されなかった場合は最初の都道府県設定を使用（フォールバック）
+        if ordered_sets:
+            first_set_name, first_settings = ordered_sets[0]
+            prefecture = first_settings.get("prefecture", "").strip()
+            if prefecture:
+                set_code = sequence_codes[0]
                 parts = base_code.split("_", 2)
                 if len(parts) >= 3:
                     return f"{set_code}_{prefecture}_{parts[2]}"
                 else:
                     return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
         
-        # 検出されなかった場合は従来のロジック（セット優先順序）
-        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
-            if set_name in municipality_settings:
-                settings = municipality_settings[set_name]
-                prefecture = settings.get("prefecture", "").strip()
-                
-                if prefecture:
-                    set_code = set_codes[set_name]
-                    parts = base_code.split("_", 2)
-                    if len(parts) >= 3:
-                        return f"{set_code}_{prefecture}_{parts[2]}"
-                    else:
-                        return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
-        
-        # 設定がない場合はデフォルト
+        # 設定がない場合はエラーコードを返す
         return base_code.replace("1001_都道府県", "1001_未設定")
     
     def _generate_municipality_specific_code_with_detection(self, base_code: str, 
                                                           municipality_settings: Dict, 
                                                           detected_set: Optional[str] = None) -> str:
-        """検出されたセット情報を使用した市町村書類のコード生成"""
-        set_codes = {
-            "set1": 2001, "set2": 2011, "set3": 2021, "set4": 2031, "set5": 2041  
-        }
+        """検出されたセット情報を使用した市町村書類のコード生成（入力順序による連番付き）"""
+        # 入力順序連番コード: 1番目→2001, 2番目→2011, 3番目→2021, 4番目→2031, 5番目→2041
+        sequence_codes = [2001, 2011, 2021, 2031, 2041]
         
-        # 検出されたセットがある場合、そのセットを使用
+        # 東京都を除いた市町村設定を入力順で取得
+        municipality_sets = self._get_ordered_municipality_sets(municipality_settings)
+        
+        # 検出されたセットがある場合、その順序位置を特定
         if detected_set and detected_set in municipality_settings:
             settings = municipality_settings[detected_set]
             prefecture = settings.get("prefecture", "").strip()
@@ -795,7 +1123,38 @@ class DocumentClassifier:
                 return base_code.replace("2001_市町村", "2001_東京都_市町村書類なし")
                 
             if prefecture and municipality:
-                set_code = set_codes[detected_set]
+                # 検出されたセットが市町村設定の何番目かを実際に計算
+                actual_index = 0
+                for set_name in ["set1", "set2", "set3", "set4", "set5"]:
+                    if set_name in municipality_settings:
+                        set_settings = municipality_settings[set_name]
+                        set_prefecture = set_settings.get("prefecture", "").strip()
+                        set_municipality = set_settings.get("municipality", "").strip()
+                        
+                        # 東京都でない場合かつ市町村が設定されている場合のみカウント
+                        if set_prefecture and set_municipality and "東京" not in set_prefecture:
+                            if set_name == detected_set:
+                                break
+                            actual_index += 1
+                
+                set_code = sequence_codes[actual_index] if actual_index < len(sequence_codes) else sequence_codes[-1]
+                parts = base_code.split("_", 2)
+                municipality_name = f"{prefecture}{municipality}"
+                if len(parts) >= 3:
+                    final_code = f"{set_code}_{municipality_name}_{parts[2]}"
+                else:
+                    final_code = f"{set_code}_{municipality_name}_法人市民税"
+                
+                self._log_debug(f"市町村コード生成: {detected_set}({actual_index+1}番目) → {final_code}")
+                return final_code
+        
+        # 検出されなかった場合は最初の市町村設定を使用（フォールバック）
+        if municipality_sets:
+            first_set_name, first_settings = municipality_sets[0]
+            prefecture = first_settings.get("prefecture", "").strip()
+            municipality = first_settings.get("municipality", "").strip()
+            if prefecture and municipality:
+                set_code = sequence_codes[0]
                 parts = base_code.split("_", 2)
                 municipality_name = f"{prefecture}{municipality}"
                 if len(parts) >= 3:
@@ -803,81 +1162,101 @@ class DocumentClassifier:
                 else:
                     return f"{set_code}_{municipality_name}_法人市民税"
         
-        # 検出されなかった場合は従来のロジック（セット優先順序）
+        # 設定がない場合はエラーコードを返す
+        return base_code.replace("2001_市町村", "2001_未設定")
+    
+    def _get_ordered_input_sets(self, municipality_settings: Dict) -> List[Tuple[str, Dict]]:
+        """入力された順番で自治体設定を取得"""
+        ordered_sets = []
+        
+        # セット順序でチェック（set1, set2, set3, set4, set5）
         for set_name in ["set1", "set2", "set3", "set4", "set5"]:
             if set_name in municipality_settings:
                 settings = municipality_settings[set_name]
                 prefecture = settings.get("prefecture", "").strip()
                 municipality = settings.get("municipality", "").strip()
                 
-                # 東京都の場合は市町村書類は生成しない
-                if "東京" in prefecture:
-                    self._log_debug(f"東京都のため市町村書類をスキップ: {set_name}")
-                    continue
-                    
-                if prefecture and municipality:
-                    set_code = set_codes[set_name]
-                    parts = base_code.split("_", 2)
-                    municipality_name = f"{prefecture}{municipality}"
-                    if len(parts) >= 3:
-                        return f"{set_code}_{municipality_name}_{parts[2]}"
-                    else:
-                        return f"{set_code}_{municipality_name}_法人市民税"
+                # 実際に入力がある場合のみ追加
+                if prefecture:  # 都道府県が入力されている
+                    ordered_sets.append((set_name, settings))
         
-        # 設定がない場合はデフォルト
-        return base_code.replace("2001_市町村", "2001_未設定")
+        return ordered_sets
     
     def _generate_prefecture_code(self, base_code: str, municipality_settings: Dict) -> str:
-        """都道府県書類のコード生成（連番付き）"""
-        # セット優先順序: set1 > set2 > set3 > set4 > set5
-        set_codes = {
-            "set1": 1001, "set2": 1011, "set3": 1021, "set4": 1031, "set5": 1041
-        }
+        """都道府県書類のコード生成（入力順序による連番付き）"""
+        # 入力順序連番コード: 1番目→1001, 2番目→1011, 3番目→1021, 4番目→1031, 5番目→1041
+        sequence_codes = [1001, 1011, 1021, 1031, 1041]
         
-        for set_name in ["set1", "set2", "set3", "set4", "set5"]:
-            if set_name in municipality_settings:
-                settings = municipality_settings[set_name]
-                prefecture = settings.get("prefecture", "").strip()
-                
-                if prefecture:
-                    set_code = set_codes[set_name]
-                    # 1001_都道府県_XXX → 1001_東京都_XXX のように変更
-                    parts = base_code.split("_", 2)
-                    if len(parts) >= 3:
-                        return f"{set_code}_{prefecture}_{parts[2]}"
-                    else:
-                        return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
+        # 実際に入力された自治体を順番で取得
+        ordered_sets = self._get_ordered_input_sets(municipality_settings)
+        
+        if not ordered_sets:
+            # 設定がない場合はデフォルト
+            return base_code.replace("1001_都道府県", "1001_未設定")
+        
+        # 1番目に入力された都道府県を使用
+        first_set_name, first_settings = ordered_sets[0]
+        prefecture = first_settings.get("prefecture", "").strip()
+        
+        if prefecture:
+            # 1番目は必ず1001
+            set_code = sequence_codes[0]
+            parts = base_code.split("_", 2)
+            if len(parts) >= 3:
+                return f"{set_code}_{prefecture}_{parts[2]}"
+            else:
+                return f"{set_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
         
         # 設定がない場合はデフォルト
         return base_code.replace("1001_都道府県", "1001_未設定")
     
-    def _generate_municipality_specific_code(self, base_code: str, municipality_settings: Dict) -> str:
-        """市町村書類のコード生成（連番付き）"""
-        # セット優先順序: set1 > set2 > set3 > set4 > set5
-        set_codes = {
-            "set1": 2001, "set2": 2011, "set3": 2021, "set4": 2031, "set5": 2041  
-        }
+    def _get_ordered_municipality_sets(self, municipality_settings: Dict) -> List[Tuple[str, Dict]]:
+        """東京都を除いた市町村設定を入力順で取得"""
+        municipality_sets = []
         
+        # セット順序でチェック（set1, set2, set3, set4, set5）
         for set_name in ["set1", "set2", "set3", "set4", "set5"]:
             if set_name in municipality_settings:
                 settings = municipality_settings[set_name]
                 prefecture = settings.get("prefecture", "").strip()
                 municipality = settings.get("municipality", "").strip()
                 
-                # 東京都の場合は市町村書類は生成しない
-                if "東京" in prefecture:
-                    self._log_debug(f"東京都のため市町村書類をスキップ: {set_name}")
-                    continue
-                    
-                if prefecture and municipality:
-                    set_code = set_codes[set_name]
-                    # 2001_市町村_XXX → 2001_愛知県蒲郡市_XXX のように変更
-                    parts = base_code.split("_", 2)
-                    municipality_name = f"{prefecture}{municipality}"
-                    if len(parts) >= 3:
-                        return f"{set_code}_{municipality_name}_{parts[2]}"
-                    else:
-                        return f"{set_code}_{municipality_name}_法人市民税"
+                # 東京都でない場合かつ市町村が設定されている場合のみ追加
+                if prefecture and municipality and "東京" not in prefecture:
+                    municipality_sets.append((set_name, settings))
+                    self._log_debug(f"市町村セット追加: {set_name} -> {prefecture}{municipality}")
+                elif "東京" in prefecture:
+                    self._log_debug(f"東京都セットをスキップ: {set_name} -> {prefecture}")
+        
+        self._log_debug(f"最終市町村セット数: {len(municipality_sets)}")
+        return municipality_sets
+
+    def _generate_municipality_specific_code(self, base_code: str, municipality_settings: Dict) -> str:
+        """市町村書類のコード生成（入力順序による連番付き）"""
+        # 入力順序連番コード: 1番目→2001, 2番目→2011, 3番目→2021, 4番目→2031, 5番目→2041
+        sequence_codes = [2001, 2011, 2021, 2031, 2041]
+        
+        # 東京都を除いた市町村設定を入力順で取得
+        municipality_sets = self._get_ordered_municipality_sets(municipality_settings)
+        
+        if not municipality_sets:
+            # 設定がない場合はデフォルト
+            return base_code.replace("2001_市町村", "2001_未設定")
+        
+        # 1番目の市町村を使用（東京都除く）
+        first_set_name, first_settings = municipality_sets[0]
+        prefecture = first_settings.get("prefecture", "").strip()
+        municipality = first_settings.get("municipality", "").strip()
+        
+        if prefecture and municipality:
+            # 1番目は必ず2001
+            set_code = sequence_codes[0]
+            parts = base_code.split("_", 2)
+            municipality_name = f"{prefecture}{municipality}"
+            if len(parts) >= 3:
+                return f"{set_code}_{municipality_name}_{parts[2]}"
+            else:
+                return f"{set_code}_{municipality_name}_法人市民税"
         
         # 設定がない場合はデフォルト
         return base_code.replace("2001_市町村", "2001_未設定")

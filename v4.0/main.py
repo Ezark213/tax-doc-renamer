@@ -136,6 +136,19 @@ class TaxDocumentRenamerV4:
         municipality_frame = ttk.LabelFrame(right_frame, text="自治体設定")
         municipality_frame.pack(fill='x', pady=(0, 10))
         
+        # 東京都設定の注意メッセージ
+        tokyo_notice_frame = ttk.Frame(municipality_frame)
+        tokyo_notice_frame.pack(fill='x', pady=(5, 10))
+        
+        notice_label = ttk.Label(
+            tokyo_notice_frame, 
+            text="⚠️ 注意：東京都あての地方税申告書がある場合には、\n東京都はセット1に入力してください",
+            foreground='red',
+            font=('Arial', 9, 'bold'),
+            justify='center'
+        )
+        notice_label.pack()
+        
         self._create_municipality_settings(municipality_frame)
         
         # 処理オプション
@@ -186,6 +199,15 @@ class TaxDocumentRenamerV4:
     def _create_municipality_settings(self, parent):
         """自治体設定UIの作成"""
         self.municipality_vars = []
+        self.municipality_entries = []
+        
+        # ヘッダー
+        header_frame = ttk.Frame(parent)
+        header_frame.pack(fill='x', pady=(0, 5))
+        
+        ttk.Label(header_frame, text="セット", width=8).pack(side='left')
+        ttk.Label(header_frame, text="都道府県", width=10).pack(side='left')
+        ttk.Label(header_frame, text="市町村", width=12).pack(side='left')
         
         for i in range(5):
             set_frame = ttk.Frame(parent)
@@ -196,10 +218,57 @@ class TaxDocumentRenamerV4:
             prefecture_var = tk.StringVar()
             municipality_var = tk.StringVar()
             
-            ttk.Entry(set_frame, textvariable=prefecture_var, width=8).pack(side='left', padx=(0, 2))
-            ttk.Entry(set_frame, textvariable=municipality_var, width=12).pack(side='left')
+            prefecture_entry = ttk.Entry(set_frame, textvariable=prefecture_var, width=10)
+            prefecture_entry.pack(side='left', padx=(0, 2))
+            
+            municipality_entry = ttk.Entry(set_frame, textvariable=municipality_var, width=12)
+            municipality_entry.pack(side='left')
+            
+            # 東京都入力時の市町村欄制御
+            prefecture_var.trace('w', lambda *args, idx=i: self._on_prefecture_changed(idx))
             
             self.municipality_vars.append((prefecture_var, municipality_var))
+            self.municipality_entries.append((prefecture_entry, municipality_entry))
+    
+    def _on_prefecture_changed(self, set_index: int):
+        """都道府県入力変更時の処理"""
+        prefecture_var, municipality_var = self.municipality_vars[set_index]
+        prefecture_entry, municipality_entry = self.municipality_entries[set_index]
+        
+        prefecture = prefecture_var.get().strip()
+        
+        # 東京都が入力された場合の処理
+        if "東京" in prefecture:
+            # 市町村欄をクリアして無効化
+            municipality_var.set("")
+            municipality_entry.configure(state='disabled')
+        else:
+            # 東京都以外の場合は市町村欄を有効化
+            municipality_entry.configure(state='normal')
+    
+    def _validate_municipality_settings(self) -> bool:
+        """自治体設定の妥当性チェック"""
+        tokyo_sets = []
+        
+        # 東京都が入力されているセットを検索
+        for i, (prefecture_var, municipality_var) in enumerate(self.municipality_vars):
+            prefecture = prefecture_var.get().strip()
+            if "東京" in prefecture and prefecture != "":
+                tokyo_sets.append(i + 1)  # セット番号（1から開始）
+        
+        # 東京都がセット1以外にある場合はエラー
+        if tokyo_sets and 1 not in tokyo_sets:
+            error_msg = f"エラー: 東京都はセット1に入力してください。\n現在の東京都の位置: セット{tokyo_sets[0]}"
+            messagebox.showerror("設定エラー", error_msg)
+            return False
+        
+        # 東京都が複数のセットにある場合はエラー
+        if len(tokyo_sets) > 1:
+            error_msg = f"エラー: 東京都は1つのセットにのみ入力してください。\n現在の東京都の位置: セット{', セット'.join(map(str, tokyo_sets))}"
+            messagebox.showerror("設定エラー", error_msg)
+            return False
+        
+        return True
 
     def _create_result_tab(self):
         """処理結果タブの作成"""
@@ -256,9 +325,9 @@ class TaxDocumentRenamerV4:
     def _setup_default_municipalities(self):
         """デフォルト自治体設定"""
         defaults = [
-            ("東京", ""),
-            ("愛知", "蒲郡市"),
-            ("福岡", "福岡市"),
+            ("東京都", ""),
+            ("愛知県", "蒲郡市"),
+            ("大阪府", "大阪市"),
             ("", ""),
             ("", "")
         ]
@@ -267,6 +336,10 @@ class TaxDocumentRenamerV4:
             if i < len(self.municipality_vars):
                 self.municipality_vars[i][0].set(prefecture)
                 self.municipality_vars[i][1].set(municipality)
+                
+                # 東京都の場合は市町村欄を無効化
+                if "東京" in prefecture:
+                    self.municipality_entries[i][1].configure(state='disabled')
 
     def _on_files_dropped(self, files: List[str]):
         """ファイルドロップ時の処理"""
@@ -323,6 +396,10 @@ class TaxDocumentRenamerV4:
             messagebox.showwarning("警告", "処理中です")
             return
         
+        # 自治体設定の妥当性チェック
+        if not self._validate_municipality_settings():
+            return
+        
         # 出力フォルダ選択
         output_folder = filedialog.askdirectory(title="分割ファイルの出力フォルダを選択")
         if not output_folder:
@@ -347,6 +424,10 @@ class TaxDocumentRenamerV4:
         
         if self.split_processing or self.rename_processing:
             messagebox.showwarning("警告", "処理中です")
+            return
+        
+        # 自治体設定の妥当性チェック
+        if not self._validate_municipality_settings():
             return
         
         # 自治体セットを取得
@@ -529,9 +610,18 @@ class TaxDocumentRenamerV4:
             elif self.municipality_sets and len(self.municipality_sets) >= 1:
                 prefecture_code = 1011  # セット2デフォルト
         
+        # 自治体設定を辞書形式に変換
+        municipality_settings = {}
+        if self.municipality_sets:
+            for i, municipality_set in enumerate(self.municipality_sets, 1):
+                municipality_settings[f"set{i}"] = {
+                    "prefecture": municipality_set.prefecture,
+                    "municipality": municipality_set.municipality
+                }
+        
         # 書類分類（詳細ログ付き）
         classification_result = self.classifier.classify_with_municipality_info(
-            text, filename, prefecture_code, municipality_code
+            text, filename, municipality_settings, file_path
         )
         
         # 分類詳細ログを出力
