@@ -34,10 +34,10 @@ def build_complete_version():
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--windowed",
-        "--name", "TaxDocumentRenamer_v5_Complete",
+        "--name", "TaxDocumentRenamer_v5_Ultimate",
         "--clean",
         "--noconfirm",
-        "main_v5_complete.py"
+        "main_v5_ultimate.py"
     ]
     
     print("実行中:", " ".join(cmd))
@@ -55,19 +55,19 @@ def create_complete_package():
     """完全版パッケージ作成"""
     print("完全版パッケージを作成中...")
     
-    package_dir = "dist/TaxDocumentRenamer_v5_Complete_Package"
+    package_dir = "dist/TaxDocumentRenamer_v5_Ultimate_Package"
     
     # パッケージディレクトリ作成
     os.makedirs(package_dir, exist_ok=True)
     
     # 実行ファイルコピー
-    exe_source = "dist/TaxDocumentRenamer_v5_Complete.exe"
+    exe_source = "dist/TaxDocumentRenamer_v5_Ultimate.exe"
     if os.path.exists(exe_source):
-        shutil.copy2(exe_source, f"{package_dir}/TaxDocumentRenamer_v5_Complete.exe")
+        shutil.copy2(exe_source, f"{package_dir}/TaxDocumentRenamer_v5_Ultimate.exe")
         print(f"実行ファイルをコピー: {exe_source}")
     
     # README作成
-    readme_content = """# 税務書類リネームシステム v5.0 完全版
+    readme_content = """# 税務書類リネームシステム v5.0 Ultimate版
 
 ## 特徴
 - セットベース連番システム
@@ -82,7 +82,7 @@ def create_complete_package():
 - セット3: 福岡県福岡市 (1021, 1023, 1024) + (2011, 2013, 2014)
 
 ## 使用方法
-1. TaxDocumentRenamer_v5_Complete.exe を実行
+1. TaxDocumentRenamer_v5_Ultimate.exe を実行
 2. PDFファイルを選択（ドラッグ&ドロップまたはボタンクリック）
 3. 年月設定 (例: 2508)
 4. 自治体セット確認・変更
@@ -102,8 +102,8 @@ def create_complete_package():
 - セット設定の可視化
 - エラーハンドリングの強化
 
-Version: 5.0 Complete
-Build Date: 2024-08-28
+Version: 5.0 Ultimate
+Build Date: 2025-08-28
 """
     
     with open(f"{package_dir}/README.md", "w", encoding="utf-8") as f:
@@ -114,7 +114,7 @@ Build Date: 2024-08-28
 
 def main():
     """メイン処理"""
-    print("税務書類リネームシステム v5.0 完全版ビルド開始")
+    print("税務書類リネームシステム v5.0 Ultimate版ビルド開始")
     print("=" * 50)
     
     # PyInstaller確認
@@ -122,8 +122,8 @@ def main():
         return False
     
     # メインスクリプト確認
-    if not os.path.exists("main_v5_complete.py"):
-        print("main_v5_complete.py が見つかりません")
+    if not os.path.exists("main_v5_ultimate.py"):
+        print("main_v5_ultimate.py が見つかりません")
         return False
     
     # ビルド実行
@@ -134,7 +134,7 @@ def main():
     package_dir = create_complete_package()
     
     # 結果確認
-    exe_path = f"{package_dir}/TaxDocumentRenamer_v5_Complete.exe"
+    exe_path = f"{package_dir}/TaxDocumentRenamer_v5_Ultimate.exe"
     if os.path.exists(exe_path):
         size = os.path.getsize(exe_path) / (1024*1024)
         print(f"完全版ビルド完了: {exe_path}")
@@ -147,9 +147,9 @@ def main():
 if __name__ == "__main__":
     success = main()
     if success:
-        print("\n完全版ビルドが成功しました!")
+        print("\nUltimate版ビルドが成功しました!")
         print("dist フォルダに実行ファイルがあります。")
     else:
         print("\nビルドに失敗しました。")
     
-    input("\nEnterキーを押して終了...")
+    # input("\nEnterキーを押して終了...")  # 自動実行用にコメントアウト
