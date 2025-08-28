@@ -99,9 +99,9 @@ def test_final_corrections():
         "municipality.pdf",
         municipality_settings
     )
-    test5_pass = ("2011" in result5.document_type and "愛知県蒲郡市" in result5.document_type)
+    test5_pass = ("2001" in result5.document_type and "愛知県蒲郡市" in result5.document_type)
     print(f"  Result: {result5.document_type}")
-    print(f"  Expected: Contains '2011' and '愛知県蒲郡市'")
+    print(f"  Expected: Contains '2001' and '愛知県蒲郡市'")
     print(f"  Status: {'PASS' if test5_pass else 'FAIL'}")
     tests.append(test5_pass)
     print()

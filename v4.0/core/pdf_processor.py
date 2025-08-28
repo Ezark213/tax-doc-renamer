@@ -180,9 +180,24 @@ class PDFProcessor:
                     output_filename = f"{config['code']}_{config['name']}_{year_month}.pdf"
                     output_path = os.path.join(output_dir, output_filename)
                     
+                    # 保存前に空白ページチェック
+                    if self._is_blank_page_content(new_doc[0]):
+                        print(f"DEBUG: 空白ページのためスキップ - {output_filename} (ページ{page_num})")
+                        new_doc.close()
+                        continue
+                    
                     # 保存
                     new_doc.save(output_path)
                     new_doc.close()
+                    
+                    # 保存後に追加で空白チェック（確実な削除のため）
+                    if self._is_blank_saved_file(output_path):
+                        print(f"DEBUG: 保存後空白ファイル削除 - {output_filename}")
+                        try:
+                            os.remove(output_path)
+                            continue
+                        except Exception as e:
+                            print(f"DEBUG: ファイル削除エラー - {e}")
                     
                     print(f"DEBUG: 分割完了 - {output_filename} (ページ{page_num})")
                     
@@ -196,7 +211,12 @@ class PDFProcessor:
                 return [SplitResult("", [], "error", False, f"有効ページが不足: {len(valid_pages)}ページ（4ページ必要）")]
             
             doc.close()
-            return split_results
+            
+            # 空白ページを削除した結果をフィルタリング
+            valid_results = [result for result in split_results if result.success]
+            print(f"DEBUG: 最終結果 - 有効ファイル数: {len(valid_results)}")
+            
+            return valid_results
             
         except Exception as e:
             print(f"DEBUG: 国税分割エラー - {str(e)}")
@@ -336,9 +356,24 @@ class PDFProcessor:
                 output_filename = f"{code}_{name}_{year_month}.pdf"
                 output_path = os.path.join(output_dir, output_filename)
                 
+                # 保存前に空白ページチェック
+                if self._is_blank_page_content(new_doc[0]):
+                    print(f"DEBUG: 空白ページのためスキップ - {output_filename} (ページ{page_num})")
+                    new_doc.close()
+                    continue
+                
                 # 保存
                 new_doc.save(output_path)
                 new_doc.close()
+                
+                # 保存後に追加で空白チェック（確実な削除のため）
+                if self._is_blank_saved_file(output_path):
+                    print(f"DEBUG: 保存後空白ファイル削除 - {output_filename}")
+                    try:
+                        os.remove(output_path)
+                        continue
+                    except Exception as e:
+                        print(f"DEBUG: ファイル削除エラー - {e}")
                 
                 print(f"DEBUG: 分割完了 - {output_filename} (ページ{page_num}, 種別: {page_type})")
                 
@@ -350,7 +385,12 @@ class PDFProcessor:
                 ))
             
             doc.close()
-            return split_results
+            
+            # 空白ページを削除した結果をフィルタリング
+            valid_results = [result for result in split_results if result.success]
+            print(f"DEBUG: 最終結果 - 有効ファイル数: {len(valid_results)}")
+            
+            return valid_results
             
         except Exception as e:
             print(f"DEBUG: 地方税分割エラー - {str(e)}")
@@ -425,6 +465,128 @@ class PDFProcessor:
         ]
         
         return [split for split in local_splits if split['pages']]
+    
+    def _is_blank_page_content(self, page) -> bool:
+        """ページの中身が空白か判定する（税務書類特化チェック）"""
+        try:
+            # テキスト抽出
+            text = page.get_text().strip()
+            
+            print(f"DEBUG: ページチェック - テキスト長: {len(text)} 文字")
+            print(f"DEBUG: テキスト内容サンプル: {text[:100]}..." if len(text) > 100 else f"DEBUG: テキスト全体: {text}")
+            
+            # 文字数チェック（非常に厳しい基準）
+            if len(text) < 50:
+                print("DEBUG: 文字数不足で空白判定")
+                return True
+            
+            # 税務書類特化の重要キーワードチェック
+            essential_tax_keywords = [
+                # 申告関連
+                "申告受付完了通知",
+                "申告受付完了",
+                "申告受付",
+                "受付完了通知",
+                "受付完了",
+                # 納付関連
+                "納付情報発行結果",
+                "納付情報発行",
+                "納付情報",
+                "納付書",
+                "納付金額",
+                # メール関連
+                "メール詳細",
+                "納付区分番号通知",
+                "納付区分番号",
+                # 受信関連
+                "受信通知",
+                "受信結果",
+                "受信",
+                # 税目関連
+                "法人税",
+                "消費税",
+                "地方法人税",
+                "都道府県民税",
+                "市町村民税",
+                "事業税",
+                # 金額関連
+                "税額",
+                "金額",
+                "円",
+                # 日付関連
+                "年月日",
+                "期限",
+                # 会社情報
+                "住所",
+                "所在地",
+                "名称",
+                "代表者",
+                # 其他重要キーワード
+                "電子申告",
+                "Ｅ－Ｔａｘ",
+                "税務署"
+            ]
+            
+            # キーワードマッチング
+            matched_keywords = []
+            for keyword in essential_tax_keywords:
+                if keyword in text:
+                    matched_keywords.append(keyword)
+            
+            print(f"DEBUG: マッチしたキーワード: {matched_keywords}")
+            
+            # 重要キーワードが一つもない場合は空白と判定
+            if not matched_keywords:
+                print("DEBUG: 重要キーワードがないため空白判定")
+                return True
+            
+            print(f"DEBUG: 有効なコンテンツと判定 - マッチ数: {len(matched_keywords)}")
+            return False
+            
+        except Exception as e:
+            print(f"DEBUG: ページ空白チェックエラー - {e}")
+            return False
+    
+    def _is_blank_saved_file(self, file_path: str) -> bool:
+        """保存済みファイルが空白か判定する（税務書類特化）"""
+        try:
+            if not os.path.exists(file_path):
+                print(f"DEBUG: ファイルが存在しない: {file_path}")
+                return True
+                
+            # ファイルサイズチェック（税務書類の最低サイズを考慮）
+            file_size = os.path.getsize(file_path)
+            print(f"DEBUG: ファイルサイズチェック: {file_size} bytes - {file_path}")
+            
+            # 10KB未満は空白の可能性が高い（より緩い基準）
+            if file_size < 10000:  # 10KB未満
+                print(f"DEBUG: ファイルサイズが小さいため詳細チェック実行: {file_size} bytes")
+                
+                # PDFを開いて中身を再チェック
+                doc = fitz.open(file_path)
+                if doc.page_count == 0:
+                    print("DEBUG: ページ数が0のため空白判定")
+                    doc.close()
+                    return True
+                    
+                page = doc[0]
+                is_blank = self._is_blank_page_content(page)
+                doc.close()
+                
+                if is_blank:
+                    print(f"DEBUG: 中身チェックで空白判定: {file_path}")
+                else:
+                    print(f"DEBUG: 中身チェックで有効判定: {file_path}")
+                
+                return is_blank
+            else:
+                print(f"DEBUG: ファイルサイズが十分なため有効判定: {file_size} bytes")
+                return False
+            
+        except Exception as e:
+            print(f"DEBUG: 保存ファイル空白チェックエラー - {e}")
+            # エラーの場合は安全のため削除しない
+            return False
 
 if __name__ == "__main__":
     # テスト用
