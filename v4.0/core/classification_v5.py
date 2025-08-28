@@ -113,7 +113,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["法人税申告", "法人税", "内国法人"]
             },
             
-            "0003_受信通知_法人税": {
+            "0003_受信通知": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細", "種目 法人税及び地方法人税申告書"], "all"),
@@ -127,7 +127,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "法人税"]
             },
             
-            "0004_納付情報_法人税": {
+            "0004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細（納付区分番号通知）", "法人税及地方法人税"], "all"),
@@ -161,7 +161,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["県税事務所", "都税事務所"]
             },
             
-            "1003_受信通知_都道府県": {
+            "1003_受信通知": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["申告受付完了通知", "都道府県民税", "事業税"], "all"),
@@ -174,7 +174,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "都道府県"]
             },
             
-            "1004_納付情報_都道府県": {
+            "1004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["納付情報発行結果", "法人二税・特別税"], "all"),
@@ -202,7 +202,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["市役所", "市民税"]
             },
             
-            "2003_受信通知_市町村": {
+            "2003_受信通知": {
                 "priority": 140,
                 "highest_priority_conditions": [
                     AndCondition(["申告受付完了通知", "法人市町村民税"], "all"),
@@ -219,7 +219,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "市町村"]
             },
             
-            "2004_納付情報_市町村": {
+            "2004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["納付情報発行結果", "法人住民税"], "all"),
@@ -270,7 +270,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["イメージ添付書類", "添付書類", "法人消費税"]
             },
             
-            "3003_受信通知_消費税": {
+            "3003_受信通知": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細", "種目 消費税申告書"], "all"),
@@ -284,7 +284,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "消費税"]
             },
             
-            "3004_納付情報_消費税": {
+            "3004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細（納付区分番号通知）", "消費税及地方消費税"], "all"),
@@ -584,24 +584,72 @@ class DocumentClassifierV5:
         self._log_debug(f"自治体連番適用チェック: {document_type}, 都道府県={prefecture_code}, 市町村={municipality_code}")
         
         # 受信通知関連の自治体別連番対応
-        if document_type == "0003_受信通知_法人税":
+        if document_type == "0003_受信通知":
             if prefecture_code:
                 # 芝税務署(東京)などの国税受信通知 → 都道府県別連番
                 self._log_debug(f"法人税受信通知の都道府県連番適用: {prefecture_code}")
-                return f"{prefecture_code}_受信通知_法人税"
+                return f"{prefecture_code}_受信通知"
         
-        elif document_type == "2003_受信通知_市町村":
-            if municipality_code:
-                # 市町村受信通知 → 市町村別連番
+        elif document_type == "1003_受信通知":
+            if prefecture_code:
+                # 都道府県受信通知 → 都道府県別連番
+                self._log_debug(f"都道府県受信通知の都道府県連番適用: {prefecture_code}")
+                return f"{prefecture_code}_受信通知"
+        
+        elif document_type in ["1013_受信通知", "1023_受信通知", "1033_受信通知"]:
+            if prefecture_code:
+                # 都道府県系列受信通知の連番化
+                self._log_debug(f"都道府県系列受信通知の都道府県連番適用: {prefecture_code}")
+                return f"{prefecture_code}_受信通知"
+        
+        elif document_type == "2003_受信通知":
+            if municipality_code and prefecture_code != 1001:  # 東京都除外
+                # 市町村受信通知 → 市町村別連番（東京都は除外）
                 self._log_debug(f"市町村受信通知の市町村連番適用: {municipality_code}")
-                return f"{municipality_code}_受信通知_市町村"
+                return f"{municipality_code}_受信通知"
+            elif prefecture_code == 1001:
+                # 東京都の場合は市町村コードを適用しない
+                self._log_debug(f"東京都のため市町村コード適用をスキップ: {document_type}")
+                return document_type
+        
+        elif document_type in ["2013_受信通知", "2023_受信通知", "2033_受信通知"]:
+            if municipality_code and prefecture_code != 1001:  # 東京都除外
+                # 市町村系列受信通知の連番化（東京都は除外）
+                self._log_debug(f"市町村系列受信通知の市町村連番適用: {municipality_code}")
+                return f"{municipality_code}_受信通知"
+            elif prefecture_code == 1001:
+                # 東京都の場合は市町村コードを適用しない
+                self._log_debug(f"東京都のため市町村系列コード適用をスキップ: {document_type}")
+                return document_type
         
         # 納付情報の自治体別連番対応
-        elif document_type == "3004_納付情報_消費税":
+        elif document_type == "0004_納付情報":
+            if prefecture_code:
+                # 法人税納付情報 → 都道府県別連番
+                self._log_debug(f"法人税納付情報の都道府県連番適用: {prefecture_code}")
+                return f"{prefecture_code}_納付情報"
+        
+        elif document_type == "1004_納付情報":
+            if prefecture_code:
+                # 都道府県納付情報 → 都道府県別連番
+                self._log_debug(f"都道府県納付情報の都道府県連番適用: {prefecture_code}")
+                return f"{prefecture_code}_納付情報"
+        
+        elif document_type == "2004_納付情報":
+            if municipality_code and prefecture_code != 1001:  # 東京都除外
+                # 市町村納付情報 → 市町村別連番（東京都は除外）
+                self._log_debug(f"市町村納付情報の市町村連番適用: {municipality_code}")
+                return f"{municipality_code}_納付情報"
+            elif prefecture_code == 1001:
+                # 東京都の場合は市町村コードを適用しない
+                self._log_debug(f"東京都のため市町村納付情報コード適用をスキップ: {document_type}")
+                return document_type
+        
+        elif document_type == "3004_納付情報":
             if prefecture_code:
                 # 消費税納付情報 → 都道府県別連番
                 self._log_debug(f"消費税納付情報の都道府県連番適用: {prefecture_code}")
-                return f"{prefecture_code}_納付情報_消費税"
+                return f"{prefecture_code}_納付情報"
         
         # 申告書の自治体別連番対応
         elif document_type == "0001_法人税及び地方法人税申告書":
@@ -617,47 +665,69 @@ class DocumentClassifierV5:
                 return f"{prefecture_code}_{prefecture_name}_法人都道府県民税・事業税・特別法人事業税"
         
         elif document_type == "2001_市町村_法人市民税":
-            if municipality_code:
+            if municipality_code and prefecture_code != 1001:  # 東京都除外
                 municipality_name = self._get_municipality_name(municipality_code)
                 return f"{municipality_code}_{municipality_name}_法人市民税"
+            elif prefecture_code == 1001:
+                # 東京都の場合は市町村コードを適用しない
+                self._log_debug(f"東京都のため市町村コード適用をスキップ: {document_type}")
+                return document_type
         
         self._log_debug(f"自治体連番適用なし: {document_type}")
         return document_type
 
     def _get_prefecture_name(self, prefecture_code: int) -> str:
-        """都道府県コードから名前を取得（実装時に適切なマッピングを設定）"""
-        # 仮実装 - 実際の運用では設定から取得
+        """都道府県コードから名前を取得（汎用的拡張対応）"""
+        # 汎用的マッピング - 新しい都道府県も簡単に追加可能
         mapping = {
             1001: "東京都",
             1011: "愛知県", 
-            1021: "福岡県"
+            1021: "福岡県",
+            # 拡張例:
+            # 1031: "大阪府",
+            # 1041: "大分県",
+            # 1051: "北海道",
+            # 1061: "神奈川県"
         }
-        return mapping.get(prefecture_code, "都道府県")
+        return mapping.get(prefecture_code, f"都道府県{prefecture_code}")
 
     def _get_municipality_name(self, municipality_code: int) -> str:
-        """市町村コードから名前を取得（実装時に適切なマッピングを設定）"""
-        # 仮実装 - 実際の運用では設定から取得
+        """市町村コードから名前を取得（汎用的拡張対応）"""
+        # 汎用的マッピング - 新しい市町村も簡単に追加可能
         mapping = {
             2001: "愛知県蒲郡市",
-            2011: "福岡県福岡市"
+            2011: "福岡県福岡市",
+            # 拡張例:
+            # 2021: "大阪府大阪市",
+            # 2031: "大分県大分市",
+            # 2041: "北海道札幌市",
+            # 2051: "神奈川県横浜市"
         }
-        return mapping.get(municipality_code, "市町村")
+        return mapping.get(municipality_code, f"市町村{municipality_code}")
 
     def _extract_municipality_info_from_text(self, text: str, filename: str) -> Tuple[Optional[int], Optional[int]]:
         """テキストから自治体コードを抽出（テキストベース解析）"""
         combined_text = f"{text} {filename}".lower()
         
-        # デフォルト自治体設定（GUI設定と連携）
+        # デフォルト自治体設定（汎用的キーワード分離システム）
         # セット1: 東京都, セット2: 愛知県蒲郡市, セット3: 福岡県福岡市
+        # 拡張例: セット4: 大阪府大阪市, セット5: 大分県大分市 等も対応可能
+        
         prefecture_keywords = {
-            1001: ["東京", "東京都", "都税事務所", "芝税務署"],  # セット1: 東京都
-            1011: ["愛知", "愛知県", "蒲郡", "蒲郡市", "蒲郡市役所"],  # セット2: 愛知県
-            1021: ["福岡", "福岡県", "福岡市", "博多", "中央区"]  # セット3: 福岡県
+            1001: ["都税事務所", "芝税務署", "東京都港都税事務所"],  # セット1: 東京都（具体的機関名で特定）
+            1011: ["東三河県税事務所", "愛知県東三河県税事務所"],  # セット2: 愛知県（具体的機関名）
+            1021: ["西福岡県税事務所", "福岡県西福岡県税事務所"]  # セット3: 福岡県（具体的機関名）
+            # 拡張例:
+            # 1031: ["大阪府税事務所", "大阪府中央府税事務所"],  # セット4: 大阪府
+            # 1041: ["大分県税事務所", "大分県中央県税事務所"]   # セット5: 大分県
         }
         
         municipality_keywords = {
-            2001: ["蒲郡", "蒲郡市", "蒲郡市役所"],  # セット2の市町村: 蒲郡市
-            2011: ["福岡市", "博多", "中央区", "福岡区", "福岡県福岡市"]  # セット3の市町村: 福岡市
+            2001: ["蒲郡市役所", "蒲郡市長"],  # セット2の市町村: 蒲郡市（具体的機関名）
+            2011: ["福岡市役所", "福岡市長"]  # セット3の市町村: 福岡市（具体的機関名）
+            # 拡張例:
+            # 2021: ["大阪市役所", "大阪市長"],  # セット4の市町村: 大阪市
+            # 2031: ["大分市役所", "大分市長"]   # セット5の市町村: 大分市
         }
         
         # 都道府県コード検出
@@ -695,12 +765,12 @@ if __name__ == "__main__":
         {
             "text": "メール詳細 種目 法人税及び地方法人税申告書 受付番号 20250731185710521215",
             "filename": "test_houjinzei.pdf",
-            "expected": "0003_受信通知_法人税"
+            "expected": "0003_受信通知"
         },
         {
             "text": "納付区分番号通知 税目 消費税及地方消費税 納付先 芝税務署",
             "filename": "test_shouhizei.pdf", 
-            "expected": "3004_納付情報_消費税"
+            "expected": "3004_納付情報"
         }
     ]
     
