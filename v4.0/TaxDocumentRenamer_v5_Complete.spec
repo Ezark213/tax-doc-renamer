@@ -1,25 +1,37 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
-    ['main_v5_complete.py'],
+    ['main_v5_complete_fixed.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        'tkinter',
+        'tkinter.ttk',
+        'tkinter.filedialog',
+        'tkinter.messagebox',
+        'threading',
+        'shutil',
+        'pathlib',
+        'typing',
+        'csv',
+        'datetime',
+        're'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
-    optimize=0,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
+    a.zipfiles,
     a.datas,
     [],
     name='TaxDocumentRenamer_v5_Complete',
@@ -35,4 +47,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=None
 )

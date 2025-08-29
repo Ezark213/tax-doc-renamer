@@ -525,15 +525,10 @@ class TaxDocumentRenamerV51:
                             text_content = f"CSV: {file_name}"
                     
                     # 分類実行
-                    classification_result = self.classifier.classify_document(text_content, file_name)
+                    document_type, alerts = self.classifier.classify_document_v5_fixed(text_content, file_name)
                     
-                    # テキストから自治体セット番号抽出
-                    set_number = self.classifier.extract_municipality_from_text(text_content, file_name)
-                    
-                    # 自治体連番適用
-                    final_document_type = self.classifier.apply_municipal_numbering(
-                        classification_result.document_type, set_number
-                    )
+                    # 分類結果を使用
+                    final_document_type = document_type
                     
                     # 年月付与
                     year_month = self.year_month_var.get()
