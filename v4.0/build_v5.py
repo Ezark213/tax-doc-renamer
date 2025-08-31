@@ -199,7 +199,7 @@ if __name__ == "__main__":
     with open(build_dir / "setup.py", "w", encoding="utf-8") as f:
         f.write(setup_content)
     
-    print("  ✓ setup.py作成完了")
+    print("  OK setup.py作成完了")
 
 def create_launcher_scripts():
     """起動スクリプトを作成"""
@@ -240,8 +240,8 @@ pause
     with open(build_dir / "run_tests.bat", "w", encoding="utf-8") as f:
         f.write(test_batch_content)
     
-    print("  ✓ start_v5.bat作成完了")
-    print("  ✓ run_tests.bat作成完了")
+    print("  OK start_v5.bat作成完了")
+    print("  OK run_tests.bat作成完了")
 
 def create_version_info():
     """バージョン情報ファイルを作成"""
@@ -272,7 +272,105 @@ def create_version_info():
     with open(build_dir / "version.json", "w", encoding="utf-8") as f:
         json.dump(version_info, f, indent=2, ensure_ascii=False)
     
-    print("  ✓ version.json作成完了")
+    print("  OK version.json作成完了")
+
+def create_pyinstaller_spec():
+    """PyInstaller用のspecファイルを作成"""
+    print("\nPyInstaller設定ファイル作成中...")
+    
+    spec_content = '''# -*- mode: python ; coding: utf-8 -*-
+
+a = Analysis(
+    ['main_v5.py'],
+    pathex=[],
+    binaries=[],
+    datas=[
+        ('core', 'core'),
+    ],
+    hiddenimports=['tkinter', 'tkinter.filedialog', 'tkinter.messagebox'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+)
+pyz = PYZ(a.pure, a.zipped_data)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='TaxDocRenamer_v5.0_Modified',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None,
+)
+'''
+    
+    with open("TaxDocRenamer_v5.spec", "w", encoding="utf-8") as f:
+        f.write(spec_content)
+    
+    print("  OK TaxDocRenamer_v5.spec作成完了")
+
+def build_executable():
+    """PyInstallerで実行可能ファイルをビルド"""
+    print("\n実行可能ファイルビルド中...")
+    
+    try:
+        # PyInstallerがインストールされているか確認
+        subprocess.run([sys.executable, "-m", "pip", "show", "pyinstaller"], 
+                      check=True, capture_output=True)
+        print("  OK PyInstaller確認完了")
+    except subprocess.CalledProcessError:
+        print("  PyInstallerをインストール中...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], 
+                      check=True)
+        print("  OK PyInstallerインストール完了")
+    
+    # specファイル作成
+    create_pyinstaller_spec()
+    
+    # ビルド実行
+    print("  実行可能ファイル作成中... (数分かかる場合があります)")
+    result = subprocess.run([
+        sys.executable, "-m", "PyInstaller", 
+        "--onefile", 
+        "--windowed",
+        "--name", "TaxDocRenamer_v5.0_Modified",
+        "--distpath", "dist",
+        "--workpath", "build_temp",
+        "--specpath", ".",
+        "main_v5.py"
+    ], capture_output=True, text=True)
+    
+    if result.returncode == 0:
+        print("  OK 実行可能ファイル作成完了")
+        
+        # 生成されたファイルをデスクトップにコピー
+        exe_path = Path("dist/TaxDocRenamer_v5.0_Modified.exe")
+        if exe_path.exists():
+            desktop_path = Path("C:/Users/pukur/Desktop/TaxDocRenamer_v5.0_Modified.exe")
+            shutil.copy2(exe_path, desktop_path)
+            print(f"  OK 実行ファイルをデスクトップにコピー: {desktop_path}")
+            return True
+        else:
+            print("  ERROR 実行ファイルが見つかりません")
+            return False
+    else:
+        print(f"  ERROR ビルドエラー: {result.stderr}")
+        return False
 
 def create_distribution_package():
     """配布パッケージを作成"""
@@ -313,8 +411,8 @@ docs/V5_運用ガイド.md を参照
     with open(build_dir / "README_PACKAGE.txt", "w", encoding="utf-8") as f:
         f.write(package_info)
     
-    print(f"  ✓ 配布パッケージ '{package_name}' 準備完了")
-    print(f"  📁 場所: {build_dir.absolute()}")
+    print(f"  OK 配布パッケージ '{package_name}' 準備完了")
+    print(f"  場所: {build_dir.absolute()}")
     
     return package_name
 
@@ -332,13 +430,17 @@ def main():
         create_setup_script()
         create_launcher_scripts()
         create_version_info()
+        
+        # 実行可能ファイルをビルド
+        exe_success = build_executable()
+        
         package_name = create_distribution_package()
         
         print("\n" + "=" * 60)
-        print("🎉 ビルド完了！")
+        print("ビルド完了！")
         print("=" * 60)
-        print(f"📦 パッケージ名: {package_name}")
-        print(f"📁 場所: {build_dir.absolute()}")
+        print(f"パッケージ名: {package_name}")
+        print(f"場所: {build_dir.absolute()}")
         print("\n配布手順:")
         print("1. build_v5/ フォルダ全体を配布")
         print("2. 受け取り側で setup.py を実行")
@@ -348,7 +450,7 @@ def main():
         print("- docs/README_v5.md で使用方法確認")
         
     except Exception as e:
-        print(f"\n❌ ビルドエラー: {e}")
+        print(f"\nビルドエラー: {e}")
         return False
     
     return True
@@ -357,6 +459,6 @@ if __name__ == "__main__":
     success = main()
     
     if success:
-        print("\n🚀 v5.0システム配布準備完了！")
+        print("\nv5.0システム配布準備完了！")
     else:
-        print("\n🔧 ビルド処理を確認してください。")
+        print("\nビルド処理を確認してください。")

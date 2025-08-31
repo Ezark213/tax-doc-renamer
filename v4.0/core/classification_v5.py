@@ -82,8 +82,11 @@ class DocumentClassifierV5:
             },
             
             "0001_法人税及び地方法人税申告書": {
-                "priority": 135,
+                "priority": 200,  # 最高優先度に変更
                 "highest_priority_conditions": [
+                    # 修正指示書に基づく新しい最優先条件を追加
+                    AndCondition(["01_内国法人", "確定申告"], "all"),  # ファイル名パターン
+                    AndCondition(["内国法人の確定申告(青色)"], "any"),  # 単独でも最優先
                     AndCondition(["事業年度分の法人税申告書", "差引確定法人税額"], "all"),
                     AndCondition(["内国法人の確定申告(青色)", "法人税額"], "all"),
                     AndCondition(["控除しきれなかった金額", "課税留保金額"], "all"),
@@ -99,8 +102,15 @@ class DocumentClassifierV5:
             },
             
             "0002_添付資料_法人税": {
-                "priority": 125,
+                "priority": 200,  # バグ修正依頼書: B-2 最高優先度に変更
                 "highest_priority_conditions": [
+                    # バグ修正依頼書: B-1 完全一致キーワードの追加
+                    AndCondition(["法人税 添付資料"], "any"),
+                    AndCondition(["添付資料 法人税"], "any"), 
+                    AndCondition(["イメージ添付書類(法人税申告)"], "any"),
+                    AndCondition(["イメージ添付書類 法人税"], "any"),
+                    AndCondition(["添付書類 法人税"], "any"),
+                    # 既存条件も維持
                     AndCondition(["添付資料", "法人税申告", "イメージ添付"], "all"),
                     AndCondition(["添付書類", "法人税", "申告書"], "all")
                 ],
@@ -113,7 +123,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["法人税申告", "法人税", "内国法人"]
             },
             
-            "0003_受信通知_法人税": {
+            "0003_受信通知": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細", "種目 法人税及び地方法人税申告書"], "all"),
@@ -127,7 +137,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "法人税"]
             },
             
-            "0004_納付情報_法人税": {
+            "0004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細（納付区分番号通知）", "法人税及地方法人税"], "all"),
@@ -161,7 +171,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["県税事務所", "都税事務所"]
             },
             
-            "1003_受信通知_都道府県": {
+            "1003_受信通知": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["申告受付完了通知", "都道府県民税", "事業税"], "all"),
@@ -174,7 +184,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "都道府県"]
             },
             
-            "1004_納付情報_都道府県": {
+            "1004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["納付情報発行結果", "法人二税・特別税"], "all"),
@@ -190,19 +200,28 @@ class DocumentClassifierV5:
             
             # ===== 2000番台 - 市町村税関連 =====
             "2001_市町村_法人市民税": {
-                "priority": 135,
+                "priority": 180,  # バグ修正依頼書: C-2 優先度を高く設定
                 "highest_priority_conditions": [
+                    # バグ修正依頼書: C-1 市民税判定条件の強化
+                    AndCondition(["法人市民税", "申告書", "市役所"], "all"),
+                    AndCondition(["法人市町村民税", "確定申告"], "all"),
+                    AndCondition(["市長", "法人市民税"], "all"),
+                    # 既存条件も維持
                     AndCondition(["法人市民税申告書", "市役所", "均等割"], "all"),
                     AndCondition(["市町村民税", "法人税割", "申告納付税額"], "all"),
                     AndCondition(["法人市民税", "課税標準総額", "市長"], "all")
                 ],
                 "exact_keywords": ["法人市民税申告書", "市民税申告書"],
                 "partial_keywords": ["法人市民税", "市町村民税", "市役所", "町役場", "村役場"],
-                "exclude_keywords": ["都道府県", "事業税", "県税事務所", "都税事務所", "受信通知", "納付情報"],
+                "exclude_keywords": [
+                    "都道府県", "事業税", "県税事務所", "都税事務所", "受信通知", "納付情報",
+                    # バグ修正依頼書: C-1 除外条件の追加
+                    "内国法人", "確定申告(青色)", "事業年度分", "税額控除"
+                ],
                 "filename_keywords": ["市役所", "市民税"]
             },
             
-            "2003_受信通知_市町村": {
+            "2003_受信通知": {
                 "priority": 140,
                 "highest_priority_conditions": [
                     AndCondition(["申告受付完了通知", "法人市町村民税"], "all"),
@@ -219,7 +238,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "市町村"]
             },
             
-            "2004_納付情報_市町村": {
+            "2004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["納付情報発行結果", "法人住民税"], "all"),
@@ -252,8 +271,10 @@ class DocumentClassifierV5:
             },
             
             "3002_添付資料_消費税": {
-                "priority": 125,
+                "priority": 200,  # 最高優先度に変更
                 "highest_priority_conditions": [
+                    # 修正指示書に基づくファイル名最優先条件を追加
+                    AndCondition(["イメージ添付書類(法人消費税申告)"], "any"),  # 単独最優先
                     AndCondition(["添付資料", "消費税申告", "イメージ添付"], "all"),
                     AndCondition(["添付書類", "法人消費税申告"], "all"),
                     AndCondition(["イメージ添付書類(法人消費税申告)", "添付資料"], "all")
@@ -270,7 +291,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["イメージ添付書類", "添付書類", "法人消費税"]
             },
             
-            "3003_受信通知_消費税": {
+            "3003_受信通知": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細", "種目 消費税申告書"], "all"),
@@ -284,7 +305,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["受信通知", "消費税"]
             },
             
-            "3004_納付情報_消費税": {
+            "3004_納付情報": {
                 "priority": 130,
                 "highest_priority_conditions": [
                     AndCondition(["メール詳細（納付区分番号通知）", "消費税及地方消費税"], "all"),
@@ -296,6 +317,121 @@ class DocumentClassifierV5:
                 "partial_keywords": ["納付情報", "納付書", "納付区分番号通知"],
                 "exclude_keywords": ["法人税及地方法人税", "受信通知"],
                 "filename_keywords": ["納付情報", "消費税"]
+            },
+            
+            # ===== 5000番台 - 会計書類（修正版） =====
+            "5001_決算書": {
+                "priority": 135,
+                "highest_priority_conditions": [
+                    AndCondition(["決算報告書"], "any"),
+                    AndCondition(["貸借対照表", "損益計算書"], "all")
+                ],
+                "exact_keywords": ["決算書", "決算報告書", "貸借対照表", "損益計算書"],
+                "partial_keywords": ["決算", "B/S", "P/L"],
+                "exclude_keywords": [],
+                "filename_keywords": ["決算書", "決算報告書"]
+            },
+            
+            "5002_総勘定元帳": {
+                "priority": 140,  # 最高優先度
+                "highest_priority_conditions": [
+                    AndCondition(["総勘定元帳"], "any")
+                ],
+                "exact_keywords": ["総勘定元帳"],
+                "partial_keywords": ["総勘定", "元帳"],
+                "exclude_keywords": ["補助元帳", "補助", "内国法人", "確定申告", "01_内国法人"],  # 法人税申告書を除外
+                "filename_keywords": ["総勘定元帳", "総勘定"]
+            },
+            
+            "5003_補助元帳": {
+                "priority": 135,
+                "highest_priority_conditions": [
+                    AndCondition(["補助元帳"], "any")
+                ],
+                "exact_keywords": ["補助元帳"],
+                "partial_keywords": ["補助", "元帳"],
+                "exclude_keywords": ["総勘定"],
+                "filename_keywords": ["補助元帳", "補助"]
+            },
+            
+            "5004_残高試算表": {
+                "priority": 135,
+                "highest_priority_conditions": [
+                    AndCondition(["残高試算表"], "any"),
+                    AndCondition(["試算表"], "any")
+                ],
+                "exact_keywords": ["残高試算表", "試算表"],
+                "partial_keywords": ["残高試算", "試算"],
+                "exclude_keywords": [],
+                "filename_keywords": ["残高試算表", "試算表"]
+            },
+            
+            "5005_仕訳帳": {
+                "priority": 135,
+                "highest_priority_conditions": [
+                    AndCondition(["仕訳帳"], "any")
+                ],
+                "exact_keywords": ["仕訳帳"],
+                "partial_keywords": ["仕訳"],
+                "exclude_keywords": [],
+                "filename_keywords": ["仕訳帳", "仕訳"]
+            },
+            
+            # ===== 6000番台 - 固定資産関連（修正版） =====
+            "6001_固定資産台帳": {
+                "priority": 135,
+                "highest_priority_conditions": [
+                    AndCondition(["固定資産台帳"], "any")
+                ],
+                "exact_keywords": ["固定資産台帳"],
+                "partial_keywords": ["固定資産", "資産台帳"],
+                "exclude_keywords": [],
+                "filename_keywords": ["固定資産台帳"]
+            },
+            
+            "6002_一括償却資産明細表": {
+                "priority": 140,  # 最高優先度
+                "highest_priority_conditions": [
+                    AndCondition(["一括償却資産明細表"], "any")
+                ],
+                "exact_keywords": ["一括償却資産明細表"],
+                "partial_keywords": ["一括償却", "償却資産明細"],
+                "exclude_keywords": ["少額"],
+                "filename_keywords": ["一括償却資産明細表", "一括償却"]
+            },
+            
+            "6003_少額減価償却資産明細表": {
+                "priority": 140,  # 最高優先度
+                "highest_priority_conditions": [
+                    AndCondition(["少額減価償却資産明細表"], "any")
+                ],
+                "exact_keywords": ["少額減価償却資産明細表"],
+                "partial_keywords": ["少額減価償却", "少額償却"],
+                "exclude_keywords": ["一括"],
+                "filename_keywords": ["少額減価償却資産明細表", "少額"]
+            },
+            
+            # ===== 7000番台 - 税区分関連（修正版） =====
+            "7001_勘定科目別税区分集計表": {
+                "priority": 140,  # 最高優先度
+                "highest_priority_conditions": [
+                    AndCondition(["勘定科目別税区分集計表"], "any")
+                ],
+                "exact_keywords": ["勘定科目別税区分集計表"],
+                "partial_keywords": ["勘定科目別税区分", "科目別税区分"],
+                "exclude_keywords": ["イメージ添付書類", "添付資料", "法人消費税申告"],  # 添付資料系を除外
+                "filename_keywords": ["勘定科目別税区分集計表"]
+            },
+            
+            "7002_税区分集計表": {
+                "priority": 135,
+                "highest_priority_conditions": [
+                    AndCondition(["税区分集計表"], "any")
+                ],
+                "exact_keywords": ["税区分集計表"],
+                "partial_keywords": ["税区分集計", "区分集計"],
+                "exclude_keywords": ["勘定科目別", "科目別"],
+                "filename_keywords": ["税区分集計表"]
             }
         }
 
@@ -375,6 +511,19 @@ class DocumentClassifierV5:
             preview = text_cleaned[:200] + "..." if len(text_cleaned) > 200 else text_cleaned
             self._log_debug(f"テキスト内容: {preview}")
         
+        # バグ修正依頼書: D-2 地方税受信通知専用判定（新規追加）
+        municipality_info = self._extract_municipality_info_from_text(text_cleaned, filename_cleaned)
+        prefecture_code, municipality_code = municipality_info
+        
+        local_tax_result = self._classify_local_tax_receipt(text_cleaned, filename_cleaned, prefecture_code, municipality_code)
+        if local_tax_result:
+            return local_tax_result
+        
+        # 修正指示書: 修正3 - 納付情報・受信通知の判別強化
+        enhanced_result = self._check_enhanced_payment_receipt_detection(text_cleaned, filename_cleaned)
+        if enhanced_result:
+            return enhanced_result
+        
         # 最優先AND条件判定
         priority_result = self._check_highest_priority_conditions(text_cleaned, filename_cleaned)
         if priority_result:
@@ -451,13 +600,13 @@ class DocumentClassifierV5:
                 best_keywords = combined_keywords
                 self._log_debug(f"    新たな最高スコア! → {doc_type}")
         
-        # 信頼度を計算（0.0-1.0）
-        confidence = min(best_score / 15.0, 1.0)
+        # 信頼度を計算（0.0-1.0）会計書類用に調整
+        confidence = min(best_score / 10.0, 1.0)  # 会計書類用に閾値を下げる
         
         self._log(f"最終結果: {best_match}, スコア: {best_score:.1f}, 信頼度: {confidence:.2f}")
         
-        # 分類できない場合のデフォルト
-        if not best_match or confidence < 0.3:
+        # 分類できない場合のデフォルト（会計書類用に閾値を下げる）
+        if not best_match or confidence < 0.2:  # 0.3 → 0.2 に変更
             best_match = "9999_未分類"
             confidence = 0.0
             best_method = "default_fallback"
@@ -534,7 +683,13 @@ class DocumentClassifierV5:
         filename_keywords = rules.get("filename_keywords", [])
         for keyword in filename_keywords:
             if keyword in filename:
-                points = priority * 3  # ファイル名マッチは最高スコア
+                # バグ修正依頼書: C-2 市役所ファイル名パターンの重み付け強化
+                multiplier = 3.0  # デフォルトの重み付け
+                if keyword == "市役所" and "法人市民税" in str(rules.get("partial_keywords", [])):
+                    multiplier = 9.0  # 市役所 → ファイル名スコア × 3.0 の重み付け適用
+                    self._log_debug(f"    市役所パターン重み付け強化: 市民税関連で×{multiplier}")
+                
+                points = priority * multiplier
                 score += points
                 matched_keywords.append(f"[ファイル名]{keyword}")
                 self._log_debug(f"    ファイル名専用一致: '{keyword}' (+{points})")
@@ -580,49 +735,94 @@ class DocumentClassifierV5:
     def _apply_municipality_numbering(self, document_type: str, 
                                     prefecture_code: Optional[int] = None,
                                     municipality_code: Optional[int] = None) -> str:
-        """自治体連番の適用"""
+        """自治体連番の適用（修正版：固定番号を厳格に管理）"""
         self._log_debug(f"自治体連番適用チェック: {document_type}, 都道府県={prefecture_code}, 市町村={municipality_code}")
         
-        # 受信通知関連の自治体別連番対応
-        if document_type == "0003_受信通知_法人税":
-            if prefecture_code:
-                # 芝税務署(東京)などの国税受信通知 → 都道府県別連番
-                self._log_debug(f"法人税受信通知の都道府県連番適用: {prefecture_code}")
-                return f"{prefecture_code}_受信通知_法人税"
+        # 修正1: 固定番号は連番適用除外（重要な修正）
+        # 修正指示書: 修正5に基づき、1003_受信通知を固定番号から除外
+        FIXED_NUMBERS = {
+            "0003_受信通知",     # 法人税受信通知は固定
+            "0004_納付情報",     # 法人税納付情報は固定
+            "3003_受信通知",     # 消費税受信通知は固定
+            "3004_納付情報",     # 消費税納付情報は固定
+            "1004_納付情報",     # 都道府県納付情報は固定
+            "2004_納付情報"      # 市町村納付情報は固定
+            # 注意: 1003_受信通知と2003_受信通知は連番適用対象のため除外
+        }
         
-        elif document_type == "2003_受信通知_市町村":
-            if municipality_code:
-                # 市町村受信通知 → 市町村別連番
-                self._log_debug(f"市町村受信通知の市町村連番適用: {municipality_code}")
-                return f"{municipality_code}_受信通知_市町村"
+        if document_type in FIXED_NUMBERS:
+            self._log_debug(f"固定番号のため連番適用除外: {document_type}")
+            return document_type
         
-        # 納付情報の自治体別連番対応
-        elif document_type == "3004_納付情報_消費税":
-            if prefecture_code:
-                # 消費税納付情報 → 都道府県別連番
-                self._log_debug(f"消費税納付情報の都道府県連番適用: {prefecture_code}")
-                return f"{prefecture_code}_納付情報_消費税"
-        
-        # 申告書の自治体別連番対応
-        elif document_type == "0001_法人税及び地方法人税申告書":
-            if prefecture_code:
-                # 法人税申告書 → 都道府県別連番
-                self._log_debug(f"法人税申告書の都道府県連番適用: {prefecture_code}")
-                return f"{prefecture_code}_法人税及び地方法人税申告書"
-        
-        # 従来の1001, 2001系統も維持
-        elif document_type == "1001_都道府県_法人都道府県民税・事業税・特別法人事業税":
+        # 修正2: 連番適用は申告書と市町村受信通知のみ
+        # 都道府県申告書（1001系統）
+        if document_type == "1001_都道府県_法人都道府県民税・事業税・特別法人事業税":
             if prefecture_code:
                 prefecture_name = self._get_prefecture_name(prefecture_code)
                 return f"{prefecture_code}_{prefecture_name}_法人都道府県民税・事業税・特別法人事業税"
         
+        # 市町村申告書（2001系統）
         elif document_type == "2001_市町村_法人市民税":
             if municipality_code:
                 municipality_name = self._get_municipality_name(municipality_code)
                 return f"{municipality_code}_{municipality_name}_法人市民税"
         
+        # 修正指示書: 修正5 - 都道府県受信通知の連番対応
+        elif document_type == "1003_受信通知":
+            if prefecture_code:
+                # セット番号に基づく連番生成: 1003, 1013, 1023
+                set_order = self._get_set_order_from_prefecture_code(prefecture_code)
+                if set_order == 1:
+                    return "1003_受信通知"
+                elif set_order == 2:
+                    return "1013_受信通知"
+                elif set_order == 3:
+                    return "1023_受信通知"
+        
+        # 市町村受信通知（2003系統）の連番対応
+        elif document_type == "2003_受信通知":
+            if municipality_code:
+                # セット番号に基づく連番生成: 2003, 2013, 2023
+                set_order = self._get_set_order_from_municipality_code(municipality_code)
+                if set_order == 1:
+                    return "2003_受信通知"
+                elif set_order == 2:
+                    return "2013_受信通知"
+                elif set_order == 3:
+                    return "2023_受信通知"
+        
         self._log_debug(f"自治体連番適用なし: {document_type}")
         return document_type
+
+    def _get_set_order_from_prefecture_code(self, prefecture_code: int) -> int:
+        """都道府県コードからセット順序を取得（修正指示書: 修正5対応）"""
+        # 修正指示書に基づくセット順序マッピング
+        code_to_set = {
+            1001: 1,  # 東京都 = セット1
+            1011: 2,  # 愛知県 = セット2 
+            1021: 3,  # 福岡県 = セット3
+        }
+        return code_to_set.get(prefecture_code, 1)  # デフォルトはセット1
+    
+    def _get_set_order_from_municipality_code(self, municipality_code: int) -> int:
+        """市町村コードからセット順序を取得（修正指示書: 修正5対応）"""
+        # 修正指示書に基づくセット順序マッピング
+        code_to_set = {
+            2001: 2,  # 蒲郡市 = セット2（東京都がないので繰り上がり）
+            2011: 3,  # 福岡市 = セット3
+        }
+        return code_to_set.get(municipality_code, 1)  # デフォルトはセット1
+    
+    def _get_city_order_from_code(self, municipality_code: int) -> int:
+        """市町村コードから順序を取得（レガシー関数 - 後方互換性のため残す）"""
+        code_to_order = {
+            2001: 1,  # 1番目の市町村
+            2011: 2,  # 2番目の市町村
+            2021: 3,  # 3番目の市町村
+            2031: 4,  # 4番目の市町村
+            2041: 5   # 5番目の市町村
+        }
+        return code_to_order.get(municipality_code, 1)
 
     def _get_prefecture_name(self, prefecture_code: int) -> str:
         """都道府県コードから名前を取得（実装時に適切なマッピングを設定）"""
@@ -647,43 +847,309 @@ class DocumentClassifierV5:
         """テキストから自治体コードを抽出（テキストベース解析）"""
         combined_text = f"{text} {filename}".lower()
         
-        # デフォルト自治体設定（GUI設定と連携）
-        # セット1: 東京都, セット2: 愛知県蒲郡市, セット3: 福岡県福岡市
-        prefecture_keywords = {
-            1001: ["東京", "東京都", "都税事務所", "芝税務署"],  # セット1: 東京都
-            1011: ["愛知", "愛知県", "蒲郡", "蒲郡市", "蒲郡市役所"],  # セット2: 愛知県
-            1021: ["福岡", "福岡県", "福岡市", "博多", "中央区"]  # セット3: 福岡県
+        # 修正指示書に基づく提出先優先の自治体判定
+        # Step 1: ファイル名から提出先事務所を特定
+        submission_office_patterns = {
+            1: ["東京都港都税事務所", "港都税事務所", "芝税務署", "都税事務所"],  # セット1
+            2: ["愛知県東三河県税事務所", "東三河県税事務所", "蒲郡市役所", "蒲郡市"],  # セット2  
+            3: ["福岡県西福岡県税事務所", "西福岡県税事務所", "福岡市", "福岡市役所"],  # セット3
         }
         
-        municipality_keywords = {
-            2001: ["蒲郡", "蒲郡市", "蒲郡市役所"],  # セット2の市町村: 蒲郡市
-            2011: ["福岡市", "博多", "中央区", "福岡区", "福岡県福岡市"]  # セット3の市町村: 福岡市
-        }
+        # Step 2: 会社住所を除外してからテキスト判定
+        # 会社住所パターン（修正指示書に基づく）
+        company_address_patterns = [
+            r'東京都港区港南.*品川グランドセントラルタワー',
+            r'愛知県蒲郡市豊岡町.*44番地',  
+            r'福岡県福岡市中央区草香江'
+        ]
         
-        # 都道府県コード検出
+        # 会社住所を除外
+        filtered_text = combined_text
+        for pattern in company_address_patterns:
+            filtered_text = re.sub(pattern, '', filtered_text, flags=re.IGNORECASE)
+        
+        # ファイル名から提出先セットを判定
+        detected_set = None
+        for set_num, office_names in submission_office_patterns.items():
+            for office_name in office_names:
+                if office_name in filename.lower():
+                    detected_set = set_num
+                    self._log_debug(f"ファイル名提出先検出: {office_name} → セット{set_num}")
+                    break
+            if detected_set:
+                break
+        
+        # テキストからも提出先を確認（会社住所除外済み）
+        if not detected_set:
+            for set_num, office_names in submission_office_patterns.items():
+                for office_name in office_names:
+                    if office_name in filtered_text:
+                        detected_set = set_num
+                        self._log_debug(f"テキスト提出先検出: {office_name} → セット{set_num}")
+                        break
+                if detected_set:
+                    break
+        
+        # セット番号をコード番号に変換（東京都特別ルール適用）
         prefecture_code = None
-        for code, keywords in prefecture_keywords.items():
-            for keyword in keywords:
-                if keyword in combined_text:
-                    prefecture_code = code
-                    self._log_debug(f"都道府県マッチ: {keyword} → {code}")
-                    break
-            if prefecture_code:
-                break
-        
-        # 市町村コード検出
         municipality_code = None
-        for code, keywords in municipality_keywords.items():
-            for keyword in keywords:
-                if keyword in combined_text:
-                    municipality_code = code
-                    self._log_debug(f"市町村マッチ: {keyword} → {code}")
-                    break
-            if municipality_code:
-                break
+        
+        if detected_set == 1:  # セット1: 東京都（市町村なし）
+            prefecture_code = 1001  # 東京都は常に1001
+        elif detected_set == 2:  # セット2: 愛知県蒲郡市
+            prefecture_code = 1011  # セット2の都道府県
+            municipality_code = 2001  # 東京都がないので繰り上がり
+        elif detected_set == 3:  # セット3: 福岡県福岡市
+            prefecture_code = 1021  # セット3の都道府県
+            municipality_code = 2011  # 東京都がないので繰り上がり
         
         self._log_debug(f"テキスト自治体認識結果: 都道府県={prefecture_code}, 市町村={municipality_code}")
         return prefecture_code, municipality_code
+    
+    def _is_payment_info(self, text_content: str, filename: str) -> bool:
+        """
+        修正指示書: 修正3 - 納付情報の判定強化
+        納付情報として必ず分類すべきキーワードをチェック
+        """
+        payment_indicators = [
+            '納付区分番号通知',
+            '納付内容を確認し',
+            '以下のボタンより納付',
+            'メール詳細（納付区分番号通知）'
+        ]
+        
+        # これらのキーワードが含まれる場合は必ず納付情報として分類
+        for indicator in payment_indicators:
+            if indicator in text_content:
+                self._log_debug(f"納付情報強制判定: {indicator}")
+                return True
+        
+        return False
+    
+    def _is_receipt_notification(self, text_content: str, filename: str) -> bool:
+        """
+        修正指示書: 修正3 - 受信通知の判定強化
+        納付関連キーワードがない場合のみ受信通知とする
+        """
+        receipt_indicators = [
+            '送信されたデータを受け付けました',
+            '申告データを受付けました',
+            'メール詳細'  # 単独の場合
+        ]
+        
+        # 納付関連キーワードがある場合は受信通知から除外
+        exclusion_keywords = ['納付区分番号通知', '納付内容を確認し']
+        
+        has_receipt = any(indicator in text_content for indicator in receipt_indicators)
+        has_payment = any(keyword in text_content for keyword in exclusion_keywords)
+        
+        result = has_receipt and not has_payment
+        if result:
+            self._log_debug(f"受信通知強制判定: 受信={has_receipt}, 納付除外={has_payment}")
+        
+        return result
+    
+    def _classify_local_tax_receipt(self, text: str, filename: str, prefecture_code: Optional[int], municipality_code: Optional[int]) -> Optional[ClassificationResult]:
+        """
+        バグ修正依頼書: A-2 地方税受信通知の専用分類処理
+        都道府県・市町村の受信通知に適切な連番を付与
+        """
+        combined_text = f"{text} {filename}"
+        
+        # 都道府県向け受信通知の判定条件（AND条件）
+        prefecture_receipt_conditions = [
+            ["申告受付完了通知", "法人事業税"],
+            ["申告受付完了通知", "特別法人事業税"], 
+            ["県税事務所", "受信通知"],
+            ["都税事務所", "受信通知"]
+        ]
+        
+        # 市町村向け受信通知の判定条件（AND条件）
+        municipality_receipt_conditions = [
+            ["申告受付完了通知", "法人市民税"],
+            ["申告受付完了通知", "法人市町村民税"],
+            ["市役所", "申告受付完了通知"],
+            ["市長", "法人市民税", "受付完了通知"]
+        ]
+        
+        # 都道府県向け判定
+        if any(all(kw in combined_text for kw in condition) 
+               for condition in prefecture_receipt_conditions):
+            set_number = self._get_jurisdiction_set_number(prefecture_code, "prefecture")
+            code = self._generate_receipt_number("prefecture", set_number)
+            self._log_debug(f"地方税受信通知（都道府県）: セット{set_number} → {code}_受信通知")
+            return ClassificationResult(
+                document_type=f"{code}_受信通知",
+                confidence=1.0,
+                matched_keywords=["地方税受信通知（都道府県）"],
+                classification_method="local_tax_receipt_detection",
+                debug_steps=[],
+                processing_log=self.processing_log.copy()
+            )
+        
+        # 市町村向け判定  
+        if any(all(kw in combined_text for kw in condition)
+               for condition in municipality_receipt_conditions):
+            set_number = self._get_jurisdiction_set_number(municipality_code, "municipality")
+            code = self._generate_receipt_number("municipality", set_number)
+            self._log_debug(f"地方税受信通知（市町村）: セット{set_number} → {code}_受信通知")
+            return ClassificationResult(
+                document_type=f"{code}_受信通知",
+                confidence=1.0,
+                matched_keywords=["地方税受信通知（市町村）"],
+                classification_method="local_tax_receipt_detection",
+                debug_steps=[],
+                processing_log=self.processing_log.copy()
+            )
+            
+        return None
+    
+    def _generate_receipt_number(self, classification_type: str, jurisdiction_set_number: int) -> str:
+        """
+        バグ修正依頼書: A-2 受信通知の連番を生成
+        
+        Args:
+            classification_type: "prefecture" or "municipality"
+            jurisdiction_set_number: セット番号 (1-5)
+        
+        Returns:
+            str: 生成された番号 (例: "1003", "2013")
+        """
+        base_numbers = {
+            "prefecture": 1003,
+            "municipality": 2003
+        }
+        
+        if classification_type in base_numbers:
+            base = base_numbers[classification_type]
+            result = str(base + (jurisdiction_set_number - 1) * 10)
+            self._log_debug(f"連番生成: {classification_type} セット{jurisdiction_set_number} → {result}")
+            return result
+        
+        return "0003"  # フォールバック
+    
+    def _get_jurisdiction_set_number(self, code: Optional[int], jurisdiction_type: str) -> int:
+        """
+        バグ修正依頼書: A-2 自治体コードからセット番号を取得
+        
+        Args:
+            code: 都道府県コードまたは市町村コード
+            jurisdiction_type: "prefecture" or "municipality"
+        
+        Returns:
+            int: セット番号 (1-5)
+        """
+        if jurisdiction_type == "prefecture":
+            # 都道府県コードからセット番号への変換
+            code_to_set = {
+                1001: 1,  # 東京都
+                1011: 2,  # 愛知県 
+                1021: 3,  # 福岡県
+                1031: 4,  # 将来の拡張用
+                1041: 5   # 将来の拡張用
+            }
+            return code_to_set.get(code, 1)  # デフォルトはセット1
+        elif jurisdiction_type == "municipality":
+            # 市町村コードからセット番号への変換
+            code_to_set = {
+                2001: 1,  # 1番目の市町村
+                2011: 2,  # 2番目の市町村
+                2021: 3,  # 3番目の市町村
+                2031: 4,  # 4番目の市町村
+                2041: 5   # 5番目の市町村
+            }
+            return code_to_set.get(code, 1)  # デフォルトはセット1
+        
+        return 1  # フォールバック
+    
+    def _check_enhanced_payment_receipt_detection(self, text: str, filename: str) -> Optional[ClassificationResult]:
+        """
+        修正指示書: 修正3 - 納付情報・受信通知の判別強化
+        特定のキーワードパターンに基づく強制分類
+        """
+        combined_text = f"{text} {filename}"
+        
+        # 納付情報の強制判定
+        if self._is_payment_info(combined_text, filename):
+            # 税目によって適切な納付情報コードを返す
+            if "法人税" in combined_text or "内国法人" in combined_text:
+                return ClassificationResult(
+                    document_type="0004_納付情報",
+                    confidence=1.0,
+                    matched_keywords=["納付情報強制判定"],
+                    classification_method="enhanced_payment_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+            elif "消費税" in combined_text:
+                return ClassificationResult(
+                    document_type="3004_納付情報",
+                    confidence=1.0,
+                    matched_keywords=["納付情報強制判定"],
+                    classification_method="enhanced_payment_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+            elif "都道府県" in combined_text or "県税事務所" in combined_text or "都税事務所" in combined_text:
+                return ClassificationResult(
+                    document_type="1004_納付情報",
+                    confidence=1.0,
+                    matched_keywords=["納付情報強制判定"],
+                    classification_method="enhanced_payment_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+            elif "市町村" in combined_text or "市役所" in combined_text or "市民税" in combined_text:
+                return ClassificationResult(
+                    document_type="2004_納付情報",
+                    confidence=1.0,
+                    matched_keywords=["納付情報強制判定"],
+                    classification_method="enhanced_payment_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+        
+        # 受信通知の強制判定（納付関連キーワードがない場合のみ）
+        if self._is_receipt_notification(combined_text, filename):
+            # 税目によって適切な受信通知コードを返す
+            if "法人税" in combined_text or "内国法人" in combined_text:
+                return ClassificationResult(
+                    document_type="0003_受信通知",
+                    confidence=1.0,
+                    matched_keywords=["受信通知強制判定"],
+                    classification_method="enhanced_receipt_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+            elif "消費税" in combined_text:
+                return ClassificationResult(
+                    document_type="3003_受信通知",
+                    confidence=1.0,
+                    matched_keywords=["受信通知強制判定"],
+                    classification_method="enhanced_receipt_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+            elif "都道府県" in combined_text or "県税事務所" in combined_text or "都税事務所" in combined_text:
+                return ClassificationResult(
+                    document_type="1003_受信通知",
+                    confidence=1.0,
+                    matched_keywords=["受信通知強制判定"],
+                    classification_method="enhanced_receipt_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+            elif "市町村" in combined_text or "市役所" in combined_text or "市民税" in combined_text:
+                return ClassificationResult(
+                    document_type="2003_受信通知",
+                    confidence=1.0,
+                    matched_keywords=["受信通知強制判定"],
+                    classification_method="enhanced_receipt_detection",
+                    debug_steps=[],
+                    processing_log=self.processing_log.copy()
+                )
+        
+        return None
 
 if __name__ == "__main__":
     # テスト用
