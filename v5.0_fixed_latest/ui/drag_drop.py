@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""
+ドラッグ&ドロップ機能 v4.0
+直感的ファイル選択インターフェース
+"""
+
+import tkinter as tk
+from tkinter import ttk
+import os
+from typing import List, Callable, Optional
+from pathlib import Path
+
+class DragDropWidget:
+    """ドラッグ&ドロップ機能を提供するウィジェット"""
+    
+    def __init__(self, parent_widget: tk.Widget, callback: Callable[[List[str]], None]):
+        """
+        初期化
+        
+        Args:
+            parent_widget: ドロップを受け付ける親ウィジェット
+            callback: ファイルドロップ時に呼ばれるコールバック関数
+        """
+        self.parent = parent_widget
+        self.callback = callback
+        self.supported_extensions = {'.pdf', '.csv'}
+        
+        # ドラッグ&ドロップの設定
+        self._setup_drag_drop()
+        
+        # 視覚効果用の変数
+        self.original_bg = None
+        self.is_dragging_over = False
+
+    def _setup_drag_drop(self):
+        """ドラッグ&ドロップイベントの設定"""
+        try:
+            # Windowsの場合のドラッグ&ドロップ設定
+            if os.name == 'nt':
+                self._setup_windows_drag_drop()
+            else:
+                # Unix系の場合（基本的なバインド）
+                self._setup_unix_drag_drop()
+                
+        except Exception as e:
+            print(f"ドラッグ&ドロップ設定エラー: {e}")
+
+    def _setup_windows_drag_drop(self):
+        """Windows用ドラッグ&ドロップ設定"""
+        try:
+            # tkinterdndライブラリを使用（利用可能な場合）
+            try:
+                from tkinterdnd2 import DND_FILES, TkinterDnD
+                
+                # 親ウィンドウをTkinterDnDに変換
+                if hasattr(self.parent, 'tk'):
+                    root = self.parent.tk
+                    if not isinstance(root, TkinterDnD.Tk):
+                        # 既存のTkをTkinterDnDに変換
+                        pass
+                
+                # ドロップイベントの登録
+                self.parent.drop_target_register(DND_FILES)
+                self.parent.dnd_bind('<<Drop>>', self._on_drop)
+                self.parent.dnd_bind('<<DragEnter>>', self._on_drag_enter)
+                self.parent.dnd_bind('<<DragLeave>>', self._on_drag_leave)
+                
+            except ImportError:
+                # tkinterdndが利用できない場合は代替手段
+                self._setup_alternative_drag_drop()
+                
+        except Exception as e:
+            print(f"Windows D&D設定エラー: {e}")
+            self._setup_alternative_drag_drop()
+
+    def _setup_unix_drag_drop(self):
+        """Unix系用ドラッグ&ドロップ設定"""
+        # 基本的なマウスイベントバインド
+        self.parent.bind('<Button-1>', self._on_click)
+        self.parent.bind('<B1-Motion>', self._on_drag)
+        self.parent.bind('<ButtonRelease-1>', self._on_release)
+
+    def _setup_alternative_drag_drop(self):
+        """代替ドラッグ&ドロップ設定"""
+        # クリックイベントでファイル選択ダイアログを開く
+        self.parent.bind('<Button-1>', self._on_click_fallback)
+        self.parent.bind('<Double-Button-1>', self._on_double_click_fallback)
+
+    def _on_drop(self, event):
+        """ファイルドロップイベント処理"""
+        try:
+            files = event.data.split()
+            valid_files = self._filter_valid_files(files)
+            
+            if valid_files:
+                self.callback(valid_files)
+            else:
+                self._show_invalid_files_message(files)
+                
+        except Exception as e:
+            print(f"ドロップ処理エラー: {e}")
+        finally:
+            self._reset_visual_state()
+
+    def _on_drag_enter(self, event):
+        """ドラッグエンター時の視覚効果"""
+        self.is_dragging_over = True
+        self._update_visual_state()
+
+    def _on_drag_leave(self, event):
+        """ドラッグリーブ時の視覚効果"""
+        self.is_dragging_over = False
+        self._reset_visual_state()
+
+    def _on_click(self, event):
+        """クリックイベント（Unix系）"""
+        pass
+
+    def _on_drag(self, event):
+        """ドラッグイベント（Unix系）"""
+        pass
+
+    def _on_release(self, event):
+        """リリースイベント（Unix系）"""
+        pass
+
+    def _on_click_fallback(self, event):
+        """代替クリックイベント"""
+        from tkinter import filedialog
+        
+        filetypes = [
+            ('対応ファイル', '*.pdf;*.csv'),
+            ('PDFファイル', '*.pdf'),
+            ('CSVファイル', '*.csv'),
+            ('すべてのファイル', '*.*')
+        ]
+        
+        files = filedialog.askopenfilenames(
+            title="処理するファイルを選択",
+            filetypes=filetypes
+        )
+        
+        if files:
+            valid_files = self._filter_valid_files(list(files))
+            if valid_files:
+                self.callback(valid_files)
+
+    def _on_double_click_fallback(self, event):
+        """代替ダブルクリックイベント（フォルダ選択）"""
+        from tkinter import filedialog
+        
+        folder = filedialog.askdirectory(title="フォルダを選択")
+        if folder:
+            files = self._get_files_from_folder(folder)
+            valid_files = self._filter_valid_files(files)
+            if valid_files:
+                self.callback(valid_files)
+
+    def _filter_valid_files(self, files: List[str]) -> List[str]:
+        """有効なファイルをフィルタリング"""
+        valid_files = []
+        
+        for file_path in files:
+            try:
+                # ファイルパスのクリーニング
+                cleaned_path = file_path.strip('{}').strip('"').strip("'")
+                
+                if os.path.isfile(cleaned_path):
+                    ext = os.path.splitext(cleaned_path)[1].lower()
+                    if ext in self.supported_extensions:
+                        valid_files.append(cleaned_path)
+                elif os.path.isdir(cleaned_path):
+                    # ディレクトリの場合、中のファイルを取得
+                    folder_files = self._get_files_from_folder(cleaned_path)
+                    valid_files.extend(self._filter_valid_files(folder_files))
+                    
+            except Exception as e:
+                print(f"ファイル処理エラー: {e}")
+                continue
+        
+        return valid_files
+
+    def _get_files_from_folder(self, folder_path: str) -> List[str]:
+        """フォルダ内の対応ファイルを取得"""
+        files = []
+        try:
+            for root, dirs, filenames in os.walk(folder_path):
+                for filename in filenames:
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext in self.supported_extensions:
+                        files.append(os.path.join(root, filename))
+        except Exception as e:
+            print(f"フォルダ読み取りエラー: {e}")
+        
+        return files
+
+    def _update_visual_state(self):
+        """ドラッグオーバー時の視覚状態更新"""
+        try:
+            if self.is_dragging_over:
+                if self.original_bg is None:
+                    self.original_bg = self.parent.cget('bg')
+                self.parent.config(bg='lightblue', relief='sunken')
+        except Exception:
+            pass
+
+    def _reset_visual_state(self):
+        """視覚状態をリセット"""
+        try:
+            if self.original_bg is not None:
+                self.parent.config(bg=self.original_bg, relief='flat')
+            self.is_dragging_over = False
+        except Exception:
+            pass
+
+    def _show_invalid_files_message(self, files: List[str]):
+        """無効ファイルのメッセージ表示"""
+        from tkinter import messagebox
+        
+        invalid_extensions = set()
+        for file_path in files:
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext not in self.supported_extensions:
+                invalid_extensions.add(ext if ext else '拡張子なし')
+        
+        if invalid_extensions:
+            ext_list = ', '.join(invalid_extensions)
+            messagebox.showwarning(
+                "対応していないファイル",
+                f"以下の拡張子には対応していません: {ext_list}\n\n"
+                f"対応ファイル: PDF, CSV"
+            )
+
+class DropZoneFrame(ttk.Frame):
+    """ドロップゾーン専用フレーム"""
+    
+    def __init__(self, parent, callback: Callable[[List[str]], None], **kwargs):
+        """初期化"""
+        super().__init__(parent, **kwargs)
+        
+        self.callback = callback
+        
+        # ドロップゾーンの外観設定
+        self.configure(relief='solid', borderwidth=2)
+        
+        # ラベル表示
+        self.label = ttk.Label(
+            self, 
+            text="📁 ファイルをここにドラッグ&ドロップ\n\n対応形式: PDF, CSV\n\nクリックでファイル選択",
+            font=('Arial', 12),
+            anchor='center',
+            justify='center'
+        )
+        self.label.pack(expand=True, fill='both', padx=20, pady=20)
+        
+        # ドラッグ&ドロップ機能を追加
+        self.drag_drop = DragDropWidget(self, self.callback)
+        
+        # ホバー効果
+        self.bind('<Enter>', self._on_enter)
+        self.bind('<Leave>', self._on_leave)
+        self.label.bind('<Enter>', self._on_enter)
+        self.label.bind('<Leave>', self._on_leave)
+
+    def _on_enter(self, event):
+        """マウスオーバー時の効果"""
+        self.configure(relief='solid', borderwidth=2)
+
+    def _on_leave(self, event):
+        """マウスアウト時の効果"""
+        self.configure(relief='solid', borderwidth=2)
+
+if __name__ == "__main__":
+    # テスト用
+    root = tk.Tk()
+    root.title("ドラッグ&ドロップテスト")
+    root.geometry("400x300")
+    
+    def test_callback(files):
+        print(f"ドロップされたファイル: {files}")
+    
+    drop_zone = DropZoneFrame(root, test_callback)
+    drop_zone.pack(fill='both', expand=True, padx=20, pady=20)
+    
+    print("ドラッグ&ドロップ機能 v4.0 テスト開始")
+    root.mainloop()
