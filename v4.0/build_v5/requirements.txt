@@ -1,0 +1,8 @@
+# v5.0システム 必要なライブラリ
+PyMuPDF>=1.21.0  # PDF処理
+tkinter  # GUI (通常はPythonに含まれる)
+pathlib  # パス処理 (通常はPythonに含まれる)
+logging  # ログ機能 (通常はPythonに含まれる)
+datetime  # 日時処理 (通常はPythonに含まれる)
+json  # JSON処理 (通常はPythonに含まれる)
+re  # 正規表現 (通常はPythonに含まれる)

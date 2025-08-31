@@ -1,0 +1,9 @@
+このファイルはプレースホルダーです。
+
+実際のeng.traineddataファイルを以下から取得して配置してください：
+https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+
+ファイル名: eng.traineddata
+配置場所: このディレクトリ
+
+注意: このプレースホルダーファイルは削除してください。
