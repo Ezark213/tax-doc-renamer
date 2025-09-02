@@ -11,10 +11,10 @@ from pathlib import Path
 
 # ビルド設定
 BUILD_CONFIG = {
-    "app_name": "TaxDocumentRenamer_v5_Fixed",
-    "main_script": "main_v5_fixed.py",
-    "version": "5.0.1",
-    "description": "税務書類リネームシステム v5.0 修正版"
+    "app_name": "TaxDocumentRenamer_v5_1_7_Kessansho_Fixed",
+    "main_script": "main.py",
+    "version": "5.1.7",
+    "description": "税務書類リネームシステム v5.1.7 決算書判定修正版"
 }
 
 def check_pyinstaller():
@@ -132,7 +132,7 @@ def run_build():
 
 def main():
     """メイン処理"""
-    print("税務書類リネームシステム v5.0 修正版ビルド開始")
+    print("税務書類リネームシステム v5.1.7 決算書判定修正版ビルド開始")
     print("=" * 50)
     
     # PyInstaller確認
@@ -169,4 +169,4 @@ if __name__ == "__main__":
     else:
         print("\nビルドに失敗しました。")
     
-    input("\nEnterキーを押して終了...")
+    # input("\nEnterキーを押して終了...")

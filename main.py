@@ -622,20 +622,29 @@ class TaxDocumentRenamerV5:
             text = ""
         
         # v5.0 書類分類（AND条件対応 + セット連番適用）
-        # 注意: classification_v5_fixed.py内で自治体セット検出・連番適用が完全実装されているため、
-        # 旧来のMunicipalityMatcherは使用せず、修正版エンジンに一元化
-        classification_result = self.classifier_v5.classify_document_v5(text, filename)
+        # 修正: 自治体情報を考慮した分類を使用して、実際の自治体名をファイル名に反映
+        classification_result = self.classifier_v5.classify_with_municipality_info_v5(text, filename)
         document_type = classification_result.document_type if classification_result else "9999_未分類"
         alerts = []  # v5.1では単純化
         
         # classification_resultは既に取得済み
         
-        # 分類詳細ログを出力（v5.1版）
+        # 分類詳細ログを出力（v5.1版）- デバッグ情報強化
         if classification_result:
             self._log(f"v5.1分類結果:")
             self._log(f"  - 書類種別: {classification_result.document_type}")
             self._log(f"  - 信頼度: {classification_result.confidence:.2f}")
             self._log(f"  - 判定方法: {classification_result.classification_method}")
+            
+            # 判定キーワードの詳細表示
+            if classification_result.matched_keywords:
+                keywords_str = ", ".join(classification_result.matched_keywords)
+                self._log(f"  - 判定キーワード: [{keywords_str}]")
+            
+            # 処理ログからデバッグ情報を抽出して表示
+            for log_entry in classification_result.processing_log:
+                if any(keyword in log_entry for keyword in ["判定", "条件", "マッチ", "強制"]):
+                    self._log(f"  🔍 {log_entry}")
         else:
             self._log("分類に失敗しました")
         
@@ -652,9 +661,16 @@ class TaxDocumentRenamerV5:
         
         self._log(f"v5.0完了: {filename} -> {new_filename}")
         
-        # 結果追加（判定方法と信頼度を含む）
+        # 結果追加（判定方法と信頼度を含む）- デバッグ情報追加
         method_display = self._get_method_display(classification_result.classification_method)
         confidence_display = f"{classification_result.confidence:.2f}"
+        
+        # 判定キーワードも表示に含める
+        if classification_result.matched_keywords:
+            keywords_summary = ", ".join(classification_result.matched_keywords[:3])  # 最初の3個まで
+            if len(classification_result.matched_keywords) > 3:
+                keywords_summary += "..."
+            method_display += f" | キーワード: [{keywords_summary}]"
         
         self.root.after(0, lambda: self._add_result_success(
             file_path, new_filename, classification_result.document_type, 
