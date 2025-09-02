@@ -11,10 +11,10 @@ from pathlib import Path
 
 # ビルド設定
 BUILD_CONFIG = {
-    "app_name": "TaxDocumentRenamer_v5_1_7_Kessansho_Fixed",
+    "app_name": "TaxDocumentRenamer_v5_2_0_Bundle_PDF_Auto_Split",
     "main_script": "main.py",
-    "version": "5.1.7",
-    "description": "税務書類リネームシステム v5.1.7 決算書判定修正版"
+    "version": "5.2.0",
+    "description": "税務書類リネームシステム v5.2.0 Bundle PDF Auto-Split対応版"
 }
 
 def check_pyinstaller():
@@ -132,7 +132,7 @@ def run_build():
 
 def main():
     """メイン処理"""
-    print("税務書類リネームシステム v5.1.7 決算書判定修正版ビルド開始")
+    print("税務書類リネームシステム v5.2.0 Bundle PDF Auto-Split対応版ビルド開始")
     print("=" * 50)
     
     # PyInstaller確認
