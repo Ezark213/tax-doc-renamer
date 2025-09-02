@@ -21,7 +21,7 @@ from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
 from core.csv_processor import CSVProcessor
 from core.classification_v5 import DocumentClassifierV5  # v5.1バグ修正版エンジンを使用
 from core.runtime_paths import get_tesseract_executable_path, get_tessdata_dir_path, validate_tesseract_resources
-from ui.drag_drop import DropZoneFrame
+from ui.drag_drop import DropZoneFrame, AutoSplitControlFrame
 
 
 def _init_tesseract():
@@ -95,11 +95,15 @@ class TaxDocumentRenamerV5:
     def __init__(self):
         """初期化"""
         self.root = tk.Tk()
-        self.root.title("税務書類リネームシステム v5.1 (バグ修正版)")
-        self.root.geometry("1000x700")
+        self.root.title("税務書類リネームシステム v5.2 (Bundle PDF Auto-Split)")
+        self.root.geometry("1200x800")
         
-        # v5.0 コアエンジンの初期化
-        self.pdf_processor = PDFProcessor()
+        # v5.2 コアエンジンの初期化（ロガー付き）
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger(__name__)
+        
+        self.pdf_processor = PDFProcessor(logger=self.logger)
         self.ocr_engine = OCREngine()
         self.csv_processor = CSVProcessor()
         self.classifier_v5 = DocumentClassifierV5(debug_mode=True)
@@ -108,7 +112,11 @@ class TaxDocumentRenamerV5:
         self.files_list = []
         self.split_processing = False
         self.rename_processing = False
-        self.municipality_sets = []
+        self.auto_split_processing = False  # v5.2 new
+        self.municipality_sets = {}
+        
+        # v5.2 Auto-Split settings
+        self.auto_split_settings = {'auto_split_bundles': True, 'debug_mode': False}
         
         # UI構築
         self._create_ui()
@@ -125,15 +133,15 @@ class TaxDocumentRenamerV5:
         # タイトル
         title_label = ttk.Label(
             main_frame, 
-            text="税務書類リネームシステム v5.1 (バグ修正版)", 
+            text="税務書類リネームシステム v5.2", 
             font=('Arial', 16, 'bold')
         )
-        title_label.pack(pady=(0, 10))
+        title_label.pack(pady=(0, 5))
         
-        # v5.0 新機能の説明
+        # v5.2 新機能の説明
         info_label = ttk.Label(
             main_frame,
-            text="✨ v5.1バグ修正: 地方税受信通知連番・添付資料分類・市民税識別強化",
+            text="🆕 v5.2 New: Bundle PDF Auto-Split | ✨ v5.1バグ修正完了版",
             font=('Arial', 10),
             foreground='blue'
         )
@@ -195,11 +203,22 @@ class TaxDocumentRenamerV5:
         self.files_listbox.pack(side='left', fill='both', expand=True)
         scrollbar.pack(side='right', fill='y')
         
-        # 右側: 設定
+        # 右側: 設定 + Auto-Split控制
         right_frame = ttk.Frame(paned)
         paned.add(right_frame, weight=1)
         
-        ttk.Label(right_frame, text="設定", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
+        ttk.Label(right_frame, text="設定・Auto-Split", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
+        
+        # v5.2 Auto-Split控制フレーム
+        self.auto_split_control = AutoSplitControlFrame(right_frame)
+        self.auto_split_control.pack(fill='x', pady=(0, 10))
+        
+        # コールバック設定
+        self.auto_split_control.set_callbacks(
+            batch_callback=self._start_batch_processing,
+            split_callback=self._start_split_only_processing,
+            force_callback=self._start_force_split_processing
+        )
         
         # 年月設定
         year_month_frame = ttk.LabelFrame(right_frame, text="年月設定")
@@ -242,6 +261,25 @@ class TaxDocumentRenamerV5:
             foreground='gray'
         )
         v5_info.pack(anchor='w', padx=20)
+        
+        # エクスポート設定
+        export_frame = ttk.LabelFrame(right_frame, text="エクスポート設定")
+        export_frame.pack(fill='x', pady=(0, 10))
+        
+        # キーワード辞書エクスポートボタン
+        ttk.Button(
+            export_frame,
+            text="📤 キーワード辞書をエクスポート",
+            command=self._export_keyword_dictionary
+        ).pack(anchor='w', pady=5)
+        
+        export_info = ttk.Label(
+            export_frame,
+            text="※分類ルール辞書をJSONファイルでデスクトップに保存",
+            font=('Arial', 8),
+            foreground='gray'
+        )
+        export_info.pack(anchor='w', padx=20)
         
         # 処理ボタン（分割・リネーム独立化）
         process_frame = ttk.Frame(right_frame)
@@ -305,17 +343,19 @@ class TaxDocumentRenamerV5:
         tree_frame = ttk.Frame(self.result_frame)
         tree_frame.pack(fill='both', expand=True)
         
-        columns = ('元ファイル名', '新ファイル名', '分類', '判定方法', '信頼度', '状態')
+        columns = ('元ファイル名', '新ファイル名', '分類', '判定方法', '信頼度', 'マッチしたキーワード', '状態')
         self.result_tree = ttk.Treeview(tree_frame, columns=columns, show='headings')
         
         for col in columns:
             self.result_tree.heading(col, text=col)
             if col == '判定方法':
-                self.result_tree.column(col, width=200)
+                self.result_tree.column(col, width=150)
             elif col == '信頼度':
                 self.result_tree.column(col, width=80)
+            elif col == 'マッチしたキーワード':
+                self.result_tree.column(col, width=200)
             else:
-                self.result_tree.column(col, width=150)
+                self.result_tree.column(col, width=130)
         
         tree_scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=self.result_tree.yview)
         self.result_tree.configure(yscrollcommand=tree_scrollbar.set)
@@ -353,6 +393,26 @@ class TaxDocumentRenamerV5:
         ttk.Button(log_button_frame, text="🗑️ ログクリア", command=self._clear_log).pack(side='left', padx=(0, 5))
         ttk.Button(log_button_frame, text="💾 ログ保存", command=self._save_log).pack(side='left', padx=5)
 
+    def _create_municipality_settings(self, parent_frame):
+        """自治体設定UIの作成"""
+        # セット1-5のStringVar変数を初期化
+        for i in range(1, 6):
+            setattr(self, f'prefecture_var_{i}', tk.StringVar())
+            setattr(self, f'city_var_{i}', tk.StringVar())
+        
+        # UI作成
+        for i in range(1, 6):
+            set_frame = ttk.Frame(parent_frame)
+            set_frame.pack(fill='x', pady=2)
+            
+            ttk.Label(set_frame, text=f"セット{i}:", width=8).pack(side='left')
+            
+            prefecture_var = getattr(self, f'prefecture_var_{i}')
+            city_var = getattr(self, f'city_var_{i}')
+            
+            ttk.Entry(set_frame, textvariable=prefecture_var, width=12).pack(side='left', padx=2)
+            ttk.Entry(set_frame, textvariable=city_var, width=12).pack(side='left', padx=2)
+
     def _setup_default_municipalities(self):
         """デフォルト自治体設定"""
         defaults = [
@@ -363,19 +423,16 @@ class TaxDocumentRenamerV5:
             ("", "")
         ]
         
-        for i, (prefecture, municipality) in enumerate(defaults):
-            if i < len(self.municipality_vars):
-                self.municipality_vars[i][0].set(prefecture)
-                self.municipality_vars[i][1].set(municipality)
+        for i, (prefecture, city) in enumerate(defaults, 1):
+            if i <= 5:
+                prefecture_var = getattr(self, f'prefecture_var_{i}', None)
+                city_var = getattr(self, f'city_var_{i}', None)
+                if prefecture_var and city_var:
+                    prefecture_var.set(prefecture)
+                    city_var.set(city)
 
-    def _on_files_dropped(self, files: List[str]):
-        """ファイルドロップ時の処理"""
-        for file_path in files:
-            if file_path not in self.files_list:
-                self.files_list.append(file_path)
-                self.files_listbox.insert(tk.END, os.path.basename(file_path))
-        
-        self._log(f"ファイル追加: {len(files)}件")
+    # Commented out old method since we have the new v5.2 version above
+    # def _on_files_dropped(self, files: List[str]):
 
     def _select_files(self):
         """ファイル選択ダイアログ"""
@@ -472,17 +529,328 @@ class TaxDocumentRenamerV5:
         )
         thread.start()
 
-    def _get_municipality_sets(self) -> List[MunicipalitySet]:
-        """自治体設定を取得"""
-        sets = []
-        for i, (pref_var, muni_var) in enumerate(self.municipality_vars):
-            pref = pref_var.get().strip()
-            muni = muni_var.get().strip()
-            
-            if pref:  # 都道府県が入力されている場合のみ
-                sets.append(MunicipalitySet(i + 1, pref, muni))
+    # ===== v5.2 Auto-Split Processing Methods =====
+    
+    def _start_batch_processing(self):
+        """v5.2 一括処理（分割&出力）処理開始"""
+        if not self.files_list:
+            messagebox.showwarning("警告", "処理するファイルを選択してください")
+            return
         
-        return sets
+        if self.auto_split_processing or self.rename_processing or self.split_processing:
+            messagebox.showwarning("警告", "処理中です")
+            return
+        
+        # 出力フォルダ選択
+        output_folder = filedialog.askdirectory(title="処理済みファイルの出力フォルダを選択")
+        if not output_folder:
+            return
+        
+        # 設定取得
+        self.auto_split_settings = self.auto_split_control.get_settings()
+        
+        # バックグラウンド処理開始
+        self.auto_split_processing = True
+        self._update_auto_split_button_states()
+        
+        thread = threading.Thread(
+            target=self._batch_processing_background,
+            args=(output_folder,),
+            daemon=True
+        )
+        thread.start()
+    
+    def _start_split_only_processing(self):
+        """v5.2 分割のみ（検証）処理開始"""
+        if not self.files_list:
+            messagebox.showwarning("警告", "処理するファイルを選択してください")
+            return
+        
+        if self.auto_split_processing or self.rename_processing or self.split_processing:
+            messagebox.showwarning("警告", "処理中です")
+            return
+        
+        # 出力フォルダ選択
+        output_folder = filedialog.askdirectory(title="分割ファイルの出力フォルダを選択")
+        if not output_folder:
+            return
+        
+        # 設定取得
+        self.auto_split_settings = self.auto_split_control.get_settings()
+        
+        # バックグラウンド処理開始
+        self.auto_split_processing = True
+        self._update_auto_split_button_states()
+        
+        thread = threading.Thread(
+            target=self._split_only_processing_background,
+            args=(output_folder,),
+            daemon=True
+        )
+        thread.start()
+    
+    def _start_force_split_processing(self):
+        """v5.2 強制分割処理開始"""
+        if not self.files_list:
+            messagebox.showwarning("警告", "処理するファイルを選択してください")
+            return
+        
+        if self.auto_split_processing or self.rename_processing or self.split_processing:
+            messagebox.showwarning("警告", "処理中です")
+            return
+        
+        # 確認ダイアログ
+        result = messagebox.askyesno(
+            "強制分割の確認",
+            "選択したすべてのPDFファイルを強制的に1ページごとに分割しますか？\n\n"
+            "※ 束ね判定に関係なく分割されます。"
+        )
+        if not result:
+            return
+        
+        # 出力フォルダ選択
+        output_folder = filedialog.askdirectory(title="強制分割ファイルの出力フォルダを選択")
+        if not output_folder:
+            return
+        
+        # 設定取得
+        self.auto_split_settings = self.auto_split_control.get_settings()
+        
+        # バックグラウンド処理開始
+        self.auto_split_processing = True
+        self._update_auto_split_button_states()
+        
+        thread = threading.Thread(
+            target=self._force_split_processing_background,
+            args=(output_folder,),
+            daemon=True
+        )
+        thread.start()
+    
+    def _batch_processing_background(self, output_folder: str):
+        """v5.2 一括処理のバックグラウンド処理"""
+        try:
+            total_files = len(self.files_list)
+            processed_count = 0
+            split_count = 0
+            
+            self.root.after(0, lambda: self.auto_split_control.update_progress("一括処理開始...", "blue"))
+            
+            for i, file_path in enumerate(self.files_list):
+                progress = (i / total_files) * 100
+                filename = os.path.basename(file_path)
+                
+                self.root.after(0, lambda f=filename: self.auto_split_control.update_progress(
+                    f"処理中: {f} ({i+1}/{total_files})", "blue"
+                ))
+                
+                try:
+                    if file_path.lower().endswith('.pdf'):
+                        # Bundle detection and split
+                        def processing_callback(temp_path, page_num, bundle_type):
+                            # Process each split page through existing pipeline
+                            self._process_single_file_v5(temp_path, output_folder)
+                        
+                        was_split = self.pdf_processor.maybe_split_pdf(
+                            file_path, output_folder, force=False, processing_callback=processing_callback
+                        )
+                        
+                        if was_split:
+                            split_count += 1
+                            self._log(f"Bundle split completed: {filename}")
+                        else:
+                            # Process as normal file
+                            self._process_single_file_v5(file_path, output_folder)
+                            self._log(f"Normal processing completed: {filename}")
+                    
+                    else:
+                        # Process non-PDF files normally
+                        self._process_single_file_v5(file_path, output_folder)
+                    
+                    processed_count += 1
+                    
+                except Exception as e:
+                    self._log(f"Processing error: {filename} - {str(e)}")
+                    self.root.after(0, lambda f=filename, e=str(e): self._add_result_error(
+                        f, f"処理エラー: {e}"
+                    ))
+            
+            # 処理完了
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"一括処理完了: {processed_count}件処理 (分割: {split_count}件)", "green"
+            ))
+            
+        except Exception as e:
+            self._log(f"Batch processing error: {str(e)}")
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"処理エラー: {str(e)}", "red"
+            ))
+        finally:
+            self.root.after(0, self._auto_split_processing_finished)
+    
+    def _split_only_processing_background(self, output_folder: str):
+        """v5.2 分割のみ処理のバックグラウンド処理"""
+        try:
+            total_files = len(self.files_list)
+            split_count = 0
+            
+            self.root.after(0, lambda: self.auto_split_control.update_progress("分割のみ処理開始...", "blue"))
+            
+            for i, file_path in enumerate(self.files_list):
+                progress = (i / total_files) * 100
+                filename = os.path.basename(file_path)
+                
+                self.root.after(0, lambda f=filename: self.auto_split_control.update_progress(
+                    f"分割判定中: {f} ({i+1}/{total_files})", "blue"
+                ))
+                
+                try:
+                    if file_path.lower().endswith('.pdf'):
+                        was_split = self.pdf_processor.maybe_split_pdf(
+                            file_path, output_folder, force=False, processing_callback=None
+                        )
+                        
+                        if was_split:
+                            split_count += 1
+                            self._log(f"Bundle split completed (split-only): {filename}")
+                            self.root.after(0, lambda f=file_path: self._add_result_success(
+                                f, "分割済み", "Bundle分割", "Auto-Split", "1.00", ["Bundle自動検出"]
+                            ))
+                        else:
+                            self._log(f"Not a bundle, skipped: {filename}")
+                            self.root.after(0, lambda f=file_path: self._add_result_success(
+                                f, "対象外", "通常PDF", "Bundle判定", "0.00", ["Bundle対象外"]
+                            ))
+                    else:
+                        self._log(f"Non-PDF file, skipped: {filename}")
+                        
+                except Exception as e:
+                    self._log(f"Split-only error: {filename} - {str(e)}")
+                    self.root.after(0, lambda f=filename, e=str(e): self._add_result_error(
+                        f, f"分割エラー: {e}"
+                    ))
+            
+            # 処理完了
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"分割のみ処理完了: {split_count}件分割", "green"
+            ))
+            
+        except Exception as e:
+            self._log(f"Split-only processing error: {str(e)}")
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"分割エラー: {str(e)}", "red"
+            ))
+        finally:
+            self.root.after(0, self._auto_split_processing_finished)
+    
+    def _force_split_processing_background(self, output_folder: str):
+        """v5.2 強制分割処理のバックグラウンド処理"""
+        try:
+            total_files = len(self.files_list)
+            force_split_count = 0
+            
+            self.root.after(0, lambda: self.auto_split_control.update_progress("強制分割処理開始...", "orange"))
+            
+            for i, file_path in enumerate(self.files_list):
+                filename = os.path.basename(file_path)
+                
+                self.root.after(0, lambda f=filename: self.auto_split_control.update_progress(
+                    f"強制分割中: {f} ({i+1}/{total_files})", "orange"
+                ))
+                
+                try:
+                    if file_path.lower().endswith('.pdf'):
+                        was_split = self.pdf_processor.maybe_split_pdf(
+                            file_path, output_folder, force=True, processing_callback=None
+                        )
+                        
+                        if was_split:
+                            force_split_count += 1
+                            self._log(f"Force split completed: {filename}")
+                            self.root.after(0, lambda f=file_path: self._add_result_success(
+                                f, "強制分割済み", "PDF分割", "Force Split", "1.00", ["強制分割実行"]
+                            ))
+                        else:
+                            self._log(f"Force split failed: {filename}")
+                            self.root.after(0, lambda f=file_path: self._add_result_error(
+                                f, "強制分割失敗"
+                            ))
+                    else:
+                        self._log(f"Non-PDF file for force split: {filename}")
+                        
+                except Exception as e:
+                    self._log(f"Force split error: {filename} - {str(e)}")
+                    self.root.after(0, lambda f=filename, e=str(e): self._add_result_error(
+                        f, f"強制分割エラー: {e}"
+                    ))
+            
+            # 処理完了
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"強制分割処理完了: {force_split_count}件分割", "green"
+            ))
+            
+        except Exception as e:
+            self._log(f"Force split processing error: {str(e)}")
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"強制分割エラー: {str(e)}", "red"
+            ))
+        finally:
+            self.root.after(0, self._auto_split_processing_finished)
+    
+    def _auto_split_processing_finished(self):
+        """v5.2 Auto-Split処理完了時の処理"""
+        self.auto_split_processing = False
+        self._update_auto_split_button_states()
+        self.notebook.select(1)  # 結果タブに切り替え
+        messagebox.showinfo("完了", "Auto-Split処理が完了しました")
+    
+    def _update_auto_split_button_states(self):
+        """v5.2 Auto-Splitボタンの状態を更新"""
+        if self.auto_split_processing:
+            self.auto_split_control.set_button_states(False)
+        else:
+            self.auto_split_control.set_button_states(True)
+    
+    def _on_files_dropped(self, files: List[str]):
+        """ファイルドロップ時の処理 (v5.2 auto-split support)"""
+        for file_path in files:
+            if file_path not in self.files_list:
+                self.files_list.append(file_path)
+                self.files_listbox.insert(tk.END, os.path.basename(file_path))
+        
+        self._log(f"ファイル追加: {len(files)}件")
+        
+        # v5.2 Auto-split on upload (if enabled)
+        if self.auto_split_settings.get('auto_split_bundles', True):
+            self._auto_split_on_upload(files)
+    
+    def _auto_split_on_upload(self, files: List[str]):
+        """v5.2 アップロード時の自動分割判定"""
+        bundle_candidates = []
+        
+        for file_path in files:
+            if file_path.lower().endswith('.pdf'):
+                # Quick bundle detection
+                detection_result = self.pdf_processor._detect_bundle_type(file_path)
+                if detection_result.is_bundle:
+                    bundle_candidates.append((file_path, detection_result))
+        
+        if bundle_candidates:
+            # Show notification for detected bundles
+            bundle_names = [os.path.basename(path) for path, _ in bundle_candidates]
+            message = f"束ねPDF検出: {len(bundle_candidates)}件\n\n{', '.join(bundle_names[:3])}"
+            if len(bundle_names) > 3:
+                message += f"\n...他{len(bundle_names)-3}件"
+            
+            message += "\n\n「一括処理」で自動分割・出力できます。"
+            
+            self.auto_split_control.update_progress(
+                f"束ねPDF検出: {len(bundle_candidates)}件", "orange"
+            )
+            
+            # Optional: Show info dialog
+            messagebox.showinfo("Bundle PDF検出", message)
+
 
     def _split_files_background(self, output_folder: str):
         """分割処理のバックグラウンド処理"""
@@ -502,7 +870,7 @@ class TaxDocumentRenamerV5:
                         
                         for result in split_results:
                             self.root.after(0, lambda r=result: self._add_result_success(
-                                file_path, os.path.basename(r), "分割完了", "ページ分割", "1.00"
+                                file_path, os.path.basename(r), "分割完了", "ページ分割", "1.00", ["分割対象検出"]
                             ))
                     else:
                         self._log(f"分割対象外: {os.path.basename(file_path)}")
@@ -563,50 +931,35 @@ class TaxDocumentRenamerV5:
             raise ValueError(f"未対応ファイル形式: {ext}")
 
     def _process_pdf_file_v5(self, file_path: str, output_folder: str):
-        """v5.0 PDFファイルの処理"""
+        """v5.2 PDFファイルの処理 (Bundle PDF Auto-Split対応)"""
         filename = os.path.basename(file_path)
         
-        # PDF自動分割チェック（従来と同じ）
+        # v5.2 Bundle PDF Auto-Split チェック（新統合版）
         if self.auto_split_var.get():
-            # 国税受信通知チェック
-            if self.pdf_processor.is_national_tax_notification_bundle(file_path):
-                self._log(f"国税受信通知一式として分割: {filename}")
-                year_month = self.year_month_var.get() or "YYMM"
-                split_results = self.pdf_processor.split_national_tax_notifications(
-                    file_path, output_folder, year_month
+            try:
+                # v5.2 Bundle PDF Auto-Split を使用
+                def processing_callback(temp_path, page_num, bundle_type):
+                    # 分割されたページを v5.2 分類エンジンで処理
+                    self._process_regular_pdf_v5(temp_path, output_folder)
+                    self._log(f"Bundle split page processed: {os.path.basename(temp_path)} (page {page_num}, type: {bundle_type})")
+                
+                was_split = self.pdf_processor.maybe_split_pdf(
+                    file_path, output_folder, force=False, processing_callback=processing_callback
                 )
                 
-                for result in split_results:
-                    if result.success:
-                        self.root.after(0, lambda r=result: self._add_result_success(
-                            file_path, r.filename, "国税分割", "自動分割", "1.00"
-                        ))
-                    else:
-                        self.root.after(0, lambda r=result: self._add_result_error(file_path, r.error_message))
-                return
-            
-            # 地方税受信通知チェック
-            if self.pdf_processor.is_local_tax_notification_bundle(file_path):
-                self._log(f"地方税受信通知一式として分割: {filename}")
-                year_month = self.year_month_var.get() or "YYMM"
-                split_results = self.pdf_processor.split_local_tax_notifications(
-                    file_path, output_folder, year_month
-                )
-                
-                for result in split_results:
-                    if result.success:
-                        self.root.after(0, lambda r=result: self._add_result_success(
-                            file_path, r.filename, "地方税分割", "自動分割", "1.00"
-                        ))
-                    else:
-                        self.root.after(0, lambda r=result: self._add_result_error(file_path, r.error_message))
-                return
+                if was_split:
+                    self._log(f"v5.2 Bundle PDF Auto-Split completed: {filename}")
+                    return
+                else:
+                    self._log(f"Not a bundle PDF, processing normally: {filename}")
+            except Exception as e:
+                self._log(f"Bundle split error, falling back to normal processing: {e}")
         
-        # v5.0 通常PDF処理
+        # v5.2 通常PDF処理（Bundle PDF ではない場合、または auto_split が無効な場合）
         self._process_regular_pdf_v5(file_path, output_folder)
 
     def _process_regular_pdf_v5(self, file_path: str, output_folder: str):
-        """v5.0 通常PDFの処理"""
+        """v5.2 通常PDFの処理 (高精度分類エンジン)"""
         filename = os.path.basename(file_path)
         
         # OCR・テキスト抽出
@@ -621,12 +974,22 @@ class TaxDocumentRenamerV5:
             self._log(f"PDF読み取りエラー: {e}")
             text = ""
         
-        # v5.0 書類分類（AND条件対応 + セット連番適用）
-        # 注意: classification_v5_fixed.py内で自治体セット検出・連番適用が完全実装されているため、
-        # 旧来のMunicipalityMatcherは使用せず、修正版エンジンに一元化
-        classification_result = self.classifier_v5.classify_document_v5(text, filename)
+        # v5.2 書類分類（セット連番対応 + 詳細ログ）
+        # セット設定情報を取得
+        municipality_sets = self._get_municipality_sets()
+        
+        # 自治体情報を考慮した分類を実行
+        classification_result = self.classifier_v5.classify_with_municipality_info_v5(
+            text, filename, 
+            prefecture_code=None, municipality_code=None,  # テキストから自動推定
+            municipality_sets=municipality_sets
+        )
+        
         document_type = classification_result.document_type if classification_result else "9999_未分類"
-        alerts = []  # v5.1では単純化
+        alerts = []  # v5.2では単純化
+        
+        # 詳細分類ログを出力
+        self._log_detailed_classification_info(classification_result, text, filename)
         
         # classification_resultは既に取得済み
         
@@ -655,11 +1018,71 @@ class TaxDocumentRenamerV5:
         # 結果追加（判定方法と信頼度を含む）
         method_display = self._get_method_display(classification_result.classification_method)
         confidence_display = f"{classification_result.confidence:.2f}"
+        matched_keywords = classification_result.matched_keywords if classification_result.matched_keywords else []
         
         self.root.after(0, lambda: self._add_result_success(
             file_path, new_filename, classification_result.document_type, 
-            method_display, confidence_display
+            method_display, confidence_display, matched_keywords
         ))
+
+    def _get_municipality_sets(self) -> Dict[int, Dict[str, str]]:
+        """UI設定からセット情報を取得"""
+        municipality_sets = {}
+        
+        # セット1-5の設定を取得
+        for i in range(1, 6):
+            prefecture_var = getattr(self, f'prefecture_var_{i}', None)
+            city_var = getattr(self, f'city_var_{i}', None)
+            
+            if prefecture_var and prefecture_var.get().strip():
+                municipality_sets[i] = {
+                    "prefecture": prefecture_var.get().strip(),
+                    "city": city_var.get().strip() if city_var else ""
+                }
+                
+        self._log(f"セット設定情報: {municipality_sets}")
+        return municipality_sets
+    
+    def _log_detailed_classification_info(self, classification_result, text: str, filename: str):
+        """詳細な分類情報をログ出力"""
+        if not classification_result:
+            self._log("❌ 分類に失敗しました")
+            return
+            
+        self._log("=" * 60)
+        self._log("🔍 **詳細分類結果**")
+        self._log(f"📄 ファイル名: {filename}")
+        self._log(f"📋 分類結果: {classification_result.document_type}")
+        self._log(f"🎯 信頼度: {classification_result.confidence:.2f}")
+        self._log(f"⚙️ 判定方法: {classification_result.classification_method}")
+        
+        # マッチしたキーワードの詳細
+        if classification_result.matched_keywords:
+            self._log(f"🔑 マッチしたキーワード: {classification_result.matched_keywords}")
+        
+        # デバッグステップの詳細（利用可能な場合）
+        if hasattr(classification_result, 'debug_steps') and classification_result.debug_steps:
+            self._log("📊 分類ステップ詳細:")
+            for i, step in enumerate(classification_result.debug_steps[:3], 1):  # 上位3件のみ表示
+                self._log(f"  {i}. {step.document_type}: スコア {step.score:.1f}, キーワード {step.matched_keywords}")
+                if step.excluded:
+                    self._log(f"     ❌ 除外理由: {step.exclude_reason}")
+        
+        # テキスト内容の一部を表示（デバッグ用）
+        if text:
+            preview = text[:200] + "..." if len(text) > 200 else text
+            self._log(f"📝 抽出テキスト（先頭200字）: {preview}")
+        
+        # 処理ログがある場合は重要な部分のみ表示
+        if hasattr(classification_result, 'processing_log') and classification_result.processing_log:
+            important_logs = [log for log in classification_result.processing_log if 
+                            "最優先AND条件一致" in log or "自治体連番適用" in log or "強制判定" in log]
+            if important_logs:
+                self._log("🔧 重要な処理ログ:")
+                for log in important_logs[-3:]:  # 最新の3件のみ
+                    self._log(f"  {log}")
+                    
+        self._log("=" * 60)
 
     def _process_single_file_legacy(self, file_path: str, output_folder: str):
         """従来版 単一ファイルの処理（互換性のため）"""
@@ -699,7 +1122,7 @@ class TaxDocumentRenamerV5:
         
         self._log(f"CSV完了: {filename} -> {new_filename}")
         self.root.after(0, lambda: self._add_result_success(
-            file_path, new_filename, result.document_type, "CSV判定", "1.00"
+            file_path, new_filename, result.document_type, "CSV判定", "1.00", ["CSV自動判定"]
         ))
 
     def _extract_year_month_from_pdf(self, text: str, filename: str) -> str:
@@ -856,14 +1279,26 @@ class TaxDocumentRenamerV5:
             self.split_button.config(state='normal', text="📄 分割実行")
             self.rename_button.config(state='normal', text="✏️ リネーム実行 (v5.0)")
 
-    def _add_result_success(self, original_file: str, new_filename: str, doc_type: str, method: str, confidence: str):
-        """成功結果を追加（v5.0拡張版）"""
+    def _add_result_success(self, original_file: str, new_filename: str, doc_type: str, method: str, confidence: str, matched_keywords: List[str] = None):
+        """成功結果を追加（v5.0拡張版・マッチキーワード対応）"""
+        # マッチしたキーワードの表示文字列を生成
+        keywords_display = ""
+        if matched_keywords:
+            # キーワードリストを文字列に変換（最大3個まで表示）
+            display_keywords = matched_keywords[:3]
+            keywords_display = ", ".join(display_keywords)
+            if len(matched_keywords) > 3:
+                keywords_display += f" (+{len(matched_keywords)-3}件)"
+        else:
+            keywords_display = "なし"
+        
         self.result_tree.insert('', 'end', values=(
             os.path.basename(original_file),
             new_filename,
             doc_type,
             method,
             confidence,
+            keywords_display,
             "✅ 成功"
         ))
 
@@ -875,6 +1310,7 @@ class TaxDocumentRenamerV5:
             "-",
             "-",
             "0.00",
+            "-",
             f"❌ エラー: {error}"
         ))
 
@@ -911,9 +1347,34 @@ class TaxDocumentRenamerV5:
         # 実装省略
         pass
 
+    def _export_keyword_dictionary(self):
+        """キーワード辞書をエクスポート"""
+        try:
+            # 分類器のエクスポート機能を呼び出し
+            export_path = self.classifier_v5.export_keyword_dictionary()
+            
+            # 成功メッセージ
+            messagebox.showinfo(
+                "エクスポート完了",
+                f"キーワード辞書をエクスポートしました：\n{export_path}"
+            )
+            
+            # ログに記録
+            self._log(f"キーワード辞書エクスポート完了: {export_path}")
+            
+        except Exception as e:
+            # エラーメッセージ
+            messagebox.showerror(
+                "エクスポートエラー",
+                f"キーワード辞書のエクスポートに失敗しました：\n{str(e)}"
+            )
+            
+            # ログに記録
+            self._log(f"キーワード辞書エクスポートエラー: {str(e)}")
+
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v5.0 起動 (AND条件対応版)")
+        self._log("税務書類リネームシステム v5.2 起動 (Bundle PDF Auto-Split対応版)")
         self.root.mainloop()
 
 if __name__ == "__main__":

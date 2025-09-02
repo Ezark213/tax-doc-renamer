@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-ドラッグ&ドロップ機能 v4.0
-直感的ファイル選択インターフェース
+ドラッグ&ドロップ機能 v5.2
+直感的ファイル選択インターフェース + 束ねPDF限定オート分割対応
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import os
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Dict, Any
 from pathlib import Path
 
 class DragDropWidget:
@@ -270,17 +270,135 @@ class DropZoneFrame(ttk.Frame):
         """マウスアウト時の効果"""
         self.configure(relief='solid', borderwidth=2)
 
-if __name__ == "__main__":
-    # テスト用
-    root = tk.Tk()
-    root.title("ドラッグ&ドロップテスト")
-    root.geometry("400x300")
+class AutoSplitControlFrame(ttk.Frame):
+    """Auto-Split制御フレーム v5.2"""
     
-    def test_callback(files):
-        print(f"ドロップされたファイル: {files}")
+    def __init__(self, parent, **kwargs):
+        """初期化"""
+        super().__init__(parent, **kwargs)
+        
+        # 設定変数
+        self.auto_split_bundles = tk.BooleanVar(value=True)  # デフォルトON
+        self.debug_mode = tk.BooleanVar(value=False)
+        
+        # コールバック関数
+        self.batch_process_callback = None
+        self.split_only_callback = None
+        self.force_split_callback = None
+        
+        self._create_controls()
     
-    drop_zone = DropZoneFrame(root, test_callback)
-    drop_zone.pack(fill='both', expand=True, padx=20, pady=20)
+    def _create_controls(self):
+        """制御UI作成"""
+        # タイトル
+        title_label = ttk.Label(self, text="Bundle PDF Auto-Split v5.2", 
+                               font=('Arial', 11, 'bold'), foreground='blue')
+        title_label.pack(pady=(0, 10))
+        
+        # 設定セクション
+        settings_frame = ttk.LabelFrame(self, text="Auto-Split設定")
+        settings_frame.pack(fill='x', pady=(0, 10))
+        
+        # 自動分割トグル
+        auto_split_cb = ttk.Checkbutton(
+            settings_frame, 
+            text="アップロード時に束ねPDFを自動分割 (推奨)", 
+            variable=self.auto_split_bundles
+        )
+        auto_split_cb.pack(anchor='w', padx=10, pady=5)
+        
+        # デバッグモード（必要時のみ表示）
+        debug_cb = ttk.Checkbutton(
+            settings_frame,
+            text="詳細ログ出力 (Debug)",
+            variable=self.debug_mode
+        )
+        debug_cb.pack(anchor='w', padx=10, pady=2)
+        
+        # 情報テキスト
+        info_text = ("対象: 地方税系(1003/1013/1023 + 1004/2004)、国税系(0003/0004 + 3003/3004)の束ね")
+        info_label = ttk.Label(settings_frame, text=info_text, 
+                              font=('Arial', 8), foreground='gray')
+        info_label.pack(anchor='w', padx=10, pady=2)
+        
+        # アクションボタンセクション
+        action_frame = ttk.LabelFrame(self, text="一括処理アクション")
+        action_frame.pack(fill='x', pady=(0, 10))
+        
+        # メインCTAボタン: 一括処理（分割&出力）
+        self.batch_button = ttk.Button(
+            action_frame,
+            text="🚀 一括処理（分割&出力）",
+            command=self._on_batch_process,
+            style='Accent.TButton'
+        )
+        self.batch_button.pack(fill='x', padx=10, pady=5)
+        
+        # サブボタン用フレーム
+        sub_button_frame = ttk.Frame(action_frame)
+        sub_button_frame.pack(fill='x', padx=10, pady=2)
+        
+        # 分割のみボタン（検証用）
+        self.split_button = ttk.Button(
+            sub_button_frame,
+            text="📄 分割のみ（検証）",
+            command=self._on_split_only
+        )
+        self.split_button.pack(side='left', padx=(0, 5))
+        
+        # 強制分割ボタン（曖昧な場合用）
+        self.force_button = ttk.Button(
+            sub_button_frame,
+            text="⚡ 強制分割",
+            command=self._on_force_split
+        )
+        self.force_button.pack(side='left')
+        
+        # プログレス表示エリア
+        self.progress_var = tk.StringVar(value="待機中...")
+        self.progress_label = ttk.Label(self, textvariable=self.progress_var,
+                                       font=('Arial', 9), foreground='green')
+        self.progress_label.pack(pady=5)
     
-    print("ドラッグ&ドロップ機能 v4.0 テスト開始")
-    root.mainloop()
+    def _on_batch_process(self):
+        """一括処理（分割&出力）ボタン"""
+        if self.batch_process_callback:
+            self.batch_process_callback()
+    
+    def _on_split_only(self):
+        """分割のみボタン"""
+        if self.split_only_callback:
+            self.split_only_callback()
+    
+    def _on_force_split(self):
+        """強制分割ボタン"""
+        if self.force_split_callback:
+            self.force_split_callback()
+    
+    def set_callbacks(self, batch_callback=None, split_callback=None, force_callback=None):
+        """コールバック関数を設定"""
+        self.batch_process_callback = batch_callback
+        self.split_only_callback = split_callback
+        self.force_split_callback = force_callback
+    
+    def update_progress(self, message: str, color: str = 'green'):
+        """プログレス表示更新"""
+        self.progress_var.set(message)
+        self.progress_label.config(foreground=color)
+    
+    def get_settings(self) -> Dict[str, Any]:
+        """現在の設定を取得"""
+        return {
+            'auto_split_bundles': self.auto_split_bundles.get(),
+            'debug_mode': self.debug_mode.get()
+        }
+    
+    def set_button_states(self, enabled: bool):
+        """ボタンの有効/無効を設定"""
+        state = 'normal' if enabled else 'disabled'
+        self.batch_button.config(state=state)
+        self.split_button.config(state=state)
+        self.force_button.config(state=state)
+
+
+

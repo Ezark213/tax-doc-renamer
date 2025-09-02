@@ -1,0 +1,95 @@
+# Bundle PDF Auto-Split Configuration v5.2
+# 束ねPDF限定オート分割の設定ファイル
+
+# Bundle detection settings
+bundle_detection:
+  # Number of pages to scan for bundle detection (default: 10)
+  scan_pages: 10
+  
+  # Minimum threshold for bundle detection
+  thresholds:
+    receipt_notifications: 1  # Minimum number of receipt notification hits
+    payment_info: 1          # Minimum number of payment info hits  
+    target_codes: 1          # Minimum number of target code hits
+
+# Target document codes (whitelist)
+target_codes:
+  local_tax:
+    receipt_notifications: ["1003", "1013", "1023", "2003", "2013", "2023"]
+    payment_info: ["1004", "2004"]
+  national_tax:
+    receipt_notifications: ["0003", "3003"]
+    payment_info: ["0004", "3004"]
+
+# Keywords for bundle detection
+keywords:
+  # Receipt notification keywords
+  receipt_notification:
+    - "受信通知"
+    - "申告受付完了通知" 
+    - "申告受付完了"
+    - "申告受付"
+    - "受付完了通知"
+    - "受付完了"
+    - "受信結果"
+    - "受信"
+    
+  # Payment information keywords  
+  payment_info:
+    - "納付情報"
+    - "納付情報発行結果"
+    - "納付情報発行"
+    - "納付書"
+    - "納付区分番号通知"
+    - "納付区分番号"
+    - "納付金額"
+    - "納付"
+  
+  # Tax category keywords
+  tax_categories:
+    national:
+      - "法人税"
+      - "消費税" 
+      - "地方法人税"
+      - "国税電子申告"
+      - "Ｅ－Ｔａｘ"
+      - "税務署"
+    local:
+      - "都道府県"
+      - "市町村"
+      - "都道府県民税"
+      - "市町村民税"
+      - "市民税"
+      - "事業税"
+      - "特別法人事業税"
+      - "県税事務所"
+      - "都税事務所"
+      - "市役所"
+      - "地方税電子申告"
+
+# OCR settings
+ocr:
+  # Fast mode settings (for initial bundle detection)
+  fast_mode:
+    rotation_correction: false
+    binary_threshold: false
+    retry_on_error: false
+    resolution: "low"
+    
+  # Precise mode settings (for final processing)  
+  precise_mode:
+    rotation_correction: true
+    binary_threshold: true
+    retry_on_error: true
+    resolution: "high"
+
+# Output settings
+output:
+  # Temporary file naming pattern (unique per split)
+  temp_file_pattern: "__split_{page:03d}_{timestamp}.pdf"
+  
+  # Auto-cleanup temporary files
+  auto_cleanup_temp: true
+  
+  # Log level for split operations
+  log_level: "INFO"  # DEBUG, INFO, WARN, ERROR

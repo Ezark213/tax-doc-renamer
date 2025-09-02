@@ -1,0 +1,60 @@
+{
+  "test_run": {
+    "timestamp": "2025-09-02T23:57:01.856946",
+    "system": "税務書類リネームシステム v5.0",
+    "test_type": "受け入れテスト"
+  },
+  "configuration": {
+    "year_month": "2508",
+    "municipality_sets": {
+      "1": {
+        "prefecture": "東京都",
+        "municipality": ""
+      },
+      "2": {
+        "prefecture": "愛知県",
+        "municipality": "蒲郡市"
+      },
+      "3": {
+        "prefecture": "福岡県",
+        "municipality": "福岡市"
+      }
+    }
+  },
+  "results": [
+    {
+      "test": "エラーハンドリングテスト",
+      "success": false,
+      "message": "0/3件成功",
+      "details": {
+        "details": [
+          {
+            "description": "未分類書類",
+            "expected": "9999",
+            "actual": "Exception: 'ClassificationResult' object has no attribute 'document_code'",
+            "success": false
+          },
+          {
+            "description": "空テキスト",
+            "expected": "9999",
+            "actual": "Exception: 'ClassificationResult' object has no attribute 'document_code'",
+            "success": false
+          },
+          {
+            "description": "英語のみ文書",
+            "expected": "9999",
+            "actual": "Exception: 'ClassificationResult' object has no attribute 'document_code'",
+            "success": false
+          }
+        ]
+      },
+      "timestamp": "2025-09-02T23:57:01.856639"
+    }
+  ],
+  "summary": {
+    "total_tests": 5,
+    "passed": 0,
+    "failed": 5,
+    "success_rate": 0.0
+  }
+}

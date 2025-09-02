@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-PDF分割・処理エンジン v4.0
-国税・地方税受信通知の自動分割機能
+PDF分割・処理エンジン v5.2
+国税・地方税受信通知の自動分割機能 + 束ねPDF限定オート分割
 """
 
 import fitz  # PyMuPDF
 import os
 import re
-from typing import List, Optional, Dict, Tuple
+import yaml
+import logging
+from typing import List, Optional, Dict, Tuple, Union, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from pypdf import PdfReader, PdfWriter
 
 @dataclass
 class SplitResult:
@@ -28,11 +31,32 @@ class PageContent:
     is_blank: bool
     keywords: List[str]
 
+@dataclass
+class BundleDetectionResult:
+    """束ねPDF判定結果"""
+    is_bundle: bool
+    bundle_type: Optional[str]  # "local" or "national"
+    confidence: float
+    matched_elements: Dict[str, List[str]]  # {"receipt": [...], "payment": [...], "codes": [...]}
+    debug_info: List[str]
+
+# v5.2 Bundle detection constants
+BUNDLE_SCAN_PAGES = 10
+LOCAL_CODES = {"1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"}
+NATIONAL_NOTICE = {"0003", "3003"}
+NATIONAL_PAYMENT = {"0004", "3004"}
+
 class PDFProcessor:
-    """PDF分割・処理のメインクラス"""
+    """PDF分割・処理のメインクラス v5.2"""
     
-    def __init__(self):
+    def __init__(self, logger: Optional[logging.Logger] = None):
         """初期化"""
+        self.logger = logger or logging.getLogger(__name__)
+        
+        # Load configuration
+        self.config = self._load_split_config()
+        
+        # v5.1 existing keywords (preserved)
         self.national_tax_keywords = {
             "法人税_受信通知": ["法人税", "受信通知", "国税電子申告"],
             "法人税_納付情報": ["法人税", "納付情報", "納付書"],
@@ -48,6 +72,48 @@ class PDFProcessor:
             "市町村_受信通知2": ["市町村", "法人市民税", "受信通知"],
             "市町村_受信通知3": ["市町村", "法人市民税", "受信通知"],
             "市町村_納付情報": ["市町村", "納付情報", "納付書"]
+        }
+
+    def _load_split_config(self) -> Dict:
+        """分割設定ファイルを読み込み"""
+        try:
+            config_path = Path(__file__).parent.parent / "resources" / "split_rules.yaml"
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return yaml.safe_load(f)
+            else:
+                # Fallback default config
+                return self._get_default_config()
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"設定ファイル読み込みエラー、デフォルト設定を使用: {e}")
+            return self._get_default_config()
+    
+    def _get_default_config(self) -> Dict:
+        """デフォルト設定を返す"""
+        return {
+            "bundle_detection": {
+                "scan_pages": 10,
+                "thresholds": {"receipt_notifications": 1, "payment_info": 1, "target_codes": 1}
+            },
+            "target_codes": {
+                "local_tax": {
+                    "receipt_notifications": ["1003", "1013", "1023", "2003", "2013", "2023"],
+                    "payment_info": ["1004", "2004"]
+                },
+                "national_tax": {
+                    "receipt_notifications": ["0003", "3003"],
+                    "payment_info": ["0004", "3004"]
+                }
+            },
+            "keywords": {
+                "receipt_notification": ["受信通知", "申告受付完了通知", "受信結果"],
+                "payment_info": ["納付情報", "納付区分番号通知", "納付書"],
+                "tax_categories": {
+                    "national": ["法人税", "消費税", "国税電子申告"],
+                    "local": ["都道府県", "市町村", "地方税電子申告"]
+                }
+            }
         }
 
     def analyze_pdf_content(self, pdf_path: str) -> List[PageContent]:
@@ -588,7 +654,293 @@ class PDFProcessor:
             # エラーの場合は安全のため削除しない
             return False
 
+    # ===== v5.2 New Bundle Detection and Auto-Split Methods =====
+    
+    def maybe_split_pdf(self, input_pdf_path: str, out_dir: str, force: bool = False, 
+                       processing_callback: Optional[Callable] = None) -> bool:
+        """
+        Bundle PDF Auto-Split Main Function
+        束ねPDF限定オート分割のメイン関数
+        
+        Args:
+            input_pdf_path: 入力PDFのパス
+            out_dir: 出力ディレクトリ
+            force: 強制分割フラグ (判定結果を無視して分割実行)
+            processing_callback: 分割後各ページの処理コールバック関数
+            
+        Returns:
+            bool: 分割実行された場合True、対象外や失敗の場合False
+        """
+        self.logger.info(f"[split] Bundle detection started: {os.path.basename(input_pdf_path)}")
+        
+        try:
+            # Step 1: Bundle detection
+            detection_result = self._detect_bundle_type(input_pdf_path)
+            
+            if not detection_result.is_bundle and not force:
+                self.logger.info(f"[split] Skip (non-bundle): {os.path.basename(input_pdf_path)}")
+                self.logger.debug(f"[split] Detection details: {detection_result.debug_info}")
+                return False
+            
+            bundle_type = detection_result.bundle_type or "unknown"
+            self.logger.info(f"[split] Bundle detected: type={bundle_type}, confidence={detection_result.confidence:.2f}")
+            
+            if force and not detection_result.is_bundle:
+                self.logger.info(f"[split] Force split enabled - proceeding despite non-bundle detection")
+                
+            # Step 2: Full page splitting
+            return self._execute_bundle_split(input_pdf_path, out_dir, bundle_type, processing_callback)
+            
+        except Exception as e:
+            self.logger.error(f"[split] Bundle split error: {input_pdf_path} - {e}")
+            return False
+    
+    def _detect_bundle_type(self, pdf_path: str) -> BundleDetectionResult:
+        """
+        束ねPDFの種別を判定
+        
+        Args:
+            pdf_path: PDFファイルのパス
+            
+        Returns:
+            BundleDetectionResult: 判定結果
+        """
+        debug_info = []
+        matched_elements = {"receipt": [], "payment": [], "codes": []}
+        
+        try:
+            # Quick sample scan using PyMuPDF (fast mode)
+            doc = fitz.open(pdf_path)
+            scan_pages = min(doc.page_count, self.config["bundle_detection"]["scan_pages"])
+            
+            sample_texts = []
+            for i in range(scan_pages):
+                page = doc[i]
+                text = page.get_text()
+                sample_texts.append(text)
+                debug_info.append(f"Page {i+1}: {len(text)} chars")
+            
+            doc.close()
+            
+            # Combine all sample text
+            combined_text = " ".join(sample_texts)
+            debug_info.append(f"Combined sample text: {len(combined_text)} chars")
+            
+            # Check for local tax bundle
+            local_result = self._is_bundle_local(sample_texts, matched_elements, debug_info)
+            if local_result:
+                return BundleDetectionResult(
+                    is_bundle=True,
+                    bundle_type="local",
+                    confidence=0.9,
+                    matched_elements=matched_elements,
+                    debug_info=debug_info
+                )
+            
+            # Check for national tax bundle
+            national_result = self._is_bundle_national(sample_texts, matched_elements, debug_info)
+            if national_result:
+                return BundleDetectionResult(
+                    is_bundle=True,
+                    bundle_type="national", 
+                    confidence=0.9,
+                    matched_elements=matched_elements,
+                    debug_info=debug_info
+                )
+                
+            return BundleDetectionResult(
+                is_bundle=False,
+                bundle_type=None,
+                confidence=0.0,
+                matched_elements=matched_elements,
+                debug_info=debug_info
+            )
+            
+        except Exception as e:
+            debug_info.append(f"Detection error: {e}")
+            return BundleDetectionResult(
+                is_bundle=False,
+                bundle_type=None,
+                confidence=0.0,
+                matched_elements=matched_elements,
+                debug_info=debug_info
+            )
+    
+    def _is_bundle_local(self, texts: List[str], matched_elements: Dict, debug_info: List[str]) -> bool:
+        """地方税束ね判定 - OCR内容ベースの書類判定"""
+        from .classification_v5 import DocumentClassifierV5
+        
+        try:
+            classifier = DocumentClassifierV5(debug_mode=False)
+            local_target_codes = ["1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"]  # 地方税対象コード
+            detected_pages = []
+            
+            debug_info.append(f"OCR-based local bundle detection started for {len(texts)} pages")
+            
+            # 各ページを個別にOCR分析して書類判定
+            for i, page_text in enumerate(texts):
+                if len(page_text.strip()) < 50:  # 空白ページスキップ
+                    continue
+                
+                # ページごとの書類コード推定
+                detected_code = classifier.detect_page_doc_code(page_text, prefer_bundle="local")
+                
+                if detected_code in local_target_codes:
+                    detected_pages.append((i+1, detected_code))
+                    matched_elements["codes"].append(f"Page{i+1}:{detected_code}")
+                    debug_info.append(f"Page {i+1}: detected target code {detected_code}")
+                else:
+                    debug_info.append(f"Page {i+1}: no target code (detected: {detected_code})")
+            
+            # Bundle判定: 2枚以上の対象書類が含まれている場合
+            is_bundle = len(detected_pages) >= 2
+            
+            if is_bundle:
+                # 受信通知と納付情報の両方があるかチェック
+                receipt_codes = [code for page, code in detected_pages if code in ["1003", "1013", "1023", "2003", "2013", "2023"]]
+                payment_codes = [code for page, code in detected_pages if code in ["1004", "2004"]]
+                
+                matched_elements["receipt"].extend([f"Page{p}:{c}" for p, c in detected_pages if c in ["1003", "1013", "1023", "2003", "2013", "2023"]])
+                matched_elements["payment"].extend([f"Page{p}:{c}" for p, c in detected_pages if c in ["1004", "2004"]])
+                
+                debug_info.append(f"Local bundle detected: {len(detected_pages)} target pages")
+                debug_info.append(f"Receipt pages: {len(receipt_codes)}, Payment pages: {len(payment_codes)}")
+            else:
+                debug_info.append(f"Not a local bundle: only {len(detected_pages)} target pages found (need ≥2)")
+            
+            return is_bundle
+            
+        except Exception as e:
+            debug_info.append(f"Local bundle detection error: {e}")
+            return False
+    
+    def _is_bundle_national(self, texts: List[str], matched_elements: Dict, debug_info: List[str]) -> bool:
+        """国税束ね判定 - OCR内容ベースの書類判定"""
+        from .classification_v5 import DocumentClassifierV5
+        
+        try:
+            classifier = DocumentClassifierV5(debug_mode=False)
+            national_target_codes = ["0003", "3003", "0004", "3004"]  # 国税対象コード
+            detected_pages = []
+            
+            debug_info.append(f"OCR-based national bundle detection started for {len(texts)} pages")
+            
+            # 各ページを個別にOCR分析して書類判定
+            for i, page_text in enumerate(texts):
+                if len(page_text.strip()) < 50:  # 空白ページスキップ
+                    continue
+                
+                # ページごとの書類コード推定
+                detected_code = classifier.detect_page_doc_code(page_text, prefer_bundle="national")
+                
+                if detected_code in national_target_codes:
+                    detected_pages.append((i+1, detected_code))
+                    matched_elements["codes"].append(f"Page{i+1}:{detected_code}")
+                    debug_info.append(f"Page {i+1}: detected target code {detected_code}")
+                else:
+                    debug_info.append(f"Page {i+1}: no target code (detected: {detected_code})")
+            
+            # Bundle判定: 2枚以上の対象書類が含まれている場合
+            is_bundle = len(detected_pages) >= 2
+            
+            if is_bundle:
+                # 受信通知と納付情報の両方があるかチェック
+                receipt_codes = [code for page, code in detected_pages if code in ["0003", "3003"]]
+                payment_codes = [code for page, code in detected_pages if code in ["0004", "3004"]]
+                
+                matched_elements["receipt"].extend([f"Page{p}:{c}" for p, c in detected_pages if c in ["0003", "3003"]])
+                matched_elements["payment"].extend([f"Page{p}:{c}" for p, c in detected_pages if c in ["0004", "3004"]])
+                
+                debug_info.append(f"National bundle detected: {len(detected_pages)} target pages")
+                debug_info.append(f"Receipt pages: {len(receipt_codes)}, Payment pages: {len(payment_codes)}")
+            else:
+                debug_info.append(f"Not a national bundle: only {len(detected_pages)} target pages found (need ≥2)")
+            
+            return is_bundle
+            
+        except Exception as e:
+            debug_info.append(f"National bundle detection error: {e}")
+            return False
+    
+    def _execute_bundle_split(self, input_pdf_path: str, out_dir: str, bundle_type: str,
+                             processing_callback: Optional[Callable] = None) -> bool:
+        """
+        束ねPDFの実際の分割処理を実行
+        
+        Args:
+            input_pdf_path: 入力PDFパス
+            out_dir: 出力ディレクトリ
+            bundle_type: 束ね種別 ("local", "national", "unknown")
+            processing_callback: 各ページ処理後のコールバック関数
+            
+        Returns:
+            bool: 分割成功した場合True
+        """
+        try:
+            # Use pypdf for splitting
+            reader = PdfReader(input_pdf_path)
+            total_pages = len(reader.pages)
+            
+            self.logger.info(f"[split] Executing split: {total_pages} pages, type={bundle_type}")
+            
+            temp_files = []
+            
+            for i, page in enumerate(reader.pages, start=1):
+                # Create single-page PDF
+                writer = PdfWriter()
+                writer.add_page(page)
+                
+                # Generate unique temporary filename with timestamp
+                import time
+                timestamp = int(time.time() * 1000000)  # microsecond precision
+                temp_pattern = self.config.get("output", {}).get("temp_file_pattern", "__split_{page:03d}_{timestamp}.pdf")
+                temp_filename = temp_pattern.format(page=i, timestamp=timestamp + i)
+                temp_path = os.path.join(out_dir, temp_filename)
+                
+                # Write temporary file
+                with open(temp_path, "wb") as output_file:
+                    writer.write(output_file)
+                
+                temp_files.append(temp_path)
+                
+                # Log page split with hint from classification if available
+                from .classification_v5 import DocumentClassifierV5
+                try:
+                    classifier = DocumentClassifierV5(debug_mode=False)
+                    # Get text from page for classification hint
+                    doc = fitz.open(temp_path)
+                    page_text = doc[0].get_text()
+                    doc.close()
+                    
+                    code_hint = classifier.detect_page_doc_code(page_text, prefer_bundle=bundle_type)
+                    self.logger.debug(f"[split] Page {i:03d}: hint={code_hint}")
+                except Exception as e:
+                    self.logger.debug(f"[split] Page {i:03d}: classification hint failed - {e}")
+                
+                # Call processing callback if provided (integrates with existing pipeline)
+                if processing_callback:
+                    try:
+                        processing_callback(temp_path, i, bundle_type)
+                    except Exception as e:
+                        self.logger.error(f"[split] Processing callback error for page {i}: {e}")
+            
+            # Cleanup temporary files if configured
+            if self.config.get("output", {}).get("auto_cleanup_temp", True):
+                for temp_file in temp_files:
+                    try:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                    except Exception as e:
+                        self.logger.warning(f"[split] Cleanup warning: {temp_file} - {e}")
+            
+            self.logger.info(f"[split] Split completed: {input_pdf_path} -> {total_pages} pages (bundle={bundle_type})")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"[split] Split execution error: {e}")
+            return False
+
 if __name__ == "__main__":
     # テスト用
     processor = PDFProcessor()
-    print("PDF分割処理エンジン v4.0 初期化完了")
+    print("PDF分割処理エンジン v5.2 初期化完了")

@@ -6,9 +6,12 @@ AND条件対応・高精度書類種別判定システム（完全改訂版）
 
 import re
 import logging
+import json
+import os
 from typing import Dict, List, Optional, Tuple, Callable, Union
 from dataclasses import dataclass, field
 import datetime
+from pathlib import Path
 
 @dataclass
 class AndCondition:
@@ -71,14 +74,29 @@ class DocumentClassifierV5:
         return {
             # ===== 0000番台 - 国税申告書類 =====
             "0000_納付税額一覧表": {
-                "priority": 140,
+                "priority": 150,  # 適度な優先度
                 "highest_priority_conditions": [
-                    AndCondition(["納付税額一覧表", "既納付額"], "all"),
-                    AndCondition(["納付税額一覧", "確定税額"], "all")
+                    # ファイル名による確実な判定のみ（過度な条件を削除）
+                    AndCondition(["納税一覧"], "any"),
+                    AndCondition(["税額一覧表"], "any")
                 ],
-                "exact_keywords": ["納付税額一覧表"],
-                "partial_keywords": ["納付税額", "税額一覧"],
-                "exclude_keywords": ["受信通知", "納付区分番号通知", "メール詳細"]
+                "exact_keywords": [
+                    "納付税額一覧表", "納税一覧", "税額一覧表"
+                ],
+                "partial_keywords": [
+                    "税額一覧"
+                ],
+                "exclude_keywords": [
+                    # 他の書類を明確に除外（過度な適用を防止）
+                    "申告書", "確定申告", "青色申告", "内国法人の確定申告",
+                    "決算書", "貸借対照表", "損益計算書",
+                    "仕訳帳", "総勘定元帳", "補助元帳", "残高試算表",
+                    "受信通知", "納付情報発行結果", "納付区分番号通知", "メール詳細",
+                    "県税事務所", "都税事務所", "市役所",
+                    "法人都道府県民税", "法人市民税", "消費税申告書",
+                    "一括償却", "少額減価償却", "固定資産台帳", "勘定科目別"
+                ],
+                "filename_keywords": ["納税一覧", "税額一覧"]
             },
             
             "0001_法人税及び地方法人税申告書": {
@@ -86,17 +104,15 @@ class DocumentClassifierV5:
                 "highest_priority_conditions": [
                     # 修正指示書に基づく新しい最優先条件を追加
                     AndCondition(["01_内国法人", "確定申告"], "all"),  # ファイル名パターン
-                    AndCondition(["内国法人の確定申告(青色)"], "any"),  # 単独でも最優先
                     AndCondition(["事業年度分の法人税申告書", "差引確定法人税額"], "all"),
-                    AndCondition(["内国法人の確定申告(青色)", "法人税額"], "all"),
                     AndCondition(["控除しきれなかった金額", "課税留保金額"], "all"),
                     AndCondition(["中間申告分の法人税額", "中間申告分の地方法人税額"], "all")
                 ],
                 "exact_keywords": [
-                    "法人税及び地方法人税申告書", "内国法人の確定申告", "内国法人の確定申告(青色)",
+                    "法人税及び地方法人税申告書",
                     "法人税申告書別表一", "申告書第一表"
                 ],
-                "partial_keywords": ["法人税申告", "内国法人", "確定申告", "青色申告", "事業年度分", "税額控除"],
+                "partial_keywords": ["法人税申告", "内国法人", "確定申告", "青色申告"],
                 "exclude_keywords": ["メール詳細", "受信通知", "納付区分番号通知", "添付資料", "イメージ添付"],
                 "filename_keywords": ["内国法人", "確定申告", "青色"]
             },
@@ -104,6 +120,9 @@ class DocumentClassifierV5:
             "0002_添付資料_法人税": {
                 "priority": 200,  # バグ修正依頼書: B-2 最高優先度に変更
                 "highest_priority_conditions": [
+                    # 新しい最優先条件: 添付書類送付書、添付書類名称、内国法人の確定申告の3つで確実に判定
+                    AndCondition(["添付書類送付書", "添付書類名称", "内国法人の確定申告"], "all"),
+                    AndCondition(["添付書類名称"], "any"), 
                     # バグ修正依頼書: B-1 完全一致キーワードの追加
                     AndCondition(["法人税 添付資料"], "any"),
                     AndCondition(["添付資料 法人税"], "any"), 
@@ -115,6 +134,7 @@ class DocumentClassifierV5:
                     AndCondition(["添付書類", "法人税", "申告書"], "all")
                 ],
                 "exact_keywords": [
+                    "添付書類送付書", "添付書類名称", "内国法人の確定申告",
                     "法人税 添付資料", "添付資料 法人税", "イメージ添付書類(法人税申告)",
                     "イメージ添付書類 法人税", "添付書類 法人税"
                 ],
@@ -202,14 +222,9 @@ class DocumentClassifierV5:
             "2001_市町村_法人市民税": {
                 "priority": 180,  # バグ修正依頼書: C-2 優先度を高く設定
                 "highest_priority_conditions": [
-                    # バグ修正依頼書: C-1 市民税判定条件の強化
-                    AndCondition(["法人市民税", "申告書", "市役所"], "all"),
-                    AndCondition(["法人市町村民税", "確定申告"], "all"),
-                    AndCondition(["市長", "法人市民税"], "all"),
-                    # 既存条件も維持
-                    AndCondition(["法人市民税申告書", "市役所", "均等割"], "all"),
-                    AndCondition(["市町村民税", "法人税割", "申告納付税額"], "all"),
-                    AndCondition(["法人市民税", "課税標準総額", "市長"], "all")
+                    # 指定された2つのAND条件のみ（最優先）
+                    AndCondition(["当該市町村内に所在"], "any"),
+                    AndCondition(["市町村民税の特定寄附金"], "any")
                 ],
                 "exact_keywords": ["法人市民税申告書", "市民税申告書"],
                 "partial_keywords": ["法人市民税", "市町村民税", "市役所", "町役場", "村役場"],
@@ -271,8 +286,10 @@ class DocumentClassifierV5:
             },
             
             "3002_添付資料_消費税": {
-                "priority": 200,  # 最高優先度に変更
+                "priority": 220,  # 0002より高い優先度に設定
                 "highest_priority_conditions": [
+                    # 新しい最優先条件: 添付書類、消費税、添付書類送付書の3つで確実に判定
+                    AndCondition(["添付書類", "消費税", "添付書類送付書"], "all"),
                     # 修正指示書に基づくファイル名最優先条件を追加
                     AndCondition(["イメージ添付書類(法人消費税申告)"], "any"),  # 単独最優先
                     AndCondition(["添付資料", "消費税申告", "イメージ添付"], "all"),
@@ -280,6 +297,7 @@ class DocumentClassifierV5:
                     AndCondition(["イメージ添付書類(法人消費税申告)", "添付資料"], "all")
                 ],
                 "exact_keywords": [
+                    "添付書類送付書", "添付書類", "消費税",
                     "消費税 添付資料", "添付資料 消費税", "イメージ添付書類(法人消費税申告)",
                     "イメージ添付書類 消費税", "添付書類 消費税"
                 ],
@@ -706,29 +724,35 @@ class DocumentClassifierV5:
 
     def classify_with_municipality_info_v5(self, text: str, filename: str, 
                                          prefecture_code: Optional[int] = None,
-                                         municipality_code: Optional[int] = None) -> ClassificationResult:
-        """v5.0 自治体情報を考慮した分類（連番対応）"""
-        # まずテキストから自治体情報を抽出（OCRベースの結果を補完）
-        if prefecture_code is None or municipality_code is None:
-            extracted_prefecture_code, extracted_municipality_code = self._extract_municipality_info_from_text(text, filename)
-            if prefecture_code is None:
-                prefecture_code = extracted_prefecture_code
-            if municipality_code is None:
-                municipality_code = extracted_municipality_code
-        
+                                         municipality_code: Optional[int] = None,
+                                         municipality_sets: Optional[Dict[int, Dict[str, str]]] = None) -> ClassificationResult:
+        """v5.0 自治体情報を考慮した分類（ステートレス対応）"""
         # v5.0 分類実行
         base_result = self.classify_document_v5(text, filename)
         
-        # 連番対応処理
-        final_code = self._apply_municipality_numbering(
-            base_result.document_type, 
-            prefecture_code, 
-            municipality_code
-        )
-        
-        if final_code != base_result.document_type:
-            self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_code}")
-            base_result.document_type = final_code
+        # 正規化処理でラベル解決（必ず実行）
+        if municipality_sets:
+            print(f"[DEBUG] 正規化処理開始: municipality_sets={municipality_sets}")
+            code, final_label, resolved_set_id = self.normalize_classification(
+                text, filename, base_result.document_type, municipality_sets
+            )
+            
+            if final_label != base_result.document_type:
+                self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_label}")
+                base_result.document_type = final_label
+        else:
+            print(f"[DEBUG] 従来処理実行: municipality_sets={municipality_sets}")
+            # セット設定がない場合は従来処理
+            self.current_municipality_sets = municipality_sets or {}
+            final_code = self._apply_municipality_numbering(
+                base_result.document_type, 
+                prefecture_code, 
+                municipality_code
+            )
+            
+            if final_code != base_result.document_type:
+                self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_code}")
+                base_result.document_type = final_code
         
         return base_result
 
@@ -754,18 +778,29 @@ class DocumentClassifierV5:
             self._log_debug(f"固定番号のため連番適用除外: {document_type}")
             return document_type
         
-        # 修正2: 連番適用は申告書と市町村受信通知のみ
+        # 連番適用: 申告書系統への自治体連番の適用
         # 都道府県申告書（1001系統）
         if document_type == "1001_都道府県_法人都道府県民税・事業税・特別法人事業税":
             if prefecture_code:
                 prefecture_name = self._get_prefecture_name(prefecture_code)
-                return f"{prefecture_code}_{prefecture_name}_法人都道府県民税・事業税・特別法人事業税"
+                final_code = f"{prefecture_code}_{prefecture_name}_法人都道府県民税・事業税・特別法人事業税"
+                self._log_debug(f"都道府県申告書連番適用: {document_type} → {final_code}")
+                return final_code
         
         # 市町村申告書（2001系統）
-        elif document_type == "2001_市町村_法人市民税":
+        elif document_type.startswith("2") and document_type.endswith("_市町村_法人市民税"):
             if municipality_code:
+                # セット設定情報のデバッグ出力
+                if hasattr(self, 'current_municipality_sets'):
+                    self._log_debug(f"セット設定情報利用可能: {self.current_municipality_sets}")
+                else:
+                    self._log_debug(f"セット設定情報なし: current_municipality_setsが未設定")
+                
                 municipality_name = self._get_municipality_name(municipality_code)
-                return f"{municipality_code}_{municipality_name}_法人市民税"
+                final_code = f"{municipality_code}_{municipality_name}_法人市民税"
+                print(f"[DEBUG] 市町村申告書連番適用: {document_type} → {final_code}")
+                self._log_debug(f"市町村申告書連番適用: {document_type} → {final_code}")
+                return final_code
         
         # 修正指示書: 修正5 - 都道府県受信通知の連番対応
         elif document_type == "1003_受信通知":
@@ -794,24 +829,53 @@ class DocumentClassifierV5:
         self._log_debug(f"自治体連番適用なし: {document_type}")
         return document_type
 
-    def _get_set_order_from_prefecture_code(self, prefecture_code: int) -> int:
-        """都道府県コードからセット順序を取得（修正指示書: 修正5対応）"""
-        # 修正指示書に基づくセット順序マッピング
-        code_to_set = {
-            1001: 1,  # 東京都 = セット1
-            1011: 2,  # 愛知県 = セット2 
-            1021: 3,  # 福岡県 = セット3
-        }
-        return code_to_set.get(prefecture_code, 1)  # デフォルトはセット1
-    
-    def _get_set_order_from_municipality_code(self, municipality_code: int) -> int:
-        """市町村コードからセット順序を取得（修正指示書: 修正5対応）"""
-        # 修正指示書に基づくセット順序マッピング
-        code_to_set = {
-            2001: 2,  # 蒲郡市 = セット2（東京都がないので繰り上がり）
-            2011: 3,  # 福岡市 = セット3
-        }
-        return code_to_set.get(municipality_code, 1)  # デフォルトはセット1
+    def build_order_maps(self, set_settings: Dict[int, Dict[str, str]]) -> Tuple[Dict[int, int], Dict[int, int]]:
+        """ステートレス連番マップを構築
+        
+        Args:
+            set_settings: セット設定辞書 {set_id: {"prefecture": str, "city": str}}
+            
+        Returns:
+            Tuple[pref_order_map, city_order_map]
+            pref_order_map: {set_id: prefecture_code}
+            city_order_map: {set_id: municipality_code}
+        """
+        # 東京都チェック（存在する場合のみ）
+        tokyo_set_id = None
+        for set_id, info in set_settings.items():
+            if info.get("prefecture") == "東京都":
+                tokyo_set_id = set_id
+                # 東京都にcityが設定されている場合はエラー
+                if info.get("city", "").strip():
+                    raise ValueError(f"東京都（セット{set_id}）にcityが設定されています: {info.get('city')}")
+                break
+        
+        # 都道府県連番マップ
+        pref_order_map = {}
+        sorted_set_ids = sorted(set_settings.keys())
+        
+        if tokyo_set_id is not None:
+            # 東京都がある場合：論理的に先頭に移動
+            ordered_sets = [tokyo_set_id] + [sid for sid in sorted_set_ids if sid != tokyo_set_id]
+        else:
+            # 東京都がない場合：入力順のまま
+            ordered_sets = sorted_set_ids
+        
+        for rank, set_id in enumerate(ordered_sets):
+            pref_order_map[set_id] = 1001 + rank * 10
+        
+        # 市町村連番マップ: cityが空でないセットのみを順序化
+        city_sets = []
+        for set_id in sorted(set_settings.keys()):
+            city = set_settings[set_id].get("city", "").strip()
+            if city:  # cityが空でない場合のみ
+                city_sets.append(set_id)
+        
+        city_order_map = {}
+        for rank, set_id in enumerate(city_sets):
+            city_order_map[set_id] = 2001 + rank * 10
+            
+        return pref_order_map, city_order_map
     
     def _get_city_order_from_code(self, municipality_code: int) -> int:
         """市町村コードから順序を取得（レガシー関数 - 後方互換性のため残す）"""
@@ -824,35 +888,291 @@ class DocumentClassifierV5:
         }
         return code_to_order.get(municipality_code, 1)
 
-    def _get_prefecture_name(self, prefecture_code: int) -> str:
-        """都道府県コードから名前を取得（実装時に適切なマッピングを設定）"""
-        # 仮実装 - 実際の運用では設定から取得
-        mapping = {
-            1001: "東京都",
-            1011: "愛知県", 
-            1021: "福岡県"
-        }
-        return mapping.get(prefecture_code, "都道府県")
-
-    def _get_municipality_name(self, municipality_code: int) -> str:
-        """市町村コードから名前を取得（実装時に適切なマッピングを設定）"""
-        # 仮実装 - 実際の運用では設定から取得
-        mapping = {
-            2001: "愛知県蒲郡市",
-            2011: "福岡県福岡市"
-        }
-        return mapping.get(municipality_code, "市町村")
-
-    def _extract_municipality_info_from_text(self, text: str, filename: str) -> Tuple[Optional[int], Optional[int]]:
-        """テキストから自治体コードを抽出（テキストベース解析）"""
+    def _resolve_document_label_stateless(self, document_type: str, extracted_text: str, 
+                                         filename: str, set_settings: Dict[int, Dict[str, str]]) -> str:
+        """ステートレスな文書ラベル解決（不整合検出機能付き）"""
+        try:
+            # 1. 連番マップを構築
+            pref_order_map, city_order_map = self.build_order_maps(set_settings)
+            
+            # 2. テキストから自治体情報を抽出（検証用）
+            extracted_pref, extracted_city = self._extract_pref_city_from_text(extracted_text, filename)
+            
+            # 3. 文書分類から自治体コードを決定
+            detected_set = self._detect_municipality_set_from_text(extracted_text, filename, set_settings)
+            if not detected_set:
+                self._log_inconsistency(filename, extracted_pref or "不明", extracted_city or "不明", 
+                                       "未分類", "未分類", "テキストから自治体を検出できませんでした")
+                return document_type
+            
+            # 4. 自治体種別判定（都道府県税 vs 市民税）
+            is_prefecture_tax = self._is_prefecture_tax_document(document_type)
+            is_municipal_tax = self._is_municipal_tax_document(document_type)
+            
+            if is_prefecture_tax:
+                # 都道府県税の場合
+                if detected_set in pref_order_map:
+                    pref_code = pref_order_map[detected_set]
+                    resolved_pref = set_settings[detected_set]["prefecture"]
+                    resolved_city = ""
+                    
+                    # 不整合検出
+                    if extracted_pref and extracted_pref != resolved_pref:
+                        self._log_inconsistency(filename, extracted_pref, extracted_city or "", 
+                                              resolved_pref, resolved_city, "都道府県名の不一致")
+                    
+                    return f"{pref_code}_{resolved_pref}_法人都道府県民税・事業税・特別法人事業税"
+                    
+            elif is_municipal_tax:
+                # 市民税の場合
+                if detected_set in city_order_map:
+                    city_code = city_order_map[detected_set]
+                    resolved_pref = set_settings[detected_set]["prefecture"]
+                    resolved_city = set_settings[detected_set]["city"]
+                    
+                    # 不整合検出
+                    if extracted_pref and extracted_pref != resolved_pref:
+                        self._log_inconsistency(filename, extracted_pref, extracted_city or "", 
+                                              resolved_pref, resolved_city, "都道府県名の不一致")
+                    if extracted_city and extracted_city != resolved_city:
+                        self._log_inconsistency(filename, extracted_pref or "", extracted_city, 
+                                              resolved_pref, resolved_city, "市町村名の不一致")
+                    
+                    return f"{city_code}_{resolved_pref}{resolved_city}_法人市民税"
+            
+            return document_type
+            
+        except Exception as e:
+            self._log_debug(f"ラベル解決エラー: {e}")
+            return document_type
+    
+    def _extract_pref_city_from_text(self, text: str, filename: str) -> Tuple[Optional[str], Optional[str]]:
+        """テキストから都道府県・市町村名を抽出（検証用）"""
+        combined_text = f"{text} {filename}"
+        
+        # 都道府県パターン
+        pref_patterns = [
+            (r'東京都', '東京都'),
+            (r'愛知県', '愛知県'),
+            (r'福岡県', '福岡県')
+        ]
+        
+        # 市町村パターン  
+        city_patterns = [
+            (r'蒲郡市', '蒲郡市'),
+            (r'福岡市', '福岡市')
+        ]
+        
+        extracted_pref = None
+        extracted_city = None
+        
+        for pattern, name in pref_patterns:
+            if re.search(pattern, combined_text):
+                extracted_pref = name
+                break
+                
+        for pattern, name in city_patterns:
+            if re.search(pattern, combined_text):
+                extracted_city = name
+                break
+        
+        return extracted_pref, extracted_city
+    
+    def _detect_municipality_set_from_text(self, text: str, filename: str, 
+                                           set_settings: Dict[int, Dict[str, str]]) -> Optional[int]:
+        """テキストから自治体セットを検出（動的）"""
         combined_text = f"{text} {filename}".lower()
         
-        # 修正指示書に基づく提出先優先の自治体判定
-        # Step 1: ファイル名から提出先事務所を特定
+        # set_settingsベースで検出パターンを動的生成
+        for set_id, info in set_settings.items():
+            prefecture = info.get("prefecture", "")
+            city = info.get("city", "")
+            
+            # 都道府県名での検出
+            if prefecture and prefecture.lower() in combined_text:
+                return set_id
+            
+            # 市町村名での検出（市役所パターンも含む）
+            if city and city.lower() in combined_text:
+                return set_id
+                
+            # 市役所パターン
+            if city and f"{city}役所".lower() in combined_text:
+                return set_id
+        return None
+    
+    def resolve_set_id_from_text(self, text: str, filename: str, set_settings: Dict[int, Dict[str, str]], 
+                                doc_kind: str) -> Optional[int]:
+        """テキストから自治体セットIDを解決（強い手がかりから順に判定）"""
+        combined_text = f"{text} {filename}"
+        
+        if doc_kind == "pref":
+            # 県税の場合：県税事務所パターンを優先検索
+            patterns = [
+                (r'東京都港都税事務所', lambda _: self._find_set_by_pref(set_settings, "東京都")),
+                (r'(\w+県).*?県税事務所', lambda m: self._find_set_by_pref(set_settings, m.group(1))),
+                (r'(\w+県)\s*税事務所', lambda m: self._find_set_by_pref(set_settings, m.group(1))),
+                (r'東京都', lambda _: self._find_set_by_pref(set_settings, "東京都")),
+            ]
+            
+        elif doc_kind == "city":
+            # 市税の場合：市役所パターンを優先検索
+            patterns = [
+                (r'(\w+市)役所', lambda m: self._find_set_by_city(set_settings, m.group(1))),
+                (r'(\w+市)長', lambda m: self._find_set_by_city(set_settings, m.group(1))),
+                (r'当該市町村.*?(\w+県)', lambda m: self._find_set_by_pref(set_settings, m.group(1))),
+            ]
+        else:
+            return None
+            
+        # パターンマッチングで検索
+        import re
+        for pattern, resolver in patterns:
+            match = re.search(pattern, combined_text)
+            if match:
+                result = resolver(match)
+                if result:
+                    return result
+        
+        # フォールバック：一般的な都道府県・市町村名検索
+        for set_id, info in set_settings.items():
+            pref = info.get("prefecture", "")
+            city = info.get("city", "")
+            
+            if doc_kind == "pref" and pref and pref in combined_text:
+                return set_id
+            elif doc_kind == "city" and city and city in combined_text:
+                return set_id
+                
+        return None
+    
+    def _find_set_by_pref(self, set_settings: Dict[int, Dict[str, str]], target_pref: str) -> Optional[int]:
+        """都道府県名からセットIDを検索"""
+        for set_id, info in set_settings.items():
+            if info.get("prefecture") == target_pref:
+                return set_id
+        return None
+    
+    def _find_set_by_city(self, set_settings: Dict[int, Dict[str, str]], target_city: str) -> Optional[int]:
+        """市町村名からセットIDを検索"""
+        for set_id, info in set_settings.items():
+            if info.get("city") == target_city:
+                return set_id
+        return None
+    
+    def _is_prefecture_tax_document(self, document_type: str) -> bool:
+        """都道府県税文書かどうか判定"""
+        prefecture_patterns = ['都道府県', '県税', '都税', '道税', '府税']
+        return any(pattern in document_type for pattern in prefecture_patterns)
+    
+    def _is_municipal_tax_document(self, document_type: str) -> bool:
+        """市民税文書かどうか判定"""
+        municipal_patterns = ['市民税', '市町村']
+        return any(pattern in document_type for pattern in municipal_patterns)
+    
+    def _log_inconsistency(self, filename: str, extracted_pref: str, extracted_city: str,
+                          resolved_pref: str, resolved_city: str, reason: str):
+        """不整合ログの記録"""
+        import csv
+        import os
+        
+        log_entry = {
+            'filename': filename,
+            'extracted_pref': extracted_pref,
+            'extracted_city': extracted_city,
+            'resolved_pref': resolved_pref,
+            'resolved_city': resolved_city,
+            'reason': reason
+        }
+        
+        # CSVログ出力
+        log_file = 'municipality_inconsistency.csv'
+        file_exists = os.path.isfile(log_file)
+        
+        with open(log_file, 'a', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=log_entry.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(log_entry)
+        
+        # WARNログも出力
+        self._log_debug(f"[WARN] 自治体名不整合: {filename} - {reason}")
+        print(f"[WARN] 自治体名不整合: {filename} - {reason}")
+    
+    def normalize_classification(self, text: str, filename: str, template_id: str, 
+                                set_settings: Dict[int, Dict[str, str]]) -> Tuple[int, str, int]:
+        """v5.1テンプレートIDを正規化して最終ラベルを生成"""
+        print(f"[INFO] 正規化処理開始: template_id={template_id}")
+        
+        try:
+            # 1. 連番マップを構築
+            pref_order_map, city_order_map = self.build_order_maps(set_settings)
+            
+            # 2. 文書種別を判定（都道府県税 vs 市民税）
+            doc_kind = "pref" if self._is_prefecture_tax_document(template_id) else "city"
+            print(f"[INFO] 文書種別判定: {doc_kind}")
+            
+            # 3. テキストから自治体セットIDを解決
+            set_id = self.resolve_set_id_from_text(text, filename, set_settings, doc_kind)
+            if not set_id:
+                print(f"[WARN] 自治体セット解決失敗, フォールバックを使用")
+                # フォールバック：最初の該当セットを使用
+                for sid, info in set_settings.items():
+                    if doc_kind == "pref":
+                        set_id = sid
+                        break
+                    elif doc_kind == "city" and info.get("city", "").strip():
+                        set_id = sid
+                        break
+                        
+            if not set_id:
+                print(f"[ERROR] セットID解決失敗")
+                return 0, template_id, 0
+            
+            # 4. 連番コードを決定
+            if doc_kind == "pref":
+                code = pref_order_map.get(set_id, 1001)
+                pref = set_settings[set_id]["prefecture"]
+                city = ""
+                final_label = f"{code}_{pref}_法人都道府県民税・事業税・特別法人事業税"
+            else:
+                code = city_order_map.get(set_id, 2001)
+                pref = set_settings[set_id]["prefecture"]
+                city = set_settings[set_id]["city"]
+                final_label = f"{code}_{pref}{city}_法人市民税"
+            
+            print(f"[INFO] 正規化結果: set_id={set_id}, code={code}, pref={pref}, city={city}")
+            print(f"[INFO] 最終ラベル: {final_label}")
+            
+            # 5. テンプレートIDが最終出力に残らないことを確認
+            assert "市町村" not in final_label, f"テンプレート文字列が残存: {final_label}"
+            assert template_id != final_label, f"正規化されていません: {template_id} == {final_label}"
+            
+            # 6. 不整合検証（簡易版）
+            extracted_pref, extracted_city = self._extract_pref_city_from_text(text, filename)
+            if extracted_pref and extracted_pref != pref:
+                print(f"[WARN] Locality mismatch text=(pref={extracted_pref}, city={extracted_city}) vs set=(pref={pref}, city={city}), file={filename}")
+            
+            return code, final_label, set_id
+            
+        except Exception as e:
+            print(f"[ERROR] 正規化処理エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0, template_id, 0
+
+    def _extract_municipality_info_from_text(self, text: str, filename: str) -> Tuple[Optional[int], Optional[int]]:
+        """テキストから自治体コードを抽出（UI設定ベース解析）"""
+        combined_text = f"{text} {filename}".lower()
+        
+        # UI設定ベースの自治体判定（より柔軟なパターンマッチング）
+        # Step 1: ファイル名と内容から自治体を特定
         submission_office_patterns = {
-            1: ["東京都港都税事務所", "港都税事務所", "芝税務署", "都税事務所"],  # セット1
-            2: ["愛知県東三河県税事務所", "東三河県税事務所", "蒲郡市役所", "蒲郡市"],  # セット2  
-            3: ["福岡県西福岡県税事務所", "西福岡県税事務所", "福岡市", "福岡市役所"],  # セット3
+            1: ["東京都", "港都税事務所", "芝税務署", "都税事務所", "東京都港都税事務所"],  # セット1
+            2: ["愛知県", "東三河県税事務所", "蒲郡市", "蒲郡市役所", "愛知県東三河県税事務所"],  # セット2  
+            3: ["福岡県", "西福岡県税事務所", "福岡市", "福岡市役所", "福岡県西福岡県税事務所"],  # セット3
+            4: ["北海道", "札幌市", "道税事務所"],  # セット4（拡張用）
+            5: ["大阪府", "大阪市", "府税事務所"]   # セット5（拡張用）
         }
         
         # Step 2: 会社住所を除外してからテキスト判定
@@ -890,18 +1210,22 @@ class DocumentClassifierV5:
                 if detected_set:
                     break
         
-        # セット番号をコード番号に変換（東京都特別ルール適用）
+        # セット番号を正確な連番コード番号に変換（連番ルール適用）
         prefecture_code = None
         municipality_code = None
         
-        if detected_set == 1:  # セット1: 東京都（市町村なし）
-            prefecture_code = 1001  # 東京都は常に1001
-        elif detected_set == 2:  # セット2: 愛知県蒲郡市
-            prefecture_code = 1011  # セット2の都道府県
-            municipality_code = 2001  # 東京都がないので繰り上がり
-        elif detected_set == 3:  # セット3: 福岡県福岡市
-            prefecture_code = 1021  # セット3の都道府県
-            municipality_code = 2011  # 東京都がないので繰り上がり
+        if detected_set:
+            # 都道府県申告書の連番: 1001 + (セット番号-1) × 10
+            prefecture_code = 1001 + (detected_set - 1) * 10
+            self._log_debug(f"都道府県連番計算: セット{detected_set} → 1001 + ({detected_set}-1)×10 = {prefecture_code}")
+            
+            # 市町村申告書の連番: 2001 + (セット番号-1) × 10
+            # ただし、東京都（セット1）は市町村書類が存在しないため除外
+            if detected_set > 1:  # 東京都以外の場合のみ
+                municipality_code = 2001 + (detected_set - 1) * 10
+                self._log_debug(f"市町村連番計算: セット{detected_set} → 2001 + ({detected_set}-1)×10 = {municipality_code}")
+            else:
+                self._log_debug(f"東京都（セット1）は市町村書類なし")
         
         self._log_debug(f"テキスト自治体認識結果: 都道府県={prefecture_code}, 市町村={municipality_code}")
         return prefecture_code, municipality_code
@@ -1150,11 +1474,331 @@ class DocumentClassifierV5:
                 )
         
         return None
+    
+    # ===== v5.2 Bundle PDF Support Methods =====
+    
+    def detect_page_doc_code(self, text: str, prefer_bundle: Optional[str] = None) -> Optional[str]:
+        """
+        ページ内コード推定 (v5.2 Bundle PDF Support)
+        単一ページのテキストから書類コードを推定
+        
+        Args:
+            text: ページのテキスト内容
+            prefer_bundle: バンドル種別のヒント ("local", "national", None)
+            
+        Returns:
+            str|None: 推定された書類コード (例: "0003", "1003") またはNone
+        """
+        if not text:
+            return None
+        
+        # 強力パターン（優先）: 直接的なコードマッチング
+        strong_pattern = re.compile(r'\b(0003|0004|3003|3004|1003|1013|1023|1004|2003|2013|2023|2004)\b')
+        strong_match = strong_pattern.search(text)
+        if strong_match:
+            code = strong_match.group(1)
+            self._log_debug(f"Strong code pattern detected: {code}")
+            return code
+        
+        # 補助パターン: キーワード組み合わせ判定
+        is_receipt = any(kw in text for kw in ["受信通知", "申告受付完了通知", "申告受付完了", "受付完了通知"])
+        is_payment = any(kw in text for kw in ["納付情報", "納付区分番号通知", "納付書", "納付情報発行結果"])
+        
+        # 税目別キーワード
+        has_corporation_tax = any(kw in text for kw in ["法人税", "内国法人", "法人税及び地方法人税"])
+        has_consumption_tax = any(kw in text for kw in ["消費税", "地方消費税", "消費税及び地方消費税"])
+        has_prefecture = any(kw in text for kw in ["都道府県", "県税事務所", "都税事務所", "法人事業税", "特別法人事業税"])
+        has_municipality = any(kw in text for kw in ["市町村", "市役所", "法人市民税", "市町村民税"])
+        
+        # 自治体特定キーワード
+        has_specific_local = any(kw in text for kw in ["東京都", "愛知県", "福岡県", "蒲郡市", "福岡市"])
+        
+        # 国税系の判定
+        if is_receipt and has_corporation_tax:
+            self._log_debug("Receipt + Corporation tax detected -> 0003")
+            return "0003"
+        elif is_payment and has_corporation_tax:
+            self._log_debug("Payment + Corporation tax detected -> 0004")  
+            return "0004"
+        elif is_receipt and has_consumption_tax:
+            self._log_debug("Receipt + Consumption tax detected -> 3003")
+            return "3003"
+        elif is_payment and has_consumption_tax:
+            self._log_debug("Payment + Consumption tax detected -> 3004")
+            return "3004"
+        
+        # 地方税系の判定
+        elif is_receipt and (has_prefecture or has_specific_local):
+            # 都道府県受信通知は連番対応が必要なため基本コードを返す
+            self._log_debug("Receipt + Prefecture detected -> 1003 (base code)")
+            return "1003"  # 後続で連番補正される
+        elif is_payment and (has_prefecture or has_specific_local):
+            self._log_debug("Payment + Prefecture detected -> 1004")
+            return "1004"
+        elif is_receipt and has_municipality:
+            # 市町村受信通知も連番対応が必要
+            self._log_debug("Receipt + Municipality detected -> 2003 (base code)")
+            return "2003"  # 後続で連番補正される
+        elif is_payment and has_municipality:
+            self._log_debug("Payment + Municipality detected -> 2004")
+            return "2004"
+        
+        # prefer_bundleに基づくヒューリスティック判定
+        if prefer_bundle == "national":
+            if is_receipt:
+                self._log_debug(f"National bundle heuristic: receipt -> 0003 (prefer)")
+                return "0003"  # 法人税を優先
+            elif is_payment:
+                self._log_debug(f"National bundle heuristic: payment -> 0004 (prefer)")
+                return "0004"  # 法人税を優先
+        elif prefer_bundle == "local":
+            if is_receipt:
+                self._log_debug(f"Local bundle heuristic: receipt -> 1003 (prefer)")
+                return "1003"  # 都道府県を優先
+            elif is_payment:
+                # 地方税の納付情報は都道府県・市町村で分かれるため、より慎重に判定
+                if has_prefecture or not has_municipality:
+                    self._log_debug(f"Local bundle heuristic: payment -> 1004 (prefer prefecture)")
+                    return "1004"
+                else:
+                    self._log_debug(f"Local bundle heuristic: payment -> 2004 (prefer municipality)")
+                    return "2004"
+        
+        # 判定できない場合
+        self._log_debug("No code pattern detected")
+        return None
+
+    def export_keyword_dictionary(self) -> str:
+        """
+        分類ルール辞書をJSONファイルとしてデスクトップにエクスポートする
+        
+        Returns:
+            str: 保存されたファイルのフルパス
+        """
+        # 現在日時でファイル名を生成
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"keyword_dictionary_{timestamp}.json"
+        
+        # デスクトップパスを取得
+        desktop_path = Path.home() / "Desktop"
+        file_path = desktop_path / filename
+        
+        # 辞書データを準備
+        export_data = {
+            "export_info": {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "version": "DocumentClassifierV5",
+                "total_rules": len(self.classification_rules_v5),
+                "description": "書類分類エンジン v5.0 - 分類ルール辞書"
+            },
+            "classification_rules": {}
+        }
+        
+        # 各分類ルールを整理してエクスポート
+        for doc_type, rules in self.classification_rules_v5.items():
+            export_data["classification_rules"][doc_type] = {
+                "priority": rules.get("priority", 0),
+                "highest_priority_conditions": [],
+                "exact_keywords": rules.get("exact_keywords", []),
+                "partial_keywords": rules.get("partial_keywords", []),
+                "exclude_keywords": rules.get("exclude_keywords", []),
+                "filename_keywords": rules.get("filename_keywords", [])
+            }
+            
+            # AND条件を文字列リストに変換
+            for condition in rules.get("highest_priority_conditions", []):
+                condition_dict = {
+                    "keywords": condition.keywords,
+                    "match_type": condition.match_type
+                }
+                export_data["classification_rules"][doc_type]["highest_priority_conditions"].append(condition_dict)
+        
+        # JSONファイルとして保存（読みやすい形式で）
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2, sort_keys=True)
+            
+            # ログ出力
+            self._log(f"分類ルール辞書をエクスポートしました: {file_path}")
+            return str(file_path)
+            
+        except Exception as e:
+            error_msg = f"エクスポート中にエラーが発生しました: {str(e)}"
+            self._log(error_msg, "ERROR")
+            raise Exception(error_msg)
+
+    def export_keyword_dictionary_markdown(self) -> str:
+        """
+        分類ルール辞書を大学生にも分かりやすいMarkdownファイルとしてデスクトップにエクスポートする
+        日本語と絵文字を使ってフレンドリーな形式で出力
+        
+        Returns:
+            str: 保存されたファイルのフルパス
+        """
+        # 現在日時でファイル名を生成
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"キーワード辞書_{timestamp}.md"
+        
+        # デスクトップパスを取得
+        desktop_path = Path.home() / "Desktop"
+        file_path = desktop_path / filename
+        
+        # Markdownコンテンツを生成
+        try:
+            markdown_content = self._generate_markdown_content()
+            
+            # ファイルに保存
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            
+            # ログ出力
+            self._log(f"Markdown形式の分類ルール辞書をエクスポートしました: {file_path}")
+            return str(file_path)
+            
+        except Exception as e:
+            error_msg = f"Markdownエクスポート中にエラーが発生しました: {str(e)}"
+            self._log(error_msg, "ERROR")
+            raise Exception(error_msg)
+    
+    def _generate_markdown_content(self) -> str:
+        """Markdownコンテンツを生成する"""
+        # 書類分類の概要
+        content = []
+        content.append("# 📋 税務書類分類システム キーワード辞書\n")
+        content.append(f"**作成日時**: {datetime.datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}\n")
+        content.append(f"**システム版本**: DocumentClassifierV5\n")
+        content.append(f"**分類ルール総数**: {len(self.classification_rules_v5)}件\n\n")
+        
+        # システムの仕組み説明
+        content.append("## 🎓 システムの仕組み（大学生向け解説）\n")
+        content.append("### 📚 基本的な動作原理\n")
+        content.append("このシステムは、PDFから抽出されたテキストやファイル名を分析して、どの種類の税務書類かを自動判定します。\n")
+        content.append("判定は以下の3つのステップで行われます：\n\n")
+        
+        content.append("1. **🔍 キーワード検索**: 文書内で特定のキーワードを探します\n")
+        content.append("2. **⭐ スコア計算**: 見つかったキーワードの重要度に基づいてスコアを計算します\n")
+        content.append("3. **🏆 最終判定**: 最も高いスコアの書類種別を選択します\n\n")
+        
+        content.append("### 📊 優先度システム\n")
+        content.append("各書類には優先度（Priority）が設定されており、数値が大きいほど優先されます：\n")
+        content.append("- **200**: 最高優先度（確実に判定したい重要書類）\n")
+        content.append("- **180**: 高優先度\n")
+        content.append("- **150-140**: 中優先度\n")
+        content.append("- **135-130**: 標準優先度\n\n")
+        
+        content.append("### 🎯 キーワードの種類\n")
+        content.append("- **完全一致キーワード**: 文書に完全に一致する語句（高スコア）\n")
+        content.append("- **部分一致キーワード**: 文書に含まれていればOKの語句（中スコア）\n")
+        content.append("- **除外キーワード**: これがあると判定を除外する語句\n")
+        content.append("- **ファイル名キーワード**: ファイル名でのみチェックする語句（重要度高）\n")
+        content.append("- **AND条件**: 複数のキーワードが同時に必要な条件\n\n")
+        
+        # 番台別の分類
+        content.append("## 📂 書類分類一覧\n")
+        
+        # 番台ごとにグループ化
+        categories = {
+            "0000": {"name": "🏛️ 国税申告書類", "items": []},
+            "1000": {"name": "🏢 都道府県税関連", "items": []},
+            "2000": {"name": "🏢 市町村税関連", "items": []},
+            "3000": {"name": "💰 消費税関連", "items": []},
+            "5000": {"name": "📊 会計書類", "items": []},
+            "6000": {"name": "🏗️ 固定資産関連", "items": []},
+            "7000": {"name": "📋 税区分関連", "items": []}
+        }
+        
+        # 各ルールを適切なカテゴリに振り分け
+        for doc_type, rules in self.classification_rules_v5.items():
+            # 千の位で分類（0001 → 0000, 1003 → 1000, 2001 → 2000, など）
+            first_digit = doc_type[0]
+            category_code = f"{first_digit}000"
+            if category_code in categories:
+                categories[category_code]["items"].append((doc_type, rules))
+        
+        # カテゴリごとにMarkdownを生成
+        for category_code, category_info in categories.items():
+            if category_info["items"]:
+                content.append(f"### {category_info['name']}\n")
+                
+                # 優先度順にソート
+                sorted_items = sorted(category_info["items"], 
+                                    key=lambda x: x[1].get("priority", 0), reverse=True)
+                
+                for doc_type, rules in sorted_items:
+                    content.append(self._format_document_type(doc_type, rules))
+        
+        content.append("\n## 🤖 システム情報\n")
+        content.append(f"- **エンジン版本**: DocumentClassifierV5\n")
+        content.append(f"- **最終更新**: {datetime.datetime.now().strftime('%Y年%m月%d日')}\n")
+        content.append(f"- **総分類数**: {len(self.classification_rules_v5)}種類\n")
+        content.append("\n---\n")
+        content.append("*この辞書は税務書類分類システムによって自動生成されました 📝*\n")
+        
+        return "".join(content)
+    
+    def _format_document_type(self, doc_type: str, rules: Dict) -> str:
+        """個別の書類種別をMarkdown形式でフォーマットする"""
+        content = []
+        
+        # タイトル
+        clean_name = doc_type.replace("_", " ").replace("0001", "").replace("0002", "").replace("0003", "").replace("0004", "")
+        priority = rules.get("priority", 0)
+        
+        # 優先度に応じて絵文字を設定
+        priority_emoji = "🔥" if priority >= 200 else "⭐" if priority >= 180 else "🌟" if priority >= 150 else "💫"
+        
+        content.append(f"#### {priority_emoji} {clean_name}\n")
+        content.append(f"**優先度**: {priority} | **分類コード**: `{doc_type}`\n\n")
+        
+        # AND条件（最優先条件）
+        highest_priority_conditions = rules.get("highest_priority_conditions", [])
+        if highest_priority_conditions:
+            content.append("**🎯 最優先AND条件** (これらがあると確実に判定)\n")
+            for i, condition in enumerate(highest_priority_conditions, 1):
+                match_type_text = "すべて必要" if condition.match_type == "all" else "いずれか必要"
+                keywords_text = " + ".join([f"`{kw}`" for kw in condition.keywords])
+                content.append(f"{i}. {keywords_text} ({match_type_text})\n")
+            content.append("\n")
+        
+        # 完全一致キーワード
+        exact_keywords = rules.get("exact_keywords", [])
+        if exact_keywords:
+            content.append("**✅ 完全一致キーワード** (高スコア)\n")
+            for keyword in exact_keywords:
+                content.append(f"- `{keyword}`\n")
+            content.append("\n")
+        
+        # 部分一致キーワード
+        partial_keywords = rules.get("partial_keywords", [])
+        if partial_keywords:
+            content.append("**🔍 部分一致キーワード** (中スコア)\n")
+            for keyword in partial_keywords:
+                content.append(f"- `{keyword}`\n")
+            content.append("\n")
+        
+        # ファイル名キーワード
+        filename_keywords = rules.get("filename_keywords", [])
+        if filename_keywords:
+            content.append("**📁 ファイル名専用キーワード** (重要度高)\n")
+            for keyword in filename_keywords:
+                content.append(f"- `{keyword}`\n")
+            content.append("\n")
+        
+        # 除外キーワード
+        exclude_keywords = rules.get("exclude_keywords", [])
+        if exclude_keywords:
+            content.append("**❌ 除外キーワード** (これがあると判定除外)\n")
+            for keyword in exclude_keywords:
+                content.append(f"- `{keyword}`\n")
+            content.append("\n")
+        
+        content.append("---\n\n")
+        return "".join(content)
 
 if __name__ == "__main__":
     # テスト用
     classifier = DocumentClassifierV5(debug_mode=True)
-    print("書類分類エンジン v5.0 初期化完了")
+    print("書類分類エンジン v5.2 初期化完了")
     
     # テストケース
     test_cases = [

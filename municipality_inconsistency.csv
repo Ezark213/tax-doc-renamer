@@ -1,0 +1,4 @@
+filename,extracted_pref,extracted_city,resolved_pref,resolved_city,reason
+test_aichi_pref_no_tokyo.pdf,愛知県,,福岡県,,都道府県名の不一致
+test_gamagori_no_tokyo.pdf,愛知県,蒲郡市,福岡県,福岡市,都道府県名の不一致
+test_gamagori_no_tokyo.pdf,愛知県,蒲郡市,福岡県,福岡市,市町村名の不一致
