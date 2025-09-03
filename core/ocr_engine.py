@@ -232,6 +232,31 @@ class OCREngine:
         
         return True
 
+    def extract_text(self, pdf_path: str) -> str:
+        """
+        v5.3互換: PDFからテキストを抽出
+        """
+        try:
+            doc = fitz.open(pdf_path)
+            if doc.page_count == 0:
+                return ""
+            
+            # 最初のページのみ処理
+            page = doc[0]
+            text = page.get_text()
+            doc.close()
+            
+            return text or ""
+        except Exception as e:
+            print(f"[OCR] extract_text error: {e}")
+            return ""
+    
+    def extract_text_from_pdf(self, pdf_path: str) -> str:
+        """
+        旧API互換: extract_textの別名
+        """
+        return self.extract_text(pdf_path)
+
 class MunicipalityMatcher:
     """自治体名と手動入力セットのマッチング処理"""
     

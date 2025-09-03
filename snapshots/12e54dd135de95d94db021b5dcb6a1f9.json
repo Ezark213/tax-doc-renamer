@@ -1,0 +1,21 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧/納税一覧 (1).pdf",
+  "source_doc_md5": "12e54dd135de95d94db021b5dcb6a1f9",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "都道府県",
+      "tax_kind": "国税",
+      "period_yyyymm": null,
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 1166,
+        "has_date": false
+      }
+    }
+  ],
+  "created_at": "2025-09-03T10:04:21.149338",
+  "version": "5.3"
+}

@@ -8,7 +8,7 @@ import re
 import logging
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Callable, Union
+from typing import Dict, List, Optional, Tuple, Callable, Union, Any
 from dataclasses import dataclass, field
 import datetime
 from pathlib import Path
@@ -50,6 +50,8 @@ class ClassificationResult:
     classification_method: str
     debug_steps: List[ClassificationStep] = field(default_factory=list)
     processing_log: List[str] = field(default_factory=list)
+    original_doc_type_code: Optional[str] = None  # 元の分類コード（自治体適用前）
+    meta: Dict[str, Any] = field(default_factory=dict)  # メタデータ（no_split等）
 
 class DocumentClassifierV5:
     """書類分類エンジン v5.0 - AND条件対応版"""
@@ -408,14 +410,17 @@ class DocumentClassifierV5:
             },
             
             "6002_一括償却資産明細表": {
-                "priority": 140,  # 最高優先度
+                "priority": 100,  # 最高優先度（100に変更）
                 "highest_priority_conditions": [
-                    AndCondition(["一括償却資産明細表"], "any")
+                    AndCondition(["一括償却資産明細表"], "any"),
+                    AndCondition(["一括償却"], "any"),
+                    AndCondition(["償却資産明細"], "any")
                 ],
                 "exact_keywords": ["一括償却資産明細表"],
-                "partial_keywords": ["一括償却", "償却資産明細"],
+                "partial_keywords": ["一括償却", "償却資産明細", "一括償却資産", "償却明細"],
                 "exclude_keywords": ["少額"],
-                "filename_keywords": ["一括償却資産明細表", "一括償却"]
+                "filename_keywords": ["一括償却資産明細表", "一括償却", "償却資産明細"],
+                "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
             
             "6003_少額減価償却資産明細表": {
@@ -426,7 +431,8 @@ class DocumentClassifierV5:
                 "exact_keywords": ["少額減価償却資産明細表"],
                 "partial_keywords": ["少額減価償却", "少額償却"],
                 "exclude_keywords": ["一括"],
-                "filename_keywords": ["少額減価償却資産明細表", "少額"]
+                "filename_keywords": ["少額減価償却資産明細表", "少額"],
+                "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
             
             # ===== 7000番台 - 税区分関連（修正版） =====
@@ -498,14 +504,24 @@ class DocumentClassifierV5:
                     self._log_debug(f"マッチしたキーワード: {matched_keywords}")
                     self._log_debug(f"マッチタイプ: {condition.match_type}")
                     
-                    return ClassificationResult(
+                    # メタデータの取得
+                    meta_data = rules.get("meta", {})
+                    
+                    result = ClassificationResult(
                         document_type=doc_type,
                         confidence=1.0,  # 最優先なので信頼度100%
                         matched_keywords=matched_keywords,
                         classification_method="highest_priority_and_condition",
                         debug_steps=[],
-                        processing_log=self.processing_log.copy()
+                        processing_log=self.processing_log.copy(),
+                        meta=meta_data
                     )
+                    
+                    # 6002/6003の場合、層C四重ロック警告
+                    if doc_type.startswith(('6002_', '6003_')):
+                        self._log(f"[6002/6003 Lock C] Asset document detected: {doc_type}")
+                    
+                    return result
         
         self._log_debug("最優先AND条件マッチなし - 通常分類処理に移行")
         return None
@@ -630,14 +646,19 @@ class DocumentClassifierV5:
             best_method = "default_fallback"
             self._log(f"信頼度不足により未分類に変更")
         
-        return ClassificationResult(
+        result = ClassificationResult(
             document_type=best_match,
             confidence=confidence,
             matched_keywords=best_keywords,
             classification_method=best_method,
             debug_steps=debug_steps,
-            processing_log=self.processing_log.copy()
+            processing_log=self.processing_log.copy(),
+            original_doc_type_code=best_match  # 元の分類コードを保存
         )
+        
+        # no_split メタデータを設定（資産・帳票系）
+        self._set_no_split_metadata(result)
+        return result
 
     def _preprocess_text(self, text: str) -> str:
         """テキストの前処理"""
@@ -733,6 +754,10 @@ class DocumentClassifierV5:
         # 正規化処理でラベル解決（必ず実行）
         if municipality_sets:
             print(f"[DEBUG] 正規化処理開始: municipality_sets={municipality_sets}")
+            # 元の分類コードを保存（自治体適用前）
+            if base_result.original_doc_type_code is None:
+                base_result.original_doc_type_code = base_result.document_type
+            
             code, final_label, resolved_set_id = self.normalize_classification(
                 text, filename, base_result.document_type, municipality_sets
             )
@@ -744,6 +769,10 @@ class DocumentClassifierV5:
             print(f"[DEBUG] 従来処理実行: municipality_sets={municipality_sets}")
             # セット設定がない場合は従来処理
             self.current_municipality_sets = municipality_sets or {}
+            # 元の分類コードを保存（自治体適用前）
+            if base_result.original_doc_type_code is None:
+                base_result.original_doc_type_code = base_result.document_type
+                
             final_code = self._apply_municipality_numbering(
                 base_result.document_type, 
                 prefecture_code, 
@@ -845,6 +874,9 @@ class DocumentClassifierV5:
         for set_id, info in set_settings.items():
             if info.get("prefecture") == "東京都":
                 tokyo_set_id = set_id
+                # 東京都は必ずセット1でなければならない
+                if set_id != 1:
+                    raise ValueError(f"東京都は必ずセット1に入力してください。現在の位置: セット{set_id}")
                 # 東京都にcityが設定されている場合はエラー
                 if info.get("city", "").strip():
                     raise ValueError(f"東京都（セット{set_id}）にcityが設定されています: {info.get('city')}")
@@ -887,6 +919,73 @@ class DocumentClassifierV5:
             2041: 5   # 5番目の市町村
         }
         return code_to_order.get(municipality_code, 1)
+
+    def _get_prefecture_name(self, prefecture_code: int) -> str:
+        """都道府県コードから実際の都道府県名を取得"""
+        # セット設定から都道府県名を取得
+        if hasattr(self, 'current_municipality_sets') and self.current_municipality_sets:
+            # prefecture_codeから逆算してセット番号を取得
+            set_id = self._get_set_id_from_prefecture_code(prefecture_code)
+            if set_id and set_id in self.current_municipality_sets:
+                return self.current_municipality_sets[set_id].get('prefecture', '都道府県')
+        
+        # フォールバック: コードから推測
+        code_to_name = {
+            1001: '東京都',
+            1011: '愛知県', 
+            1021: '福岡県',
+            1031: '大阪府',
+            1041: '神奈川県'
+        }
+        return code_to_name.get(prefecture_code, '都道府県')
+
+    def _get_municipality_name(self, municipality_code: int) -> str:
+        """市町村コードから実際の市町村名を取得"""
+        # セット設定から市町村名を取得
+        if hasattr(self, 'current_municipality_sets') and self.current_municipality_sets:
+            # municipality_codeから逆算してセット番号を取得
+            set_id = self._get_set_id_from_municipality_code(municipality_code)
+            if set_id and set_id in self.current_municipality_sets:
+                pref = self.current_municipality_sets[set_id].get('prefecture', '')
+                city = self.current_municipality_sets[set_id].get('city', '')
+                if pref and city:
+                    return f"{pref}{city}"
+                elif pref:
+                    return pref
+        
+        # フォールバック: コードから推測
+        code_to_name = {
+            2001: '愛知県蒲郡市',
+            2011: '福岡県福岡市',
+            2021: '大阪市',
+            2031: '横浜市',
+            2041: '名古屋市'
+        }
+        return code_to_name.get(municipality_code, '市町村')
+
+    def _get_set_id_from_prefecture_code(self, prefecture_code: int) -> Optional[int]:
+        """都道府県コードからセット番号を取得"""
+        # 1001, 1011, 1021, 1031, 1041 -> 1, 2, 3, 4, 5
+        if prefecture_code >= 1001 and prefecture_code <= 1041 and (prefecture_code - 1001) % 10 == 0:
+            return ((prefecture_code - 1001) // 10) + 1
+        return None
+
+    def _get_set_id_from_municipality_code(self, municipality_code: int) -> Optional[int]:
+        """市町村コードからセット番号を取得"""
+        # 2001, 2011, 2021, 2031, 2041 -> セット番号を決定
+        # 注意: 市町村コードは東京都を除いた順序なので、実際のセット番号は+1が必要な場合がある
+        if municipality_code >= 2001 and municipality_code <= 2041 and (municipality_code - 2001) % 10 == 0:
+            # 市町村は東京都を除いた順序なので、実際にどのセットかを特定するためには
+            # current_municipality_setsを確認する必要があります
+            if hasattr(self, 'current_municipality_sets') and self.current_municipality_sets:
+                city_sets = [(set_id, info) for set_id, info in self.current_municipality_sets.items() 
+                            if info.get('city', '').strip()]
+                city_sets.sort(key=lambda x: x[0])  # セット番号順
+                
+                order = ((municipality_code - 2001) // 10) + 1
+                if order <= len(city_sets):
+                    return city_sets[order - 1][0]
+        return None
 
     def _resolve_document_label_stateless(self, document_type: str, extracted_text: str, 
                                          filename: str, set_settings: Dict[int, Dict[str, str]]) -> str:
@@ -1794,6 +1893,38 @@ class DocumentClassifierV5:
         
         content.append("---\n\n")
         return "".join(content)
+    
+    def _set_no_split_metadata(self, result: ClassificationResult) -> None:
+        """分類結果にno_splitメタデータを設定（資産・帳票系）"""
+        # 資産・帳票系のコードチェック
+        document_code = result.document_type.split('_')[0] if '_' in result.document_type else result.document_type
+        
+        no_split_codes = {
+            "6001", "6002", "6003",  # 資産系
+            "5001", "5002", "5003", "5004"  # 帳票系
+        }
+        
+        if document_code in no_split_codes:
+            result.meta["no_split"] = True
+            self._log(f"[meta] no_split=True set for document_type: {result.document_type}")
+        else:
+            result.meta["no_split"] = False
+    
+    def _create_classification_result(self, document_type: str, confidence: float, matched_keywords: List[str],
+                                    classification_method: str, debug_steps: List[ClassificationStep] = None,
+                                    processing_log: List[str] = None, original_doc_type_code: str = None) -> ClassificationResult:
+        """ClassificationResult作成のヘルパーメソッド（no_splitメタデータ自動設定）"""
+        result = ClassificationResult(
+            document_type=document_type,
+            confidence=confidence,
+            matched_keywords=matched_keywords,
+            classification_method=classification_method,
+            debug_steps=debug_steps or [],
+            processing_log=processing_log or self.processing_log.copy(),
+            original_doc_type_code=original_doc_type_code or document_type
+        )
+        self._set_no_split_metadata(result)
+        return result
 
 if __name__ == "__main__":
     # テスト用

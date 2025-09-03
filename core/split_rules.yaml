@@ -1,0 +1,147 @@
+# 税務書類分割・統合ルール設定 v5.3
+# 決定論的独立化システム用設定
+
+# グローバル除外ルール（分割を禁止する書類）
+global_excludes:
+  title_keywords:
+    - "一括償却資産明細表"
+    - "少額減価償却資産明細表"
+    - "固定資産台帳"
+    - "総勘定元帳"
+    - "仕訳帳"
+    - "試算表"
+  
+  code_patterns:
+    - "6002"  # 一括償却資産明細表
+    - "6003"  # 少額減価償却資産明細表
+    - "6001"  # 固定資産台帳
+    - "5001"  # 総勘定元帳
+    - "5002"  # 仕訳帳等
+    - "5004"  # 試算表
+
+# 分割禁止条件（コード別）
+no_split_when_codes:
+  - "6002"  # 一括償却資産明細表
+  - "6003"  # 少額減価償却資産明細表
+  - "6001"  # 固定資産台帳
+  - "5001"  # 総勘定元帳
+  - "5002"  # 仕訳帳等
+  - "5004"  # 試算表
+
+# 強制分割時の再結合対象
+rejoin_on_codes:
+  - "6002"  # 一括償却資産明細表
+  - "6003"  # 少額減価償却資産明細表
+
+# Bundle検出ルール
+bundle_detection:
+  # 受信通知・納付情報混在パターン
+  mixed_patterns:
+    - keywords: ["受信通知", "納付情報"]
+      min_pages: 2
+      description: "受信通知と納付情報が混在"
+    
+    - keywords: ["申告書", "受信通知"]
+      min_pages: 2
+      description: "申告書と受信通知が混在"
+  
+  # ページ数による判定
+  page_threshold:
+    min_bundle_pages: 3
+    max_single_doc_pages: 50
+
+# OCR正規化設定
+ocr_normalization:
+  enable: true
+  
+  # 全角→半角変換
+  char_normalize:
+    numbers: true      # ０１２３→0123
+    alphabet: true     # ａｂｃ→abc
+    symbols: false     # 記号は変換しない
+  
+  # 空白・改行処理
+  whitespace:
+    normalize_spaces: true    # 連続空白を単一空白に
+    remove_tabs: true         # タブ文字除去
+    remove_line_breaks: false # 改行は保持（構造維持）
+  
+  # 特殊文字除去
+  special_chars:
+    remove_list: ["・", "\r", "\t"]
+    preserve_punctuation: true
+
+# ログ設定
+logging:
+  bundle_decisions: true
+  exclusion_reasons: true
+  split_results: true
+  rename_decisions: true
+  
+  # ログレベル別出力
+  levels:
+    info: 
+      - "bundle detection"
+      - "split decisions"
+      - "exclusion reasons"
+    debug:
+      - "ocr normalization"
+      - "fingerprint calculation"
+      - "snapshot usage"
+
+# 決定論的処理設定
+deterministic:
+  # スナップショット保存期間（日数）
+  snapshot_retention_days: 30
+  
+  # 重複ファイル名解決
+  duplicate_resolution:
+    method: "deterministic_suffix"  # page_index または short_hash
+    suffix_format: "_{index:03d}"   # _001, _002, ...
+  
+  # 連番計算設定
+  serial_calculation:
+    base_increment: 10              # 基本増分（1001→1011→1021）
+    max_municipalities: 5           # 最大自治体数
+    tokyo_special_rule: true        # 東京都特例（市町村なし）
+
+# テスト設定
+testing:
+  enable_regression_tests: true
+  
+  # テスト対象
+  test_scenarios:
+    - name: "bundle_exclusion"
+      description: "6002/6003の分割除外"
+      input_patterns: ["*償却*.pdf", "*少額*.pdf"]
+    
+    - name: "split_independence"
+      description: "分割有無に関係ない命名"
+      input_patterns: ["*地方税*.pdf", "*bundle*.pdf"]
+    
+    - name: "suffix_removal"
+      description: "サフィックス除去確認"
+      expected_absent: ["_市町村_", "_都道府県_"]
+
+# エラーハンドリング
+error_handling:
+  # スナップショット読み込み失敗時
+  snapshot_load_failure: "regenerate"  # regenerate または skip
+  
+  # OCR失敗時
+  ocr_failure: "fallback_to_filename"   # fallback_to_filename または error
+  
+  # 分類失敗時
+  classification_failure: "use_9999"    # use_9999 または error
+
+# パフォーマンス設定
+performance:
+  # 並列処理
+  enable_parallel: false    # 決定論的処理のため無効
+  
+  # キャッシュ
+  enable_caching: true
+  cache_ttl_hours: 24
+  
+  # OCRスキャン制限
+  max_scan_pages_per_pdf: 100

@@ -1,0 +1,21 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧/税区分集計表_20250720_1540.pdf",
+  "source_doc_md5": "f6cde44257c46bc06014e7b9f79d04c4",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 480,
+        "has_date": false
+      }
+    }
+  ],
+  "created_at": "2025-09-03T10:04:17.643241",
+  "version": "5.3"
+}
