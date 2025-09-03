@@ -42,7 +42,7 @@ class BundleDetectionResult:
 
 # v5.2 Bundle detection constants
 BUNDLE_SCAN_PAGES = 10
-LOCAL_CODES = {"1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"}
+LOCAL_CODES = {"1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"}  # 6002, 6003除外
 NATIONAL_NOTICE = {"0003", "3003"}
 NATIONAL_PAYMENT = {"0004", "3004"}
 
@@ -105,6 +105,7 @@ class PDFProcessor:
                     "receipt_notifications": ["0003", "3003"],
                     "payment_info": ["0004", "3004"]
                 }
+                # 注: 6002と6003は分割対象から除外（個別ファイル処理のみ）
             },
             "keywords": {
                 "receipt_notification": ["受信通知", "申告受付完了通知", "受信結果"],
@@ -772,7 +773,7 @@ class PDFProcessor:
         
         try:
             classifier = DocumentClassifierV5(debug_mode=False)
-            local_target_codes = ["1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"]  # 地方税対象コード
+            local_target_codes = ["1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"]  # 地方税対象コード (6002, 6003除外)
             detected_pages = []
             
             debug_info.append(f"OCR-based local bundle detection started for {len(texts)} pages")
@@ -785,6 +786,16 @@ class PDFProcessor:
                 # ページごとの書類コード推定
                 detected_code = classifier.detect_page_doc_code(page_text, prefer_bundle="local")
                 
+                # 6002と6003は明示的に分割対象から除外
+                if detected_code in ["6002", "6003"]:
+                    debug_info.append(f"Page {i+1}: excluded from split (code: {detected_code} - 個別ファイル扱い)")
+                    continue
+                    
+                # 6002/6003関連キーワードも除外
+                if any(keyword in page_text for keyword in ["一括償却資産", "少額減価償却", "償却資産明細"]):
+                    debug_info.append(f"Page {i+1}: excluded from split (6002/6003 related content)")
+                    continue
+                    
                 if detected_code in local_target_codes:
                     detected_pages.append((i+1, detected_code))
                     matched_elements["codes"].append(f"Page{i+1}:{detected_code}")
@@ -820,7 +831,7 @@ class PDFProcessor:
         
         try:
             classifier = DocumentClassifierV5(debug_mode=False)
-            national_target_codes = ["0003", "3003", "0004", "3004"]  # 国税対象コード
+            national_target_codes = ["0003", "3003", "0004", "3004"]  # 国税対象コード (6002, 6003除外)
             detected_pages = []
             
             debug_info.append(f"OCR-based national bundle detection started for {len(texts)} pages")
@@ -833,6 +844,16 @@ class PDFProcessor:
                 # ページごとの書類コード推定
                 detected_code = classifier.detect_page_doc_code(page_text, prefer_bundle="national")
                 
+                # 6002と6003は明示的に分割対象から除外
+                if detected_code in ["6002", "6003"]:
+                    debug_info.append(f"Page {i+1}: excluded from split (code: {detected_code} - 個別ファイル扱い)")
+                    continue
+                    
+                # 6002/6003関連キーワードも除外
+                if any(keyword in page_text for keyword in ["一括償却資産", "少額減価償却", "償却資産明細"]):
+                    debug_info.append(f"Page {i+1}: excluded from split (6002/6003 related content)")
+                    continue
+                    
                 if detected_code in national_target_codes:
                     detected_pages.append((i+1, detected_code))
                     matched_elements["codes"].append(f"Page{i+1}:{detected_code}")
@@ -917,10 +938,17 @@ class PDFProcessor:
                 except Exception as e:
                     self.logger.debug(f"[split] Page {i:03d}: classification hint failed - {e}")
                 
+                # v5.3.3 Split Context Isolation
+                self.logger.info(f"[SPLIT] reset context for {os.path.basename(temp_path)}")
+                
                 # Call processing callback if provided (integrates with existing pipeline)
                 if processing_callback:
                     try:
-                        processing_callback(temp_path, i, bundle_type)
+                        # コールバックに分割文脈隔離フラグを渡す
+                        if hasattr(processing_callback, '__code__') and 'reset_context' in processing_callback.__code__.co_varnames:
+                            processing_callback(temp_path, i, bundle_type, reset_context=True)
+                        else:
+                            processing_callback(temp_path, i, bundle_type)
                     except Exception as e:
                         self.logger.error(f"[split] Processing callback error for page {i}: {e}")
             

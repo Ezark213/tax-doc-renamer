@@ -1104,6 +1104,29 @@ class DocumentClassifierV5:
         """v5.1テンプレートIDを正規化して最終ラベルを生成"""
         print(f"[INFO] 正規化処理開始: template_id={template_id}")
         
+        # v5.3.3 Overlay Gate: ドメイン制御
+        try:
+            from helpers.domain import code_domain, is_overlay_allowed
+        except ImportError:
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+            from helpers.domain import code_domain, is_overlay_allowed
+        
+        # テンプレートIDから書類コードを抽出
+        code_part = template_id.split('_')[0] if '_' in template_id else template_id
+        domain = code_domain(code_part)
+        overlay_allowed = is_overlay_allowed(code_part)
+        
+        print(f"[OVERLAY] code={code_part}, domain={domain}, overlay_allowed={overlay_allowed}")
+        
+        # オーバーレイ禁止ドメインの場合、そのまま返す
+        if not overlay_allowed:
+            print(f"[OVERLAY] SKIP - domain {domain} overlay prohibited for code {code_part}")
+            return 0, template_id, 0  # 上書きなし
+        
+        print(f"[OVERLAY] APPLY - LOCAL_TAX domain detected, applying jurisdiction overlay")
+        
         try:
             # 1. 連番マップを構築
             pref_order_map, city_order_map = self.build_order_maps(set_settings)
@@ -1415,6 +1438,10 @@ class DocumentClassifierV5:
                     processing_log=self.processing_log.copy()
                 )
             elif "都道府県" in combined_text or "県税事務所" in combined_text or "都税事務所" in combined_text:
+                print(f"[PAYMENT_DEBUG] filename: {filename}")
+                print(f"[PAYMENT_DEBUG] detected_code: 1004_納付情報")
+                print(f"[PAYMENT_DEBUG] return_value: 1004_納付情報")
+                print(f"[PAYMENT_DEBUG] text_keywords: 都道府県/県税事務所/都税事務所")
                 return ClassificationResult(
                     document_type="1004_納付情報",
                     confidence=1.0,
@@ -1424,6 +1451,10 @@ class DocumentClassifierV5:
                     processing_log=self.processing_log.copy()
                 )
             elif "市町村" in combined_text or "市役所" in combined_text or "市民税" in combined_text:
+                print(f"[PAYMENT_DEBUG] filename: {filename}")
+                print(f"[PAYMENT_DEBUG] detected_code: 2004_納付情報")
+                print(f"[PAYMENT_DEBUG] return_value: 2004_納付情報")
+                print(f"[PAYMENT_DEBUG] text_keywords: 市町村/市役所/市民税")
                 return ClassificationResult(
                     document_type="2004_納付情報",
                     confidence=1.0,

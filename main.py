@@ -938,7 +938,11 @@ class TaxDocumentRenamerV5:
         if self.auto_split_var.get():
             try:
                 # v5.2 Bundle PDF Auto-Split を使用
-                def processing_callback(temp_path, page_num, bundle_type):
+                def processing_callback(temp_path, page_num, bundle_type, reset_context=False):
+                    # v5.3.3 分割文脈隔離
+                    if reset_context:
+                        self._log(f"[SPLIT] Context reset for {os.path.basename(temp_path)} (page {page_num})")
+                    
                     # 分割されたページを v5.2 分類エンジンで処理
                     self._process_regular_pdf_v5(temp_path, output_folder)
                     self._log(f"Bundle split page processed: {os.path.basename(temp_path)} (page {page_num}, type: {bundle_type})")
@@ -1002,11 +1006,44 @@ class TaxDocumentRenamerV5:
         else:
             self._log("分類に失敗しました")
         
-        # 年月決定
-        year_month = self.year_month_var.get() or self._extract_year_month_from_pdf(text, filename)
-        
-        # 新ファイル名生成
-        new_filename = self._generate_filename(classification_result.document_type, year_month, "pdf")
+        # v5.3.3 統一パイプライン使用
+        try:
+            from helpers.final_label_resolver import finalize_label, log_final_result
+            
+            # DocumentContext模拟对象
+            class MockContext:
+                def __init__(self, gui_yymm):
+                    self.gui_yymm = gui_yymm
+                    self.last_class = None
+                    self.jurisdiction_hint = None
+                    self.selected_set_id = None
+                    self.yymm_source = None
+            
+            # Settings模拟对象  
+            class MockSettings:
+                def __init__(self, gui_yymm):
+                    self.gui_yymm = gui_yymm
+            
+            # 年月取得
+            gui_yymm = self.year_month_var.get()
+            detected_yymm = self._extract_year_month_from_pdf(text, filename) if not gui_yymm else None
+            
+            ctx = MockContext(gui_yymm)
+            settings = MockSettings(gui_yymm)
+            
+            # 統一最終ラベル確定
+            result = finalize_label(classification_result.document_type, ctx, settings, detected_yymm)
+            log_final_result(result, filename)
+            
+            new_filename = result.final_label
+            
+        except Exception as e:
+            self._log(f"[WARN] 統一パイプライン失敗、フォールバック使用: {e}")
+            import traceback
+            traceback.print_exc()  # デバッグ用
+            # フォールバック: 従来方式
+            year_month = self.year_month_var.get() or self._extract_year_month_from_pdf(text, filename)
+            new_filename = self._generate_filename(classification_result.document_type, year_month, "pdf")
         
         # ファイルコピー
         import shutil
