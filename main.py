@@ -19,6 +19,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from core.pdf_processor import PDFProcessor
 from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
+from helpers.settings_context import UIContext, create_ui_context_from_gui, normalize_settings_input
+from helpers.run_config import RunConfig, create_run_config_from_gui
 from core.csv_processor import CSVProcessor
 from core.classification_v5 import DocumentClassifierV5  # v5.1バグ修正版エンジンを使用
 from core.runtime_paths import get_tesseract_executable_path, get_tessdata_dir_path, validate_tesseract_resources
@@ -129,11 +131,42 @@ class TaxDocumentRenamerV5:
         # v5.2 Auto-Split settings
         self.auto_split_settings = {'auto_split_bundles': True, 'debug_mode': False}
         
+        # RunConfig for UI YYMM centralization
+        self.run_config = None  # 一括処理時に作成
+        
         # UI構築
         self._create_ui()
         
         # 自治体セットのデフォルト設定
         self._setup_default_municipalities()
+    
+    def _validate_yymm_input(self, *args):
+        """YYMMの入力値をリアルタイムバリデーション"""
+        try:
+            from helpers.yymm_policy import _normalize_yymm, _validate_yymm
+            
+            current_value = self.year_month_var.get()
+            if not current_value:
+                self.yymm_status_var.set("📋 YYMM入力待ち")
+                self.yymm_status_label.config(foreground='gray')
+                return
+            
+            # 正規化を試行
+            normalized = _normalize_yymm(current_value)
+            if normalized and _validate_yymm(normalized):
+                self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized} (UI強制対応)")
+                self.yymm_status_label.config(foreground='green')
+                
+                # UI強制コードへの対応状況も表示
+                forced_codes = ["6001", "6002", "6003", "0000"]
+                self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized} | UI強制対応({', '.join(forced_codes)})")
+            else:
+                self.yymm_status_var.set(f"⚠️ 無効: {current_value} (例: 2508, 25/08, ２５０８)")
+                self.yymm_status_label.config(foreground='red')
+                
+        except Exception as e:
+            self.yymm_status_var.set(f"❌ エラー: {str(e)}")
+            self.yymm_status_label.config(foreground='red')
 
     def _create_ui(self):
         """UIの構築"""
@@ -237,7 +270,18 @@ class TaxDocumentRenamerV5:
         
         ttk.Label(year_month_frame, text="手動入力年月 (YYMM):").pack(anchor='w')
         self.year_month_var = tk.StringVar(value="2508")  # デフォルト値設定
-        ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10).pack(anchor='w', pady=5)
+        yymm_entry = ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10)
+        yymm_entry.pack(anchor='w', pady=5)
+        
+        # YYMM設定状態表示
+        self.yymm_status_var = tk.StringVar()
+        self.yymm_status_label = ttk.Label(year_month_frame, textvariable=self.yymm_status_var, 
+                                          font=('Arial', 8), foreground='blue')
+        self.yymm_status_label.pack(anchor='w', pady=(0, 5))
+        
+        # YYMMバリデーション設定（リアルタイム更新）
+        self.year_month_var.trace_add('write', self._validate_yymm_input)
+        self._validate_yymm_input()  # 初期バリデーション
         
         # 自治体設定
         municipality_frame = ttk.LabelFrame(right_frame, text="自治体設定")
@@ -544,6 +588,9 @@ class TaxDocumentRenamerV5:
     
     def _start_batch_processing(self):
         """v5.2 一括処理（分割&出力）処理開始"""
+        # v5.3.4 Split reset logging
+        self._log(f"[reset] __split_ 一括処理開始 - 処理状態リセット")
+        
         if not self.files_list:
             messagebox.showwarning("警告", "処理するファイルを選択してください")
             return
@@ -555,6 +602,24 @@ class TaxDocumentRenamerV5:
         # 出力フォルダ選択
         output_folder = filedialog.askdirectory(title="処理済みファイルの出力フォルダを選択")
         if not output_folder:
+            return
+        
+        # RunConfig作成（一括処理用）
+        try:
+            gui_yymm = self.year_month_var.get()
+            self.run_config = create_run_config_from_gui(
+                yymm_var_value=gui_yymm,
+                batch_mode=True,
+                debug_mode=self.auto_split_control.get_settings().get('debug_mode', False)
+            )
+            self.run_config.log_config()
+            
+            # UI必須コードの事前チェック（リスト内にあるかチェック）
+            self._log(f"[RUN_CONFIG] Batch processing started with manual_yymm={self.run_config.manual_yymm}")
+            
+        except Exception as e:
+            self.logger.error(f"[RUN_CONFIG] Failed to create RunConfig: {e}")
+            messagebox.showerror("設定エラー", f"YYMM設定エラー: {e}")
             return
         
         # 設定取得
@@ -660,8 +725,19 @@ class TaxDocumentRenamerV5:
                         # v5.3: 決定論的独立化パイプライン
                         # Step 1: Pre-Extract スナップショット生成（分割前）
                         self._log(f"[v5.3] Pre-Extract スナップショット生成中: {filename}")
+                        
+                        # UI設定を構築して伝搬
+                        gui_yymm = self.year_month_var.get()
+                        ui_context = create_ui_context_from_gui(
+                            yymm_var_value=gui_yymm,
+                            municipality_sets=getattr(self, 'municipality_sets', {}),
+                            batch_mode=True,
+                            allow_auto_forced_codes=getattr(self, 'allow_auto_forced_codes', False),
+                            file_path=file_path
+                        )
+                        
                         user_yymm = self._resolve_yymm_with_policy(file_path, None)  # ポリシーシステム使用
-                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
                         
                         # Step 2: Bundle検出（グローバル除外対応）
                         # Step 3: 分割実行 or 単一処理
@@ -1029,8 +1105,18 @@ class TaxDocumentRenamerV5:
         
         if ext == '.pdf':
             # v5.3 統一処理：常に pre-extract → 決定論的リネーム経路
+            # UI設定を構築して伝搬
+            gui_yymm = self.year_month_var.get()
+            ui_context = create_ui_context_from_gui(
+                yymm_var_value=gui_yymm,
+                municipality_sets=getattr(self, 'municipality_sets', {}),
+                batch_mode=True,
+                allow_auto_forced_codes=getattr(self, 'allow_auto_forced_codes', False),
+                file_path=file_path
+            )
+            
             user_yymm = self._resolve_yymm_with_policy(file_path, None)  # ポリシーシステム使用
-            snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm)
+            snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
             self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
         elif ext == '.csv':
             self._process_csv_file(file_path, output_folder)  # CSVは従来通り
@@ -1054,7 +1140,7 @@ class TaxDocumentRenamerV5:
 
     def _resolve_yymm_with_policy(self, file_path: str, classification_code: Optional[str]) -> str:
         """
-        ポリシーシステムを使用してYYMM値を決定する
+        RunConfig中心のポリシーシステムでYYMM値を決定する
         
         Args:
             file_path: 処理対象PDFファイルパス
@@ -1067,48 +1153,61 @@ class TaxDocumentRenamerV5:
             ValueError: ポリシーによる決定に失敗した場合
         """
         try:
-            # GUI値を取得
-            gui_yymm = self.year_month_var.get()
+            # RunConfigを作成または取得
+            if self.run_config is None:
+                gui_yymm = self.year_month_var.get()
+                self.run_config = create_run_config_from_gui(
+                    yymm_var_value=gui_yymm,
+                    batch_mode=False,  # 単発処理
+                    debug_mode=getattr(self, 'debug_mode', False)
+                )
             
-            # 設定オブジェクト構築
-            class SettingsProxy:
-                def __init__(self, manual_yymm: str):
-                    self.manual_yymm = manual_yymm
+            # 新しいRunConfig中心のポリシーシステムを使用
+            ctx = {
+                'log': self.logger,
+                'run_config': self.run_config
+            }
             
-            settings = SettingsProxy(gui_yymm)
-            
-            # ポリシーによる決定
             final_yymm, yymm_source = resolve_yymm_by_policy(
                 class_code=classification_code,
-                ctx=None,  # コンテキストは現在未使用
-                settings=settings,
-                detected=None  # 検出値は現在未使用（ショートカットパスのため）
+                ctx=ctx,
+                settings=self.run_config,
+                detected=None
             )
             
             # 結果検証
-            if not validate_policy_result(final_yymm, yymm_source, classification_code):
-                raise ValueError(f"Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={classification_code}")
-            
-            # ログ出力
-            log_yymm_decision(classification_code or "UNKNOWN", final_yymm, yymm_source)
-            
-            return final_yymm
+            if final_yymm:
+                if not validate_policy_result(final_yymm, yymm_source, classification_code):
+                    raise ValueError(f"Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={classification_code}")
+                
+                # 監査ログ
+                self.logger.info(f"[AUDIT][YYMM] source={yymm_source} value={final_yymm} validation=PASSED")
+                self.logger.info(f"[v5.3] YYMM source validation passed: {final_yymm} ({yymm_source} mandatory)")
+                
+                return final_yymm
+            else:
+                # YYMMが取得できない場合のエラーハンドリング
+                raise ValueError(f"[FATAL][YYMM] Failed to resolve YYMM for {classification_code or 'UNKNOWN'}. source={yymm_source}")
             
         except Exception as e:
-            self._log(f"[YYMM][POLICY] Error resolving YYMM: {e}")
-            # フォールバック：GUI値をそのまま使用
-            gui_yymm = self.year_month_var.get()
-            if gui_yymm and len(gui_yymm) == 4 and gui_yymm.isdigit():
-                self._log(f"[YYMM][POLICY] Falling back to GUI value: {gui_yymm}")
-                return gui_yymm
-            else:
-                raise ValueError(f"[FATAL] Failed to resolve YYMM and GUI fallback invalid: {gui_yymm}")
+            self.logger.error(f"[YYMM][POLICY] Failed to resolve YYMM: {e}")
+            raise  # エラーを再提出して呼び出し元に処理を任せる
 
     def _process_pdf_file_v5(self, file_path: str, output_folder: str):
         """v5.3 統一パイプライン PDFファイル処理"""
         # v5.3 統一処理：すべてスナップショット経由
+        # UI設定を構築して伝搬
+        gui_yymm = self.year_month_var.get()
+        ui_context = create_ui_context_from_gui(
+            yymm_var_value=gui_yymm,
+            municipality_sets=getattr(self, 'municipality_sets', {}),
+            batch_mode=True,
+            allow_auto_forced_codes=getattr(self, 'allow_auto_forced_codes', False),
+            file_path=file_path
+        )
+        
         user_yymm = self._resolve_yymm_with_policy(file_path, None)  # ポリシーシステム使用
-        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm)
+        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
         self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
 
     def _process_regular_pdf_v5(self, file_path: str, output_folder: str):
@@ -1311,9 +1410,22 @@ class TaxDocumentRenamerV5:
         self._log("=" * 60)
         self._log("🔍 **詳細分類結果**")
         self._log(f"📄 ファイル名: {filename}")
-        self._log(f"📋 分類結果: {classification_result.document_type}")
+        
+        # 表示は最終使用コード（ファイル名と一致）を使用
+        display_document_type = classification_result.original_doc_type_code if (
+            hasattr(classification_result, 'original_doc_type_code') and 
+            classification_result.original_doc_type_code
+        ) else classification_result.document_type
+        
+        self._log(f"📋 分類結果: {display_document_type}")
         self._log(f"🎯 信頼度: {classification_result.confidence:.2f}")
         self._log(f"⚙️ 判定方法: {classification_result.classification_method}")
+        
+        # 自治体変更版がある場合のみ表示
+        if (hasattr(classification_result, 'original_doc_type_code') and 
+            classification_result.original_doc_type_code and
+            classification_result.original_doc_type_code != classification_result.document_type):
+            self._log(f"📍 自治体変更版: {classification_result.document_type}")
         
         # マッチしたキーワードの詳細
         if classification_result.matched_keywords:
@@ -1458,6 +1570,9 @@ class TaxDocumentRenamerV5:
     def _split_single_file(self, file_path: str, output_folder: str) -> List[str]:
         """単一ファイルのページ分割（従来と同じ）"""
         split_files = []
+        
+        # v5.3.4 Split reset logging
+        self._log(f"[reset] __split_ 処理開始 - 分割状態リセット")
         
         try:
             import fitz

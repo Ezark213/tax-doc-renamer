@@ -70,6 +70,65 @@ class DocumentClassifierV5:
         
         # v5.0 新分類ルール（AND条件対応）
         self.classification_rules_v5 = self._initialize_classification_rules_v5()
+        
+        # v5.3.4 prefecture code mapping for local tax
+        self.prefecture_code_map = {
+            "東京都": "1001",
+            "愛知県": "1011", 
+            "福岡県": "1021",
+            "大阪府": "1031",
+            "神奈川県": "1041"
+        }
+
+    def code_domain(self, code: str) -> str:
+        """コードドメイン判定 - ノイズ抑制のための門番"""
+        if not code or not isinstance(code, str):
+            return "UNKNOWN"
+        
+        # コードの先頭数字でドメインを判定
+        first_digit = code[0] if code else ""
+        
+        domain_map = {
+            "0": "NATIONAL_TAX",      # 国税
+            "1": "LOCAL_TAX",         # 地方税（都道府県）
+            "2": "LOCAL_TAX",         # 地方税（市町村）
+            "3": "CONSUMPTION_TAX",   # 消費税
+            "5": "ACCOUNTING",        # 会計書類
+            "6": "ASSETS",           # 資産
+            "7": "SUMMARY"           # 集計・その他
+        }
+        
+        return domain_map.get(first_digit, "UNKNOWN")
+
+    def resolve_local_tax_class(self, base_class: str, prefecture: Optional[str] = None, 
+                               city: Optional[str] = None) -> str:
+        """LOCAL_TAX ドメインの場合のみ、自治体別の最終クラスコードを確定"""
+        if not base_class:
+            return base_class
+            
+        # ドメインチェック - LOCAL_TAX以外はそのまま返す
+        if self.code_domain(base_class) != "LOCAL_TAX":
+            return base_class
+        
+        # 都道府県税の場合（1001系）
+        if base_class.startswith("1001") or "都道府県" in base_class:
+            if prefecture and prefecture in self.prefecture_code_map:
+                upgraded_code = self.prefecture_code_map[prefecture]
+                # 元の形式を保持しながらコードだけアップグレード
+                if "_" in base_class:
+                    parts = base_class.split("_", 1)
+                    return f"{upgraded_code}_{parts[1]}"
+                else:
+                    return upgraded_code
+            # フォールバック: base_class をそのまま返す
+            return base_class
+        
+        # 市民税の場合（2001系）- 従来通り
+        if base_class.startswith("2001") or "市民税" in base_class:
+            return base_class
+        
+        # その他の地方税コード
+        return base_class
 
     def _initialize_classification_rules_v5(self) -> Dict:
         """v5.0 分類ルール初期化（AND条件対応）"""
@@ -758,13 +817,19 @@ class DocumentClassifierV5:
             if base_result.original_doc_type_code is None:
                 base_result.original_doc_type_code = base_result.document_type
             
-            code, final_label, resolved_set_id = self.normalize_classification(
-                text, filename, base_result.document_type, municipality_sets
-            )
-            
-            if final_label != base_result.document_type:
-                self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_label}")
-                base_result.document_type = final_label
+            # ドメインチェック：LOCAL_TAX以外では自治体変更版をスキップ
+            domain = self.code_domain(base_result.document_type)
+            if domain != "LOCAL_TAX":
+                self._log(f"overlay=SKIPPED(domain={domain})")
+                # LOCAL_TAX以外では何もしない
+            else:
+                code, final_label, resolved_set_id = self.normalize_classification(
+                    text, filename, base_result.document_type, municipality_sets
+                )
+                
+                if final_label != base_result.document_type:
+                    self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_label}")
+                    base_result.document_type = final_label
         else:
             print(f"[DEBUG] 従来処理実行: municipality_sets={municipality_sets}")
             # セット設定がない場合は従来処理
@@ -772,16 +837,22 @@ class DocumentClassifierV5:
             # 元の分類コードを保存（自治体適用前）
             if base_result.original_doc_type_code is None:
                 base_result.original_doc_type_code = base_result.document_type
-                
-            final_code = self._apply_municipality_numbering(
-                base_result.document_type, 
-                prefecture_code, 
-                municipality_code
-            )
             
-            if final_code != base_result.document_type:
-                self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_code}")
-                base_result.document_type = final_code
+            # ドメインチェック：LOCAL_TAX以外では自治体変更版をスキップ
+            domain = self.code_domain(base_result.document_type)
+            if domain != "LOCAL_TAX":
+                self._log(f"overlay=SKIPPED(domain={domain})")
+                # LOCAL_TAX以外では何もしない
+            else:
+                final_code = self._apply_municipality_numbering(
+                    base_result.document_type, 
+                    prefecture_code, 
+                    municipality_code
+                )
+                
+                if final_code != base_result.document_type:
+                    self._log(f"自治体名付きコード生成: {base_result.document_type} → {final_code}")
+                    base_result.document_type = final_code
         
         return base_result
 
@@ -812,7 +883,16 @@ class DocumentClassifierV5:
         if document_type == "1001_都道府県_法人都道府県民税・事業税・特別法人事業税":
             if prefecture_code:
                 prefecture_name = self._get_prefecture_name(prefecture_code)
+                
+                # v5.3.4 prefecture-specific code resolution
+                resolved_code = self.resolve_local_tax_class(document_type, prefecture_name)
                 final_code = f"{prefecture_code}_{prefecture_name}_法人都道府県民税・事業税・特別法人事業税"
+                
+                # Use resolved code if different
+                if resolved_code != document_type and "_" in resolved_code:
+                    code_part = resolved_code.split("_")[0]
+                    final_code = f"{code_part}_{prefecture_name}_法人都道府県民税・事業税・特別法人事業税"
+                
                 self._log_debug(f"都道府県申告書連番適用: {document_type} → {final_code}")
                 return final_code
         

@@ -70,7 +70,7 @@ class PreExtractEngine:
             '帳票': [r'一括償却資産', r'少額減価償却', r'明細表']
         }
     
-    def build_snapshot(self, pdf_path: str, max_scan_pages: Optional[int] = None, user_provided_yymm: Optional[str] = None) -> PreExtractSnapshot:
+    def build_snapshot(self, pdf_path: str, max_scan_pages: Optional[int] = None, user_provided_yymm: Optional[str] = None, ui_context: Optional[Dict[str, Any]] = None) -> PreExtractSnapshot:
         """
         PDFファイルからPreExtractSnapshotを構築
         
@@ -78,6 +78,7 @@ class PreExtractEngine:
             pdf_path: 対象PDFファイルパス
             max_scan_pages: 最大スキャンページ数（Noneで全ページ）
             user_provided_yymm: ユーザー指定のYYMM（セット入力優先・必須）
+            ui_context: UI設定コンテキスト（設定伝搬用）
             
         Returns:
             PreExtractSnapshot: 構築されたスナップショット
@@ -138,10 +139,11 @@ class PreExtractEngine:
                 created_at=datetime.now().isoformat()
             )
             
-            # GUI YYMMをメタデータとして保存
+            # GUI YYMM と UI設定をメタデータとして保存
             snapshot.meta = {
                 'yymm': user_provided_yymm,
-                'yymm_source': 'GUI'
+                'yymm_source': 'GUI',
+                'ui_context': ui_context or {}
             }
             
             # 永続化

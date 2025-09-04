@@ -15,6 +15,7 @@ from .models import (
     make_bucket_key, compute_text_sha1
 )
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
+from helpers.settings_context import normalize_settings_input
 
 
 class RenameEngine:
@@ -99,11 +100,15 @@ class RenameEngine:
         detected_yymm = fields.period_yyyymm if (fields.period_yyyymm and fields.period_yyyymm.isdigit() and len(fields.period_yyyymm) == 4) else None
         
         try:
+            # v5.3.5-ui-robust: 一貫した設定コンテキスト使用
+            normalized_settings = normalize_settings_input(snapshot)
+            pipeline_context = getattr(doc_item_id, '_pipeline_context', None)
+            
             # ポリシーによるYYMM決定
             final_yymm, yymm_source = resolve_yymm_by_policy(
                 class_code=final_code,
-                ctx=getattr(doc_item_id, '_pipeline_context', None),
-                settings=snapshot,  # settingsオブジェクトとしてsnapshot使用
+                ctx=pipeline_context,
+                settings=normalized_settings,
                 detected=detected_yymm
             )
             
