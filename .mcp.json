@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "tax-document-analyzer": {
+      "command": "python",
+      "args": [
+        "mcp_server.py"
+      ],
+      "cwd": "C:\\Users\\mayum\\tax-doc-renamer"
+    },
+    "serena-workflow": {
+      "command": "python",
+      "args": [
+        "-c",
+        "import sys; sys.path.append('.'); from workflows.workflow_manager import WorkflowManager; WorkflowManager().run_mcp_server()"
+      ],
+      "cwd": "C:\\Users\\mayum\\tax-doc-renamer"
+    }
+  }
+}
