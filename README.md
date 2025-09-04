@@ -169,6 +169,16 @@ tax-doc-renamer/
 
 ## 🛠️ 開発者向け
 
+### 開発手順（Windows）
+
+開発環境で一連の処理を実行するには以下を使用してください：
+
+```powershell
+scripts\run.ps1
+```
+
+初回実行時に Claude Code が承認を求めてきたら「2. Yes, and don't ask again」を選び、以降の確認をスキップできます。
+
 ### Claude Code MCP統合
 ```json
 {
