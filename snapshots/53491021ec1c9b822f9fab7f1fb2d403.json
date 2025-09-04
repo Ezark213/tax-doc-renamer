@@ -1,0 +1,1256 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧/総勘定元帳_20250720_1537.pdf",
+  "source_doc_md5": "53491021ec1c9b822f9fab7f1fb2d403",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 177,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 1,
+        "text_length": 1450,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 2,
+        "text_length": 1379,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 3,
+        "text_length": 1434,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 4,
+        "text_length": 1370,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 5,
+        "text_length": 1366,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 6,
+        "text_length": 1400,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 7,
+        "text_length": 1451,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 8,
+        "text_length": 1499,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 9,
+        "text_length": 1466,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 10,
+        "text_length": 1456,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 11,
+        "text_length": 195,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 12,
+        "text_length": 522,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 13,
+        "text_length": 257,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 14,
+        "text_length": 740,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 15,
+        "text_length": 227,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 16,
+        "text_length": 1396,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 17,
+        "text_length": 1674,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 18,
+        "text_length": 1291,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 19,
+        "text_length": 1700,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 20,
+        "text_length": 2536,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 21,
+        "text_length": 1677,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 22,
+        "text_length": 2172,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 23,
+        "text_length": 2048,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 24,
+        "text_length": 2051,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 25,
+        "text_length": 2256,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 26,
+        "text_length": 2118,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 27,
+        "text_length": 2102,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 28,
+        "text_length": 2197,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 29,
+        "text_length": 2188,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 30,
+        "text_length": 457,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 31,
+        "text_length": 180,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 32,
+        "text_length": 190,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 33,
+        "text_length": 274,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 34,
+        "text_length": 1606,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 35,
+        "text_length": 1501,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 36,
+        "text_length": 1482,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 37,
+        "text_length": 1478,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 38,
+        "text_length": 1434,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 39,
+        "text_length": 1403,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 40,
+        "text_length": 1393,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 41,
+        "text_length": 814,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 42,
+        "text_length": 1381,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 43,
+        "text_length": 1531,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 44,
+        "text_length": 885,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 45,
+        "text_length": 622,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 46,
+        "text_length": 352,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 47,
+        "text_length": 1755,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 48,
+        "text_length": 500,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 49,
+        "text_length": 1316,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 50,
+        "text_length": 1407,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 51,
+        "text_length": 1697,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 52,
+        "text_length": 1586,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 53,
+        "text_length": 458,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 54,
+        "text_length": 1819,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 55,
+        "text_length": 484,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 56,
+        "text_length": 1891,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 57,
+        "text_length": 459,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 58,
+        "text_length": 1031,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 59,
+        "text_length": 666,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 60,
+        "text_length": 1186,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 61,
+        "text_length": 352,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 62,
+        "text_length": 1403,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 63,
+        "text_length": 1449,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 64,
+        "text_length": 1442,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 65,
+        "text_length": 851,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 66,
+        "text_length": 166,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 67,
+        "text_length": 1785,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 68,
+        "text_length": 1485,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 69,
+        "text_length": 1981,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 70,
+        "text_length": 1659,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 71,
+        "text_length": 1983,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 72,
+        "text_length": 2103,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 73,
+        "text_length": 1145,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 74,
+        "text_length": 554,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 75,
+        "text_length": 741,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 76,
+        "text_length": 202,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 77,
+        "text_length": 979,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 78,
+        "text_length": 2156,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 79,
+        "text_length": 2081,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 80,
+        "text_length": 2210,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 81,
+        "text_length": 2222,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 82,
+        "text_length": 1544,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 83,
+        "text_length": 2023,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 84,
+        "text_length": 109,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 85,
+        "text_length": 198,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 86,
+        "text_length": 1876,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 87,
+        "text_length": 829,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 88,
+        "text_length": 531,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 89,
+        "text_length": 291,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 90,
+        "text_length": 182,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 91,
+        "text_length": 167,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 92,
+        "text_length": 1664,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 93,
+        "text_length": 432,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": null,
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 94,
+        "text_length": 186,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "仙台市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2401",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 95,
+        "text_length": 271,
+        "has_date": true
+      }
+    }
+  ],
+  "created_at": "2025-09-03T10:04:19.938986",
+  "version": "5.3"
+}

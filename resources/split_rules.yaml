@@ -6,6 +6,29 @@ bundle_detection:
   # Number of pages to scan for bundle detection (default: 10)
   scan_pages: 10
   
+  # 絶対非分割ルール（償却資産/少額減価）拡充版
+  never_bundle:
+    title_regex:
+      - "(?i)一括償却資産|償却資産明細|償却資産台帳"
+      - "(?i)少額減価償却資産|少額償却|少額資産明細"
+      - "(?i)少額.*償却|償却.*少額"
+      - "(?i)6002|6003"
+      # 金額パターン
+      - "(?i)(三十|30)万(円)?未満|(十|10)万(円)?未満"
+    ocr_head_regex:
+      - "一括償却資産"
+      - "少額減価償却資産"
+      - "少額.*償却"
+      - "償却.*少額"
+      - "資産(明細|台帳)"
+      - "コード.*6003"
+      - "(三十|30)万.*未満"
+    # 表ヘッダ系キーワード組み合わせチェック
+    table_header_patterns:
+      base_keywords: ["資産明細", "資産台帳", "資産一覧"]
+      detail_keywords: ["取得年月日", "取得価額", "耐用年数", "償却方法", "償却費", "期首帳簿価額", "期末残高", "資産番号", "数量", "単価"]
+      min_detail_matches: 2  # 詳細キーワードが2つ以上必要
+  
   # Minimum threshold for bundle detection
   thresholds:
     receipt_notifications: 1  # Minimum number of receipt notification hits
@@ -93,3 +116,69 @@ output:
   
   # Log level for split operations
   log_level: "INFO"  # DEBUG, INFO, WARN, ERROR
+
+# Global exclusion settings (v5.2.1)
+# These documents will NEVER be split, regardless of other conditions
+global_excludes:
+  # Document titles that trigger immediate exclusion
+  title_exact_or_fuzzy:
+    - "一括償却資産明細表"
+    - "少額減価償却資産明細表"
+    - "固定資産台帳"
+    - "総勘定元帳" 
+    - "補助元帳"
+    - "仕訳帳"
+    - "試算表"
+    - "一括償却資産明細"
+    - "少額減価償却資産明細"
+    - "償却資産明細表"
+    - "減価償却資産明細表"
+    
+  # Structural keywords that indicate non-bundle documents
+  structural_hints:
+    - "決算調整方式"
+    - "資産コード"
+    - "取得価額"
+    - "損金算入限度額"
+    - "償却方法"
+    - "耐用年数"
+    - "事業年度"
+    - "合計額"
+    - "明細表"
+    - "資産番号"
+    
+  # When any exclude keyword is found, always block bundle detection
+  allow_bundle_if_excluded_hit: false
+  
+  # OCR normalization for better matching
+  normalize_text: true
+  
+  # Pages to scan for exclusion (should match bundle_detection.scan_pages)
+  scan_pages: 10
+
+# Classification overrides for excluded document types
+classification_overrides:
+  # Don't split when these codes are detected
+  no_split_when_codes:
+    - "6001"  # 固定資産台帳
+    - "6002"  # 一括償却資産明細表
+    - "6003"  # 少額減価償却資産明細表
+    - "5001"  # 総勘定元帳
+    - "5002"  # 仕訳帳等
+    - "5003"  # 補助簿等
+    - "5004"  # 試算表
+    
+  # Force rejoin if accidentally split
+  rejoin_on_codes:
+    - "6001"
+    - "6002"
+    - "6003"
+    - "5001"
+    - "5002"
+    - "5003"
+    - "5004"
+  
+  # Metadata auto-setting
+  auto_metadata:
+    no_split_asset_codes: ["6001", "6002", "6003"]
+    no_split_book_codes: ["5001", "5002", "5003", "5004"]

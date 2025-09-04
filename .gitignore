@@ -63,10 +63,14 @@ error.log
 *.bak
 *.backup
 
-# Old/deprecated files are kept in old/ folder for reference
-# Current active files:
-# - tax_document_renamer_v4.5.2_enhanced.py (latest monolithic)
-# - v4.0/main.py (modular version)
-# - TaxDocumentRenamer_v4.5.2_Enhanced.spec (latest build config)
-# - v4.0/TaxDocumentRenamer_v4.0_Final.spec (modular build config)
+# Archive directories (moved old versions)
+archive/
+
+# Current active files preserved:
+# - main.py (latest version)
+# - core/ (modular architecture)
+# - helpers/ (v5.3.5 enhanced helpers)
+# - workflows/ (AddFunc-BugFix Workflow)
+# - mcp_server.py (Claude Code MCP integration)
+# - .mcp.json (MCP configuration)
 # - README.md (documentation)

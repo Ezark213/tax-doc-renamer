@@ -13,6 +13,7 @@ from typing import List, Optional, Dict, Tuple, Union, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from pypdf import PdfReader, PdfWriter
+from .models import DocItemID, PageFingerprint, compute_file_md5, compute_text_sha1, compute_page_md5
 
 @dataclass
 class SplitResult:
@@ -22,6 +23,7 @@ class SplitResult:
     content_type: str
     success: bool
     error_message: Optional[str] = None
+    doc_item_id: Optional[DocItemID] = None  # v5.3: 源泉情報追加
 
 @dataclass
 class PageContent:
@@ -89,6 +91,162 @@ class PDFProcessor:
                 self.logger.warning(f"設定ファイル読み込みエラー、デフォルト設定を使用: {e}")
             return self._get_default_config()
     
+    def _normalize_ocr_text(self, text: str) -> str:
+        """OCR正規化ルーチン（決定論的独立化対応）"""
+        if not text:
+            return ""
+        
+        # 全角→半角変換
+        normalized = text.translate(str.maketrans(
+            "０１２３４５６７８９ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ",
+            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        ))
+        
+        # 連続空白の縮約
+        normalized = re.sub(r'\s+', ' ', normalized)
+        
+        # 特殊文字除去
+        normalized = re.sub(r'[・\r\t]', '', normalized)
+        
+        return normalized.strip()
+    
+    def _normalize_text_for_exclude_check(self, text: str) -> str:
+        """グローバル除外チェック用のテキスト正規化"""
+        if not text:
+            return ""
+            
+        # 全角・半角統一
+        normalized = text.translate(str.maketrans(
+            "０１２３４５６７８９ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ",
+            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        ))
+        
+        # 連続空白の縮約・字間空白の除去
+        normalized = re.sub(r'\s+', '', normalized)
+        
+        # 改行・中点・特殊文字の除去
+        normalized = re.sub(r'[・\n\r\t]', '', normalized)
+        
+        return normalized
+    
+    def _check_never_bundle_rules(self, sample_texts: List[str]) -> bool:
+        """
+        層B：never_bundle設定による6002/6003資産文書検出
+        split_rules.yamlのnever_bundle設定を使用
+        """
+        try:
+            never_bundle_config = self.config.get("bundle_detection", {}).get("never_bundle", {})
+            if not never_bundle_config:
+                return False
+            
+            combined_text = " ".join(sample_texts)
+            normalized_text = self._normalize_ocr_text(combined_text)
+            
+            # title_regex patterns check
+            title_patterns = never_bundle_config.get("title_regex", [])
+            for pattern in title_patterns:
+                if re.search(pattern, normalized_text, re.IGNORECASE):
+                    self.logger.info(f"[6002/6003 Lock B] never_bundle title_regex matched: {pattern}")
+                    return True
+            
+            # ocr_head_regex patterns check (first few pages)
+            ocr_head_patterns = never_bundle_config.get("ocr_head_regex", [])
+            head_text = " ".join(sample_texts[:3])  # First 3 pages
+            normalized_head = self._normalize_ocr_text(head_text)
+            
+            for pattern in ocr_head_patterns:
+                if re.search(pattern, normalized_head, re.IGNORECASE):
+                    self.logger.info(f"[6002/6003 Lock B] never_bundle ocr_head_regex matched: {pattern}")
+                    return True
+            
+            # v5.3: 表ヘッダ系キーワード組み合わせチェック
+            table_header_config = never_bundle_config.get("table_header_patterns", {})
+            if table_header_config and self._check_table_header_combination(combined_text, table_header_config):
+                self.logger.info(f"[6002/6003 Lock B] never_bundle table header combination matched")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"[6002/6003 Lock B] never_bundle check error: {e}")
+            return False
+    
+    def _check_table_header_combination(self, text: str, config: Dict) -> bool:
+        """
+        表ヘッダ系キーワードの組み合わせチェック
+        資産系文書の表構造を検出
+        """
+        base_keywords = config.get("base_keywords", [])
+        detail_keywords = config.get("detail_keywords", [])
+        min_matches = config.get("min_detail_matches", 2)
+        
+        normalized_text = self._normalize_ocr_text(text)
+        
+        # ベースキーワードがあるか
+        base_found = any(keyword in normalized_text for keyword in base_keywords)
+        if not base_found:
+            return False
+        
+        # 詳細キーワードのマッチ数
+        detail_matches = sum(1 for keyword in detail_keywords if keyword in normalized_text)
+        
+        return detail_matches >= min_matches
+    
+    def _check_global_excludes(self, sample_texts: List[str]) -> bool:
+        """グローバル除外条件をチェック（決定論的独立化対応）"""
+        if "global_excludes" not in self.config:
+            return False
+            
+        excludes_config = self.config["global_excludes"]
+        combined_text = " ".join(sample_texts)
+        
+        # OCR正規化
+        normalized_text = self._normalize_ocr_text(combined_text)
+            
+        # タイトルキーワードチェック（資産・帳票系グローバル除外）
+        title_keywords = excludes_config.get("title_keywords", [
+            "一括償却資産明細表", "少額減価償却資産明細表", "固定資産台帳",
+            "総勘定元帳", "補助元帳", "仕訳帳", "試算表"
+        ])
+        
+        for keyword in title_keywords:
+            if keyword in normalized_text:
+                self.logger.info(f"[exclude] Global exclusion by title: {keyword}")
+                return True
+        
+        # コードパターンチェック（資産・帳票系）
+        code_patterns = excludes_config.get("code_patterns", [
+            "6001", "6002", "6003",  # 資産系
+            "5001", "5002", "5003", "5004"  # 帳票系
+        ])
+        for pattern in code_patterns:
+            if pattern in normalized_text:
+                self.logger.info(f"[exclude] Global exclusion by code: {pattern}")
+                return True
+        
+        return False
+
+    def _create_doc_item_id(self, source_pdf_path: str, page_index: int, page_text: str) -> DocItemID:
+        """分割ページ用のDocItemIDを生成"""
+        # 元PDF全体のMD5
+        source_doc_md5 = compute_file_md5(source_pdf_path)
+        
+        # 正規化テキストのSHA1
+        normalized_text = self._normalize_text_for_exclude_check(page_text)
+        text_sha1 = compute_text_sha1(normalized_text)
+        
+        # ページMD5（仮想的に生成、実際のページバイトがない場合）
+        page_content = f"page_{page_index}_{text_sha1}"
+        page_md5 = compute_page_md5(page_content.encode('utf-8'))
+        
+        fp = PageFingerprint(page_md5=page_md5, text_sha1=text_sha1)
+        
+        return DocItemID(
+            source_doc_md5=source_doc_md5,
+            page_index=page_index,
+            fp=fp
+        )
+
     def _get_default_config(self) -> Dict:
         """デフォルト設定を返す"""
         return {
@@ -114,6 +272,17 @@ class PDFProcessor:
                     "national": ["法人税", "消費税", "国税電子申告"],
                     "local": ["都道府県", "市町村", "地方税電子申告"]
                 }
+            },
+            "global_excludes": {
+                "title_exact_or_fuzzy": [
+                    "一括償却資産明細表", "少額減価償却資産明細表"
+                ],
+                "structural_hints": [
+                    "決算調整方式", "資産コード", "取得価額", "損金算入限度額"
+                ],
+                "allow_bundle_if_excluded_hit": False,
+                "normalize_text": True,
+                "scan_pages": 10
             }
         }
 
@@ -390,19 +559,19 @@ class PDFProcessor:
                 
                 if page_type == "都道府県_納付情報":
                     code = "1004"
-                    name = "納付情報_都道府県"
+                    name = "納付情報"
                 elif page_type == "市町村_納付情報":
                     code = "2004"
-                    name = "納付情報_市町村"
+                    name = "納付情報"
                 elif page_type == "都道府県_受信通知":
                     # 連番生成: 1003, 1013, 1023, 1033...
                     code = f"10{3 + prefecture_notification_count * 10:02d}"
-                    name = "受信通知_都道府県"
+                    name = "受信通知"
                     prefecture_notification_count += 1
                 elif page_type == "市町村_受信通知":
                     # 連番生成: 2003, 2013, 2023, 2033...
                     code = f"20{3 + municipality_notification_count * 10:02d}"
-                    name = "受信通知_市町村"
+                    name = "受信通知"
                     municipality_notification_count += 1
                 else:
                     # デフォルト：受信通知として処理
@@ -522,13 +691,13 @@ class PDFProcessor:
         
         # 分割結果を構築
         local_splits = [
-            {'pages': prefecture_notification_1, 'code': '1003', 'name': '受信通知_都道府県', 'type': '都道府県_受信通知1'},
-            {'pages': prefecture_notification_2, 'code': '1013', 'name': '受信通知_都道府県', 'type': '都道府県_受信通知2'},
-            {'pages': prefecture_payment, 'code': '1004', 'name': '納付情報_都道府県', 'type': '都道府県_納付情報'},
-            {'pages': municipality_notification_1, 'code': '2003', 'name': '受信通知_市町村', 'type': '市町村_受信通知1'},
-            {'pages': municipality_notification_2, 'code': '2013', 'name': '受信通知_市町村', 'type': '市町村_受信通知2'},
-            {'pages': municipality_notification_3, 'code': '2023', 'name': '受信通知_市町村', 'type': '市町村_受信通知3'},
-            {'pages': municipality_payment, 'code': '2004', 'name': '納付情報_市町村', 'type': '市町村_納付情報'}
+            {'pages': prefecture_notification_1, 'code': '1003', 'name': '受信通知', 'type': '都道府県_受信通知1'},
+            {'pages': prefecture_notification_2, 'code': '1013', 'name': '受信通知', 'type': '都道府県_受信通知2'},
+            {'pages': prefecture_payment, 'code': '1004', 'name': '納付情報', 'type': '都道府県_納付情報'},
+            {'pages': municipality_notification_1, 'code': '2003', 'name': '受信通知', 'type': '市町村_受信通知1'},
+            {'pages': municipality_notification_2, 'code': '2013', 'name': '受信通知', 'type': '市町村_受信通知2'},
+            {'pages': municipality_notification_3, 'code': '2023', 'name': '受信通知', 'type': '市町村_受信通知3'},
+            {'pages': municipality_payment, 'code': '2004', 'name': '納付情報', 'type': '市町村_納付情報'}
         ]
         
         return [split for split in local_splits if split['pages']]
@@ -681,6 +850,11 @@ class PDFProcessor:
             if not detection_result.is_bundle and not force:
                 self.logger.info(f"[split] Skip (non-bundle): {os.path.basename(input_pdf_path)}")
                 self.logger.debug(f"[split] Detection details: {detection_result.debug_info}")
+                
+                # Check if this was blocked by global exclusion
+                if any("Global exclusion triggered" in info for info in detection_result.debug_info):
+                    self.logger.info(f"[split] EXCLUDED by global rules - single document treatment")
+                    
                 return False
             
             bundle_type = detection_result.bundle_type or "unknown"
@@ -696,6 +870,95 @@ class PDFProcessor:
             self.logger.error(f"[split] Bundle split error: {input_pdf_path} - {e}")
             return False
     
+    def filename_or_heads_match_assets(self, pdf_path: str, head_pages: int = 3) -> bool:
+        """
+        層A：ファイル名または冒頭ページで資産文書（6002/6003）を検出
+        四重ロックシステムの第一段階
+        
+        Args:
+            pdf_path: PDFファイルパス
+            head_pages: 先頭から何ページまでスキャンするか
+            
+        Returns:
+            bool: 6002/6003資産文書と判定された場合True
+        """
+        try:
+            # ファイル名チェック
+            filename = os.path.basename(pdf_path)
+            # v5.3: ファイル名パターン拡充（少額語彙強化）
+            filename_asset_patterns = [
+                r'6002.*明細',
+                r'6003.*明細',
+                r'一括償却資産.*明細',
+                r'少額減価償却資産.*明細',
+                r'少額.*償却|償却.*少額',
+                r'少額資産|少額.*明細',
+                r'償却資産.*明細',
+                r'減価償却.*明細',
+                # シンプルパターン
+                r'少額\.pdf$',
+                r'資産明細.*\.pdf$'
+            ]
+            
+            for pattern in filename_asset_patterns:
+                if re.search(pattern, filename, re.IGNORECASE):
+                    self.logger.info(f"[6002/6003 Lock A] Asset document detected by filename: {pattern} in {filename}")
+                    return True
+            
+            # 冒頭ページのOCRチェック
+            doc = fitz.open(pdf_path)
+            scan_pages = min(doc.page_count, head_pages)
+            
+            for i in range(scan_pages):
+                page = doc[i]
+                text = page.get_text()
+                normalized_text = self._normalize_ocr_text(text)
+                
+                # v5.3: 資産文書キーワードパターン拡充（少額語彙強化）
+                asset_patterns = [
+                    # 基本パターン
+                    r'一括償却資産明細表?',
+                    r'少額減価償却資産明細表?',
+                    r'償却資産明細表?',
+                    r'減価償却資産明細表?',
+                    # 略形パターン
+                    r'少額.*償却|償却.*少額',
+                    r'少額資産|少額.*明細',
+                    # 表フィールド
+                    r'資産コード',
+                    r'取得価額',
+                    r'損金算入限度額',
+                    r'償却方法',
+                    r'耐用年数',
+                    r'決算調整方式',
+                    # 金額パターン
+                    r'(三十|30)万.*未満',
+                    r'(十|10)万.*未満',
+                    # コード
+                    r'6002',
+                    r'6003'
+                ]
+                
+                matches = 0
+                matched_patterns = []
+                for pattern in asset_patterns:
+                    if re.search(pattern, normalized_text, re.IGNORECASE):
+                        matches += 1
+                        matched_patterns.append(pattern)
+                
+                # 3つ以上のパターンマッチで資産文書と判定
+                if matches >= 3:
+                    doc.close()
+                    self.logger.info(f"[6002/6003 Lock A] Asset document detected by OCR patterns: {matched_patterns} (page {i+1})")
+                    return True
+            
+            doc.close()
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"[6002/6003 Lock A] Asset detection error: {e}")
+            return False
+
     def _detect_bundle_type(self, pdf_path: str) -> BundleDetectionResult:
         """
         束ねPDFの種別を判定
@@ -710,6 +973,18 @@ class PDFProcessor:
         matched_elements = {"receipt": [], "payment": [], "codes": []}
         
         try:
+            # 層A：6002/6003四重ロック - Bundle判定の先頭でブロック
+            if self.filename_or_heads_match_assets(pdf_path):
+                debug_info.append("[6002/6003 Lock A] Asset document detected - Bundle detection BLOCKED")
+                self.logger.warning(f"[6002/6003 Lock A] BLOCKED: {os.path.basename(pdf_path)} detected as asset document")
+                return BundleDetectionResult(
+                    is_bundle=False,
+                    bundle_type=None,
+                    confidence=0.0,
+                    matched_elements={"receipt": [], "payment": [], "codes": []},
+                    debug_info=debug_info
+                )
+            
             # Quick sample scan using PyMuPDF (fast mode)
             doc = fitz.open(pdf_path)
             scan_pages = min(doc.page_count, self.config["bundle_detection"]["scan_pages"])
@@ -726,6 +1001,28 @@ class PDFProcessor:
             # Combine all sample text
             combined_text = " ".join(sample_texts)
             debug_info.append(f"Combined sample text: {len(combined_text)} chars")
+            
+            # 層B：never_bundle設定チェック（split_rules.yamlから）
+            if self._check_never_bundle_rules(sample_texts):
+                debug_info.append("[6002/6003 Lock B] never_bundle rule triggered - Bundle detection BLOCKED")
+                return BundleDetectionResult(
+                    is_bundle=False,
+                    bundle_type=None,
+                    confidence=0.0,
+                    matched_elements={"receipt": [], "payment": [], "codes": []},
+                    debug_info=debug_info
+                )
+            
+            # ** GLOBAL EXCLUSION CHECK THIRD **
+            if self._check_global_excludes(sample_texts):
+                debug_info.append("Global exclusion triggered - Bundle detection blocked")
+                return BundleDetectionResult(
+                    is_bundle=False,
+                    bundle_type=None,
+                    confidence=0.0,
+                    matched_elements={"receipt": [], "payment": [], "codes": []},
+                    debug_info=debug_info
+                )
             
             # Check for local tax bundle
             local_result = self._is_bundle_local(sample_texts, matched_elements, debug_info)
@@ -944,11 +1241,15 @@ class PDFProcessor:
                 # Call processing callback if provided (integrates with existing pipeline)
                 if processing_callback:
                     try:
+                        # v5.3: Generate DocItemID for this page
+                        doc_item_id = self._create_doc_item_id(input_pdf_path, i-1, page_text)  # i-1 for 0-based indexing
+                        
                         # コールバックに分割文脈隔離フラグを渡す
                         if hasattr(processing_callback, '__code__') and 'reset_context' in processing_callback.__code__.co_varnames:
-                            processing_callback(temp_path, i, bundle_type, reset_context=True)
+                            processing_callback(temp_path, i, bundle_type, doc_item_id, reset_context=True)
                         else:
-                            processing_callback(temp_path, i, bundle_type)
+                            # Enhanced callback with DocItemID
+                            processing_callback(temp_path, i, bundle_type, doc_item_id)
                     except Exception as e:
                         self.logger.error(f"[split] Processing callback error for page {i}: {e}")
             
