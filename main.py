@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v5.0 メインアプリケーション
-AND条件対応・高精度判定システム（完全改訂版）
+税務書類リネームシステム v5.3 メインアプリケーション
+YYMM Policy System・固定資産書類対応・高精度判定システム
 """
 
 import tkinter as tk
@@ -95,7 +95,7 @@ except RuntimeError as e:
 
 
 class TaxDocumentRenamerV5:
-    """税務書類リネームシステム v5.0 メインクラス"""
+    """税務書類リネームシステム v5.3 メインクラス"""
     
     def __init__(self):
         """初期化"""
@@ -255,16 +255,16 @@ class TaxDocumentRenamerV5:
         self.ocr_enhanced_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(options_frame, text="OCR強化モード", variable=self.ocr_enhanced_var).pack(anchor='w')
         
-        # v5.0 専用オプション
+        # v5.3 専用オプション
         self.v5_mode_var = tk.BooleanVar(value=True)
         v5_checkbox = ttk.Checkbutton(
             options_frame, 
-            text="v5.0 AND条件判定モード（推奨）", 
+            text="v5.3 YYMM Policy System・AND条件判定モード（推奨）", 
             variable=self.v5_mode_var
         )
         v5_checkbox.pack(anchor='w')
         
-        # v5.0 モードの説明
+        # v5.3 モードの説明
         v5_info = ttk.Label(
             options_frame,
             text="※AND条件で受信通知・納付情報を高精度判定",
@@ -305,10 +305,10 @@ class TaxDocumentRenamerV5:
         )
         self.split_button.pack(fill='x', pady=(0, 5))
         
-        # リネーム実行ボタン（v5.0対応）
+        # リネーム実行ボタン（v5.3対応）
         self.rename_button = ttk.Button(
             process_frame, 
-            text="✏️ リネーム実行 (v5.0)", 
+            text="✏️ リネーム実行 (v5.3)", 
             command=self._start_rename_processing,
             style='Accent.TButton'
         )
@@ -324,7 +324,7 @@ class TaxDocumentRenamerV5:
         self.progress_bar.pack(fill='x', pady=(10, 0))
         
         # ステータス
-        self.status_var = tk.StringVar(value="待機中 (v5.0モード)")
+        self.status_var = tk.StringVar(value="待機中 (v5.3モード)")
         ttk.Label(process_frame, textvariable=self.status_var).pack(pady=(5, 0))
 
     def _create_municipality_settings(self, parent):
@@ -384,7 +384,7 @@ class TaxDocumentRenamerV5:
 
     def _create_log_tab(self):
         """ログタブの作成"""
-        ttk.Label(self.log_frame, text="処理ログ・デバッグ情報 (v5.0)", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
+        ttk.Label(self.log_frame, text="処理ログ・デバッグ情報 (v5.3)", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
         
         # ログ表示エリア
         log_text_frame = ttk.Frame(self.log_frame)
@@ -508,7 +508,7 @@ class TaxDocumentRenamerV5:
         thread.start()
 
     def _start_rename_processing(self):
-        """v5.0 リネーム処理開始"""
+        """v5.3 リネーム処理開始"""
         if not self.files_list:
             messagebox.showwarning("警告", "処理するファイルを選択してください")
             return
@@ -529,9 +529,9 @@ class TaxDocumentRenamerV5:
         self.rename_processing = True
         self._update_button_states()
         
-        # v5.0モードの確認
+        # v5.3モードの確認
         use_v5_mode = self.v5_mode_var.get()
-        self._log(f"リネーム処理開始: v5.0モード={'有効' if use_v5_mode else '無効'}")
+        self._log(f"リネーム処理開始: v5.3モード={'有効' if use_v5_mode else '無効'}")
         
         thread = threading.Thread(
             target=self._rename_files_background_v5,
@@ -993,14 +993,14 @@ class TaxDocumentRenamerV5:
             self.root.after(0, self._split_processing_finished)
 
     def _rename_files_background_v5(self, output_folder: str, use_v5_mode: bool):
-        """v5.0 リネーム処理のバックグラウンド処理"""
+        """v5.3 リネーム処理のバックグラウンド処理"""
         try:
             total_files = len(self.files_list)
             
             for i, file_path in enumerate(self.files_list):
                 progress = (i / total_files) * 100
                 self.root.after(0, lambda p=progress: self.progress_var.set(p))
-                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"v5.0処理中: {f}"))
+                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"v5.3処理中: {f}"))
                 
                 try:
                     if use_v5_mode:
@@ -1013,19 +1013,19 @@ class TaxDocumentRenamerV5:
             
             # 処理完了
             self.root.after(0, lambda: self.progress_var.set(100))
-            self.root.after(0, lambda: self.status_var.set(f"v5.0リネーム完了: {total_files}件処理"))
+            self.root.after(0, lambda: self.status_var.set(f"v5.3リネーム完了: {total_files}件処理"))
             
         except Exception as e:
-            self._log(f"v5.0リネーム処理エラー: {str(e)}")
+            self._log(f"v5.3リネーム処理エラー: {str(e)}")
         finally:
             self.root.after(0, self._rename_processing_finished)
 
     def _process_single_file_v5(self, file_path: str, output_folder: str):
-        """v5.0 単一ファイルの処理"""
+        """v5.3 単一ファイルの処理"""
         filename = os.path.basename(file_path)
         ext = os.path.splitext(file_path)[1].lower()
         
-        self._log(f"v5.0処理開始: {filename}")
+        self._log(f"v5.3処理開始: {filename}")
         
         if ext == '.pdf':
             # v5.3 統一処理：常に pre-extract → 決定論的リネーム経路
@@ -1166,7 +1166,7 @@ class TaxDocumentRenamerV5:
         output_path = os.path.join(output_folder, new_filename)
         shutil.copy2(file_path, output_path)
         
-        self._log(f"v5.0完了: {filename} -> {new_filename}")
+        self._log(f"v5.3完了: {filename} -> {new_filename}")
         
         # 結果追加（判定方法と信頼度を含む）
         method_display = self._get_method_display(classification_result.classification_method)
@@ -1523,7 +1523,7 @@ class TaxDocumentRenamerV5:
         self.rename_processing = False
         self._update_button_states()
         self.notebook.select(1)  # 結果タブに切り替え
-        messagebox.showinfo("完了", "v5.0リネーム処理が完了しました")
+        messagebox.showinfo("完了", "v5.3リネーム処理が完了しました")
 
     def _update_button_states(self):
         """ボタンの状態を更新"""
@@ -1532,14 +1532,14 @@ class TaxDocumentRenamerV5:
             self.rename_button.config(state='disabled')
         elif self.rename_processing:
             self.split_button.config(state='disabled')
-            self.rename_button.config(state='disabled', text="v5.0処理中...")
+            self.rename_button.config(state='disabled', text="v5.3処理中...")
         else:
             # 両方とも処理中でない場合
             self.split_button.config(state='normal', text="📄 分割実行")
-            self.rename_button.config(state='normal', text="✏️ リネーム実行 (v5.0)")
+            self.rename_button.config(state='normal', text="✏️ リネーム実行 (v5.3)")
 
     def _add_result_success(self, original_file: str, new_filename: str, doc_type: str, method: str, confidence: str, matched_keywords: List[str] = None):
-        """成功結果を追加（v5.0拡張版・マッチキーワード対応）"""
+        """成功結果を追加（v5.3拡張版・YYMM Policy対応）"""
         # マッチしたキーワードの表示文字列を生成
         keywords_display = ""
         if matched_keywords:

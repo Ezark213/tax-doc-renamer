@@ -62,20 +62,19 @@ def resolve_yymm_by_policy(class_code: str, ctx, settings, detected: Optional[st
     
     # UI強制コード：常にUIから取得（必須）
     if code4 in FORCE_UI_YYMM_CODES:
-        return require_ui_yymm(settings)
+        return require_ui_yymm(settings)  # 常にUI
     
-    # その他のコード：detected優先、UI fallback
+    # 検出値が有効な場合は優先
     if detected and _valid(detected):
         return detected, "DOC/HEURISTIC"
     
-    # フォールバック：UI値を安全網として使用
-    manual_yymm = getattr(settings, "manual_yymm", None)
-    ctx_yymm = getattr(ctx, "yymm", None) if ctx else None
+    # フォールバック（ショートカット経路でも落とさない）
+    y = getattr(ctx, "yymm", None) if ctx else None
+    if not y:
+        y = getattr(settings, "manual_yymm", None)
     
-    fallback_yymm = manual_yymm or ctx_yymm
-    
-    if _valid(fallback_yymm):
-        return fallback_yymm, "UI_FALLBACK"
+    if _valid(y):
+        return y, "UI_FALLBACK"
     
     # 最終防御：既存挙動を維持するため、ここだけは None を返し、上位での既存例外に委ねる
     return None, "NONE"

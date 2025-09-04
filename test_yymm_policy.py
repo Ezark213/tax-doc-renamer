@@ -104,7 +104,7 @@ class TestYYMMPolicy(unittest.TestCase):
             settings=self.mock_settings,
             detected=None  # 検出値なし
         )
-        self.assertEqual(yymm, "2508")  # GUI値にフォールバック
+        self.assertEqual(yymm, "2507")  # コンテキスト値を優先（改善された動作）
         self.assertEqual(source, "UI_FALLBACK")
     
     def test_resolve_yymm_context_fallback(self):
@@ -217,6 +217,91 @@ class TestYYMMPolicy(unittest.TestCase):
         yymm, source = resolve_yymm_by_policy("1001", None, self.mock_settings, None)
         self.assertEqual(yymm, "2508")  # GUI値
         self.assertEqual(source, "UI_FALLBACK")
+
+    def test_force_ui_yymm_for_600x(self):
+        """固定資産系書類（6001/6002/6003/0000）のUI強制テスト"""
+        for code in ("6001_固定資産台帳", "6002_一括償却資産明細表", "6003_少額減価償却資産明細表", "0000_納付税額一覧表"):
+            with self.subTest(code=code):
+                y, src = resolve_yymm_by_policy(code, self.mock_ctx, self.mock_settings, detected=None)
+                self.assertEqual((y, src), ("2508", "UI_FORCED"))
+                
+                # 検出値があってもUI強制
+                y, src = resolve_yymm_by_policy(code, self.mock_ctx, self.mock_settings, detected="2401")
+                self.assertEqual((y, src), ("2508", "UI_FORCED"))
+
+    def test_detected_wins_for_accounting(self):
+        """会計系書類で検出値優先のテスト"""
+        y, src = resolve_yymm_by_policy("5001_決算書", self.mock_ctx, self.mock_settings, detected="2401")
+        self.assertEqual((y, src), ("2401", "DOC/HEURISTIC"))
+        
+        # その他の会計系書類でも同様
+        for code in ("5002_総勘定元帳", "5003_補助元帳", "5004_試算表", "5005_仕訳帳"):
+            with self.subTest(code=code):
+                y, src = resolve_yymm_by_policy(code, self.mock_ctx, self.mock_settings, detected="2401")
+                self.assertEqual((y, src), ("2401", "DOC/HEURISTIC"))
+
+    def test_fallback_to_ui_when_undetected(self):
+        """検出値なし時のUIフォールバックテスト"""
+        y, src = resolve_yymm_by_policy("3001_消費税及び地方消費税申告書", self.mock_ctx, self.mock_settings, detected=None)
+        self.assertEqual((y, src), ("2507", "UI_FALLBACK"))  # コンテキスト値を優先（改善された動作）
+        
+        # 地方税系でも同様
+        for code in ("1001_都道府県税", "2001_市町村税"):
+            with self.subTest(code=code):
+                y, src = resolve_yymm_by_policy(code, self.mock_ctx, self.mock_settings, detected=None)
+                self.assertEqual((y, src), ("2507", "UI_FALLBACK"))  # コンテキスト値を優先
+
+    def test_shortcut_path_handling(self):
+        """ショートカット経路（ctx=None）での処理テスト"""
+        # コンテキストがNoneでも正常に動作することを確認
+        y, src = resolve_yymm_by_policy("5001_決算書", None, self.mock_settings, detected="2401")
+        self.assertEqual((y, src), ("2401", "DOC/HEURISTIC"))
+        
+        # UI強制コードでもコンテキストNullで動作
+        y, src = resolve_yymm_by_policy("6001_固定資産台帳", None, self.mock_settings, detected=None)
+        self.assertEqual((y, src), ("2508", "UI_FORCED"))
+        
+        # フォールバック時もsettingsからUI値取得
+        y, src = resolve_yymm_by_policy("1001_都道府県税", None, self.mock_settings, detected=None)
+        self.assertEqual((y, src), ("2508", "UI_FALLBACK"))
+
+    def test_policy_validation_comprehensive(self):
+        """包括的なポリシー検証テスト"""
+        # UI強制コードの検証
+        for code in FORCE_UI_YYMM_CODES:
+            with self.subTest(code=code):
+                # UI_FORCEDは有効
+                self.assertTrue(validate_policy_result("2508", "UI_FORCED", code))
+                # UI_FALLBACKも有効（緊急時用）
+                self.assertTrue(validate_policy_result("2508", "UI_FALLBACK", code))
+                # DOC/HEURISTICは無効
+                self.assertFalse(validate_policy_result("2508", "DOC/HEURISTIC", code))
+        
+        # 非UI強制コードの検証
+        for code in ("1001", "2001", "3001", "5001"):
+            with self.subTest(code=code):
+                # すべてのソースが有効
+                self.assertTrue(validate_policy_result("2508", "UI_FORCED", code))
+                self.assertTrue(validate_policy_result("2508", "UI_FALLBACK", code))
+                self.assertTrue(validate_policy_result("2508", "DOC/HEURISTIC", code))
+
+    def test_error_conditions_and_recovery(self):
+        """エラー条件と回復処理のテスト"""
+        # UI必須なのにUI値がない場合
+        empty_settings = MagicMock()
+        empty_settings.manual_yymm = None
+        
+        with self.assertRaises(ValueError) as cm:
+            require_ui_yymm(empty_settings)
+        self.assertIn("[FATAL] UI YYMM is required", str(cm.exception))
+        
+        # UI必須なのに無効なUI値の場合
+        invalid_settings = MagicMock()
+        invalid_settings.manual_yymm = "25"  # 2桁
+        
+        with self.assertRaises(ValueError) as cm:
+            require_ui_yymm(invalid_settings)
+        self.assertIn("[FATAL] UI YYMM is required", str(cm.exception))
 
 
 if __name__ == '__main__':
