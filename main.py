@@ -886,8 +886,24 @@ class TaxDocumentRenamerV5:
                 
                 try:
                     if file_path.lower().endswith('.pdf'):
+                        # RunConfig/YYMM伝搬用コールバック定義（Bundle分割経路でも確実に伝搬）
+                        def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
+                            # スナップショット生成（RunConfig/YYMM情報含む）
+                            gui_yymm = self.year_month_var.get()
+                            ui_context = create_ui_context_from_gui(
+                                yymm_var_value=gui_yymm,
+                                municipality_sets=getattr(self, 'municipality_sets', {}),
+                                batch_mode=True,
+                                allow_auto_forced_codes=getattr(self, 'allow_auto_forced_codes', False),
+                                file_path=file_path
+                            )
+                            user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                            snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                            # Bundle分割ファイルでもスナップショット参照処理
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                        
                         was_split = self.pdf_processor.maybe_split_pdf(
-                            file_path, output_folder, force=False, processing_callback=None
+                            file_path, output_folder, force=False, processing_callback=processing_callback
                         )
                         
                         if was_split:
@@ -940,8 +956,24 @@ class TaxDocumentRenamerV5:
                 
                 try:
                     if file_path.lower().endswith('.pdf'):
+                        # RunConfig/YYMM伝搬用コールバック定義（強制分割でも確実に伝搬）
+                        def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
+                            # スナップショット生成（RunConfig/YYMM情報含む）
+                            gui_yymm = self.year_month_var.get()
+                            ui_context = create_ui_context_from_gui(
+                                yymm_var_value=gui_yymm,
+                                municipality_sets=getattr(self, 'municipality_sets', {}),
+                                batch_mode=True,
+                                allow_auto_forced_codes=getattr(self, 'allow_auto_forced_codes', False),
+                                file_path=file_path
+                            )
+                            user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                            snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                            # 強制分割ファイルでもスナップショット参照処理
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                        
                         was_split = self.pdf_processor.maybe_split_pdf(
-                            file_path, output_folder, force=True, processing_callback=None
+                            file_path, output_folder, force=True, processing_callback=processing_callback
                         )
                         
                         if was_split:
