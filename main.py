@@ -21,6 +21,7 @@ from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
 from helpers.settings_context import UIContext, create_ui_context_from_gui, normalize_settings_input
 from helpers.run_config import RunConfig, create_run_config_from_gui
+from helpers.job_context import JobContext, create_job_context_from_gui
 from core.csv_processor import CSVProcessor
 from core.classification_v5 import DocumentClassifierV5  # v5.1バグ修正版エンジンを使用
 from core.runtime_paths import get_tesseract_executable_path, get_tessdata_dir_path, validate_tesseract_resources
@@ -614,7 +615,8 @@ class TaxDocumentRenamerV5:
             )
             self.run_config.log_config()
             
-            # UI必須コードの事前チェック（リスト内にあるかチェック）
+            # UI必須コードの事前チェック（UI強制コード検証）
+            self._pre_validate_ui_forced_codes()
             self._log(f"[RUN_CONFIG] Batch processing started with manual_yymm={self.run_config.manual_yymm}")
             
         except Exception as e:
@@ -742,8 +744,15 @@ class TaxDocumentRenamerV5:
                         # Step 2: Bundle検出（グローバル除外対応）
                         # Step 3: 分割実行 or 単一処理
                         def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
-                            # v5.3: スナップショット参照での決定論的リネーム
-                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                            # v5.3.5: JobContext統合での決定論的リネーム
+                            gui_yymm = self.year_month_var.get()
+                            job_context = create_job_context_from_gui(
+                                yymm_var_value=gui_yymm,
+                                output_directory=output_folder,
+                                batch_mode=True,
+                                debug_mode=getattr(self, 'debug_mode', False)
+                            )
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
                         
                         was_split = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=False, processing_callback=processing_callback
@@ -753,8 +762,15 @@ class TaxDocumentRenamerV5:
                             split_count += 1
                             self._log(f"[v5.3] Bundle分割完了: {filename}")
                         else:
-                            # Step 4: 単一ファイル処理（スナップショット使用）
-                            self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+                            # Step 4: 単一ファイル処理（JobContext統合）
+                            gui_yymm = self.year_month_var.get()
+                            job_context = create_job_context_from_gui(
+                                yymm_var_value=gui_yymm,
+                                output_directory=output_folder,
+                                batch_mode=True,
+                                debug_mode=getattr(self, 'debug_mode', False)
+                            )
+                            self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot, None, job_context)
                             self._log(f"[v5.3] 単一ファイル処理完了: {filename}")
                     
                     else:
@@ -888,8 +904,16 @@ class TaxDocumentRenamerV5:
                     if file_path.lower().endswith('.pdf'):
                         # RunConfig/YYMM伝搬用コールバック定義（Bundle分割経路でも確実に伝搬）
                         def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
-                            # スナップショット生成（RunConfig/YYMM情報含む）
+                            # JobContext生成（Bundle分割経路でも確実にYYMM伝搬）
                             gui_yymm = self.year_month_var.get()
+                            job_context = create_job_context_from_gui(
+                                yymm_var_value=gui_yymm,
+                                output_directory=output_folder,
+                                batch_mode=True,
+                                debug_mode=getattr(self, 'debug_mode', False)
+                            )
+                            
+                            # スナップショット生成（RunConfig/YYMM情報含む）
                             ui_context = create_ui_context_from_gui(
                                 yymm_var_value=gui_yymm,
                                 municipality_sets=getattr(self, 'municipality_sets', {}),
@@ -899,8 +923,8 @@ class TaxDocumentRenamerV5:
                             )
                             user_yymm = self._resolve_yymm_with_policy(file_path, None)
                             snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-                            # Bundle分割ファイルでもスナップショット参照処理
-                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                            # Bundle分割ファイルでもJobContext参照処理
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
                         
                         was_split = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=False, processing_callback=processing_callback
@@ -958,8 +982,16 @@ class TaxDocumentRenamerV5:
                     if file_path.lower().endswith('.pdf'):
                         # RunConfig/YYMM伝搬用コールバック定義（強制分割でも確実に伝搬）
                         def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
-                            # スナップショット生成（RunConfig/YYMM情報含む）
+                            # JobContext生成（強制分割経路でも確実にYYMM伝搬）
                             gui_yymm = self.year_month_var.get()
+                            job_context = create_job_context_from_gui(
+                                yymm_var_value=gui_yymm,
+                                output_directory=output_folder,
+                                batch_mode=True,
+                                debug_mode=getattr(self, 'debug_mode', False)
+                            )
+                            
+                            # スナップショット生成（RunConfig/YYMM情報含む）
                             ui_context = create_ui_context_from_gui(
                                 yymm_var_value=gui_yymm,
                                 municipality_sets=getattr(self, 'municipality_sets', {}),
@@ -969,8 +1001,8 @@ class TaxDocumentRenamerV5:
                             )
                             user_yymm = self._resolve_yymm_with_policy(file_path, None)
                             snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-                            # 強制分割ファイルでもスナップショット参照処理
-                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                            # 強制分割ファイルでもJobContext参照処理
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
                         
                         was_split = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=True, processing_callback=processing_callback
@@ -1149,14 +1181,60 @@ class TaxDocumentRenamerV5:
             
             user_yymm = self._resolve_yymm_with_policy(file_path, None)  # ポリシーシステム使用
             snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-            self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+            
+            # JobContext生成（非分割処理でも確実にYYMM伝搬）
+            job_context = create_job_context_from_gui(
+                yymm_var_value=gui_yymm,
+                output_directory=output_folder,
+                batch_mode=False,  # 単一ファイル処理
+                debug_mode=getattr(self, 'debug_mode', False)
+            )
+            self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot, None, job_context)
         elif ext == '.csv':
             self._process_csv_file(file_path, output_folder)  # CSVは従来通り
         else:
             raise ValueError(f"未対応ファイル形式: {ext}")
     
+    def _pre_validate_ui_forced_codes(self):
+        """
+        UI強制適用コードの事前検証
+        ファイル処理開始前にUI必須コード(6001/6002/6003/0000)の有無を確認し、
+        UI YYMM値が不足している場合はエラーを発生させる
+        """
+        if not self.run_config or not self.run_config.has_manual_yymm():
+            # UI YYMMが設定されていない場合は警告のみ（処理は継続）
+            self._log(f"[PRE_VALIDATE] No UI YYMM provided - UI forced codes will fail if encountered")
+            return
+        
+        # UI強制コードリスト
+        ui_forced_codes = {"6001", "6002", "6003", "0000"}
+        
+        # ファイルリスト中でUI強制コードが使われそうな書類をチェック
+        potential_ui_forced_files = []
+        
+        for file_path in self.files_list:
+            filename = os.path.basename(file_path).lower()
+            
+            # ファイル名パターンでUI強制書類を推測
+            if any(keyword in filename for keyword in [
+                "固定資産", "一括償却", "少額減価償却", "納付税額一覧", "資産台帳"
+            ]):
+                potential_ui_forced_files.append(file_path)
+        
+        if potential_ui_forced_files:
+            self._log(f"[PRE_VALIDATE] Found {len(potential_ui_forced_files)} potential UI-forced files")
+            self._log(f"[PRE_VALIDATE] UI YYMM confirmed: {self.run_config.manual_yymm}")
+        
+        # 正規化テスト（早期エラー検出）
+        try:
+            normalized_yymm = RunConfig._normalize_yymm(self.run_config.manual_yymm)
+            self._log(f"[PRE_VALIDATE] YYMM normalized: {self.run_config.manual_yymm} -> {normalized_yymm}")
+        except ValueError as e:
+            raise ValueError(f"[FATAL][PRE_VALIDATE] Invalid UI YYMM format: {e}")
+    
     def _process_single_file_v5_with_snapshot(self, file_path: str, output_folder: str, 
-                                             snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None):
+                                             snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None,
+                                             job_context: Optional[JobContext] = None):
         """v5.3 スナップショット方式を使用したファイル処理（決定論的命名）"""
         filename = os.path.basename(file_path)
         ext = os.path.splitext(file_path)[1].lower()
@@ -1164,7 +1242,7 @@ class TaxDocumentRenamerV5:
         self._log(f"[v5.3] 決定論的処理開始: {filename}")
         
         if ext == '.pdf':
-            self._process_pdf_file_v5_with_snapshot(file_path, output_folder, snapshot, doc_item_id)
+            self._process_pdf_file_v5_with_snapshot(file_path, output_folder, snapshot, doc_item_id, job_context)
         elif ext == '.csv':
             self._process_csv_file(file_path, output_folder)  # CSVは従来通り
         else:
@@ -1240,7 +1318,15 @@ class TaxDocumentRenamerV5:
         
         user_yymm = self._resolve_yymm_with_policy(file_path, None)  # ポリシーシステム使用
         snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-        self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+        
+        # JobContext生成（v5.3統一パイプラインでも確実にYYMM伝搬）
+        job_context = create_job_context_from_gui(
+            yymm_var_value=gui_yymm,
+            output_directory=output_folder,
+            batch_mode=True,
+            debug_mode=getattr(self, 'debug_mode', False)
+        )
+        self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot, None, job_context)
 
     def _process_regular_pdf_v5(self, file_path: str, output_folder: str):
         """v5.2 通常PDFの処理 (高精度分類エンジン)"""
@@ -1310,7 +1396,8 @@ class TaxDocumentRenamerV5:
         ))
     
     def _process_pdf_file_v5_with_snapshot(self, file_path: str, output_folder: str, 
-                                          snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None):
+                                          snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None,
+                                          job_context: Optional[JobContext] = None):
         """v5.3 スナップショット方式PDFファイル処理（決定論的命名）"""
         filename = os.path.basename(file_path)
         
@@ -1363,7 +1450,7 @@ class TaxDocumentRenamerV5:
             # 分割ファイル：v5.3決定論的リネーム
             fallback_ocr_text = text if not snapshot.pages else None
             deterministic_filename = self.rename_engine.compute_filename(
-                doc_item_id, snapshot, document_type, fallback_ocr_text
+                doc_item_id, snapshot, document_type, fallback_ocr_text, job_context
             )
             new_filename = f"{deterministic_filename}.pdf"
         else:
@@ -1385,7 +1472,7 @@ class TaxDocumentRenamerV5:
             
             fallback_ocr_text = text if not snapshot.pages else None
             deterministic_filename = self.rename_engine.compute_filename(
-                pseudo_doc_item_id, snapshot, document_type, fallback_ocr_text
+                pseudo_doc_item_id, snapshot, document_type, fallback_ocr_text, job_context
             )
             new_filename = f"{deterministic_filename}.pdf"
         

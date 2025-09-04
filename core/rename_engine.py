@@ -7,15 +7,18 @@
 import re
 import logging
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple, Any
+from typing import Optional, Dict, List, Tuple, Any, TYPE_CHECKING
 from collections import defaultdict
 
 from .models import (
     DocItemID, PreExtractSnapshot, RenameFields, SerialAllocation,
     make_bucket_key, compute_text_sha1
 )
-from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
+from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result, log_yymm_fatal, log_yymm_audit
 from helpers.settings_context import normalize_settings_input
+
+if TYPE_CHECKING:
+    from helpers.job_context import JobContext
 
 
 class RenameEngine:
@@ -77,7 +80,8 @@ class RenameEngine:
         self.serial_cache: Dict[str, SerialAllocation] = {}
     
     def compute_filename(self, doc_item_id: DocItemID, snapshot: PreExtractSnapshot, 
-                        final_code: str, fallback_ocr_text: Optional[str] = None) -> str:
+                        final_code: str, fallback_ocr_text: Optional[str] = None, 
+                        job_context: Optional['JobContext'] = None) -> str:
         """
         決定論的ファイル名生成のメイン関数
         
@@ -86,6 +90,7 @@ class RenameEngine:
             snapshot: Pre-Extractスナップショット
             final_code: 最終分類コード（分類器の結果）
             fallback_ocr_text: スナップショット不足時のフォールバックテキスト
+            job_context: JobContext（YYMM一元管理）
             
         Returns:
             str: 生成されたファイル名（拡張子なし）
@@ -95,36 +100,57 @@ class RenameEngine:
         # スナップショットからフィールド取得
         fields = self._get_rename_fields(doc_item_id, snapshot, fallback_ocr_text)
         
-        # --- YYMM Policy Integration v5.3 ---
-        # YYMMをポリシーベースで決定
-        detected_yymm = fields.period_yyyymm if (fields.period_yyyymm and fields.period_yyyymm.isdigit() and len(fields.period_yyyymm) == 4) else None
-        
-        try:
-            # v5.3.5-ui-robust: 一貫した設定コンテキスト使用
-            normalized_settings = normalize_settings_input(snapshot)
-            pipeline_context = getattr(doc_item_id, '_pipeline_context', None)
+        # --- YYMM JobContext Integration v5.3.5 ---
+        # JobContextがある場合は一元管理されたYYMMを使用
+        if job_context and job_context.confirmed_yymm:
+            try:
+                final_yymm = job_context.get_yymm_for_classification(final_code)
+                yymm_source = job_context.yymm_source
+                
+                # Enhanced logging with AUDIT support
+                log_yymm_audit("JOB_CONTEXT_USE", {
+                    "job_id": job_context.job_id,
+                    "code": final_code,
+                    "yymm": final_yymm,
+                    "source": yymm_source
+                }, self.logger)
+                
+                fields.period_yyyymm = final_yymm
+                
+            except ValueError as e:
+                log_yymm_fatal(final_code, str(e), self.logger)
+                raise
+                
+        else:
+            # フォールバック: 従来のポリシーベースYYMM決定
+            detected = fields.period_yyyymm if (fields.period_yyyymm and fields.period_yyyymm.isdigit() and len(fields.period_yyyymm) == 4) else None
             
-            # ポリシーによるYYMM決定
-            final_yymm, yymm_source = resolve_yymm_by_policy(
-                class_code=final_code,
-                ctx=pipeline_context,
-                settings=normalized_settings,
-                detected=detected_yymm
-            )
+            try:
+                # v5.3.5-ui-robust: 一貫した設定コンテキスト使用
+                normalized_settings = normalize_settings_input(snapshot)
+                pipeline_context = getattr(doc_item_id, '_pipeline_context', None)
+                
+                # ポリシーによるYYMM決定
+                final_yymm, yymm_source = resolve_yymm_by_policy(
+                    class_code=final_code,
+                    ctx=pipeline_context,
+                    settings=normalized_settings,
+                    detected=detected
+                )
+                
+                # ポリシー結果の検証
+                if not validate_policy_result(final_yymm, yymm_source, final_code):
+                    raise ValueError(f"[FATAL] Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={final_code}")
+                
+                # ログ出力
+                log_yymm_decision(final_code, final_yymm, yymm_source, self.logger)
+                
+                # fieldsに反映
+                fields.period_yyyymm = final_yymm
             
-            # ポリシー結果の検証
-            if not validate_policy_result(final_yymm, yymm_source, final_code):
-                raise ValueError(f"[FATAL] Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={final_code}")
-            
-            # ログ出力
-            log_yymm_decision(final_code, final_yymm, yymm_source, self.logger)
-            
-            # fieldsに反映
-            fields.period_yyyymm = final_yymm
-            
-        except Exception as e:
-            self.logger.error(f"[YYMM][POLICY] Failed to resolve YYMM: {e}")
-            raise
+            except Exception as e:
+                log_yymm_fatal(final_code, f"Failed to resolve YYMM: {e}", self.logger)
+                raise
         
         # v5.3 hotfix: source_pathの互換アクセス
         from helpers.paths import get_source_path

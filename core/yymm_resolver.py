@@ -94,14 +94,14 @@ def resolve_yymm(code: str, document: Any, ui_context: Dict[str, Any] = None,
     try:
         # 文書検出
         doc_result = _detect_from_document(document)
-        detected_yymm = doc_result.yymm if doc_result else None
+        detected = doc_result.yymm if doc_result else None
         
         # ポリシー適用（RunConfig中心システム対応）
         yymm_value, source_str = resolve_yymm_by_policy(
             class_code=code,
             ctx={"default_yymm": None, "run_config": None},  # RunConfig対応
             settings=ui_context,
-            detected=detected_yymm  # 引数名修正
+            detected=detected  # 引数名修正済み
         )
         
         # ソース変換

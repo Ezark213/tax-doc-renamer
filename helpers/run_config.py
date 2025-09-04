@@ -31,11 +31,14 @@ class RunConfig:
     
     @staticmethod
     def _normalize_yymm(yymm: str) -> str:
-        """YYMM値の正規化（厳密チェック）"""
+        """YYMM値の正規化（全角対応・厳密チェック）"""
         if not yymm:
             return None
             
-        yymm_str = str(yymm).strip()
+        import unicodedata
+        
+        # 全角→半角・空白除去
+        yymm_str = unicodedata.normalize("NFKC", str(yymm)).strip()
         
         # 4桁数字チェック
         if re.fullmatch(r"\d{4}", yymm_str):
