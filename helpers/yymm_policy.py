@@ -268,40 +268,11 @@ def _validate_yymm(yymm: str) -> bool:
         return False
 
 def log_yymm_decision(class_code: str, yymm: str, source: str, logger=None):
-    """YYMM決定をログ出力（INFO/AUDIT/FATAL粒度対応）"""
-    code4 = class_code[:4] if class_code else ""
-    
+    """YYMM決定をログ出力"""
     if logger:
-        # INFO: 成功した決定
-        logger.info(f"[YYMM][POLICY] code={code4} use={yymm} source={source}")
-        
-        # AUDIT: 監査用詳細ログ
-        if source in ("UI_FORCED", "UI"):
-            logger.info(f"[AUDIT][YYMM] source={source} value={yymm} validation=PASSED code={code4}")
-        elif source in ("DOC/HEURISTIC", "OCR"):
-            logger.info(f"[AUDIT][YYMM] source=DETECTED value={yymm} validation=PASSED code={code4}")
-        else:
-            logger.info(f"[AUDIT][YYMM] source={source} value={yymm} validation=PASSED code={code4}")
+        logger.info(f"[YYMM][POLICY] code={class_code} value={yymm} source={source}")
     else:
-        print(f"[YYMM][POLICY] code={code4} use={yymm} source={source}")
-
-def log_yymm_fatal(class_code: str, error_message: str, logger=None):
-    """FATAL レベルのYYMMエラーログ"""
-    code4 = class_code[:4] if class_code else ""
-    
-    if logger:
-        logger.error(f"[FATAL][YYMM] {error_message} code={code4}")
-    else:
-        print(f"[FATAL][YYMM] {error_message} code={code4}")
-
-def log_yymm_audit(event_type: str, details: dict, logger=None):
-    """AUDIT レベルの詳細ログ"""
-    details_str = " ".join(f"{k}={v}" for k, v in details.items())
-    
-    if logger:
-        logger.info(f"[AUDIT][YYMM] {event_type} {details_str}")
-    else:
-        print(f"[AUDIT][YYMM] {event_type} {details_str}")
+        print(f"[YYMM][POLICY] code={class_code} value={yymm} source={source}")
 
 def validate_policy_result(yymm: str, source: str, class_code: str = None) -> bool:
     """ポリシー適用結果の検証"""

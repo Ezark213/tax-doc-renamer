@@ -7,18 +7,15 @@
 import re
 import logging
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple, Any, TYPE_CHECKING
+from typing import Optional, Dict, List, Tuple, Any
 from collections import defaultdict
 
 from .models import (
     DocItemID, PreExtractSnapshot, RenameFields, SerialAllocation,
     make_bucket_key, compute_text_sha1
 )
-from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result, log_yymm_fatal, log_yymm_audit
+from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
 from helpers.settings_context import normalize_settings_input
-
-if TYPE_CHECKING:
-    from helpers.job_context import JobContext
 
 
 class RenameEngine:
@@ -80,8 +77,7 @@ class RenameEngine:
         self.serial_cache: Dict[str, SerialAllocation] = {}
     
     def compute_filename(self, doc_item_id: DocItemID, snapshot: PreExtractSnapshot, 
-                        final_code: str, fallback_ocr_text: Optional[str] = None, 
-                        job_context: Optional['JobContext'] = None) -> str:
+                        final_code: str, fallback_ocr_text: Optional[str] = None) -> str:
         """
         決定論的ファイル名生成のメイン関数
         
@@ -90,7 +86,6 @@ class RenameEngine:
             snapshot: Pre-Extractスナップショット
             final_code: 最終分類コード（分類器の結果）
             fallback_ocr_text: スナップショット不足時のフォールバックテキスト
-            job_context: JobContext（YYMM一元管理）
             
         Returns:
             str: 生成されたファイル名（拡張子なし）
@@ -100,60 +95,36 @@ class RenameEngine:
         # スナップショットからフィールド取得
         fields = self._get_rename_fields(doc_item_id, snapshot, fallback_ocr_text)
         
-        # --- YYMM JobContext Integration v5.3.5 ---
-        # JobContextがある場合は一元管理されたYYMMを使用
-        if job_context and job_context.confirmed_yymm:
-            try:
-                final_yymm = job_context.get_yymm_for_classification(final_code)
-                yymm_source = job_context.yymm_source
-                
-                # Enhanced logging with AUDIT support
-                log_yymm_audit("JOB_CONTEXT_USE", {
-                    "job_id": job_context.job_id,
-                    "code": final_code,
-                    "yymm": final_yymm,
-                    "source": yymm_source
-                }, self.logger)
-                
-                fields.period_yyyymm = final_yymm
-                
-            except ValueError as e:
-                log_yymm_fatal(final_code, str(e), self.logger)
-                raise
-                
-        else:
-            # フォールバック: 従来のポリシーベースYYMM決定
-            detected = fields.period_yyyymm if (fields.period_yyyymm and fields.period_yyyymm.isdigit() and len(fields.period_yyyymm) == 4) else None
+        # --- YYMM Policy Integration v5.3 ---
+        # YYMMをポリシーベースで決定
+        detected_yymm = fields.period_yyyymm if (fields.period_yyyymm and fields.period_yyyymm.isdigit() and len(fields.period_yyyymm) == 4) else None
+        
+        try:
+            # v5.3.5-ui-robust: 一貫した設定コンテキスト使用
+            normalized_settings = normalize_settings_input(snapshot)
+            pipeline_context = getattr(doc_item_id, '_pipeline_context', None)
             
-            try:
-                # v5.3.5-ui-robust: 一貫した設定コンテキスト使用
-                normalized_settings = normalize_settings_input(snapshot)
-                pipeline_context = getattr(doc_item_id, '_pipeline_context', None)
-                
-                # ポリシーによるYYMM決定
-                final_yymm, yymm_source = resolve_yymm_by_policy(
-                    class_code=final_code,
-                    ctx=pipeline_context,
-                    settings=normalized_settings,
-                    detected=detected
-                )
-                
-                # UI強制コード検証ログ強化（6001/6002/6003/0000）
-                self._log_ui_forced_code_verification(final_code, final_yymm, yymm_source)
-                
-                # ポリシー結果の検証
-                if not validate_policy_result(final_yymm, yymm_source, final_code):
-                    raise ValueError(f"[FATAL] Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={final_code}")
-                
-                # ログ出力
-                log_yymm_decision(final_code, final_yymm, yymm_source, self.logger)
-                
-                # fieldsに反映
-                fields.period_yyyymm = final_yymm
+            # ポリシーによるYYMM決定
+            final_yymm, yymm_source = resolve_yymm_by_policy(
+                class_code=final_code,
+                ctx=pipeline_context,
+                settings=normalized_settings,
+                detected=detected_yymm
+            )
             
-            except Exception as e:
-                log_yymm_fatal(final_code, f"Failed to resolve YYMM: {e}", self.logger)
-                raise
+            # ポリシー結果の検証
+            if not validate_policy_result(final_yymm, yymm_source, final_code):
+                raise ValueError(f"[FATAL] Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={final_code}")
+            
+            # ログ出力
+            log_yymm_decision(final_code, final_yymm, yymm_source, self.logger)
+            
+            # fieldsに反映
+            fields.period_yyyymm = final_yymm
+            
+        except Exception as e:
+            self.logger.error(f"[YYMM][POLICY] Failed to resolve YYMM: {e}")
+            raise
         
         # v5.3 hotfix: source_pathの互換アクセス
         from helpers.paths import get_source_path
@@ -163,9 +134,13 @@ class RenameEngine:
         except AttributeError:
             self.logger.info(f"[AUDIT][YYMM] use={fields.period_yyyymm} source=GUI file=unknown")
         
-        # 最終ラベル決定（overlay優先採用システム）
-        final_label = self._select_final_label_with_overlay(final_code, fields, snapshot, doc_item_id)
-        code, title, muni, period = final_label.code, final_label.title, final_label.municipality, final_label.period
+        # コード選定：最終分類を優先、フォールバックでヒント
+        code = final_code or fields.code_hint or "9999"
+        
+        # 基本情報抽出
+        title = self._get_title_for_code(code, fields)
+        muni = self._format_municipality(fields.muni_name)
+        period = self._format_period(fields.period_yyyymm)
         
         # 連番処理（地方税系の場合）
         serial_code = self._compute_serial_if_needed(code, doc_item_id, snapshot, fields)
@@ -380,20 +355,12 @@ class RenameEngine:
     
     def _remove_forbidden_suffixes(self, filename: str) -> str:
         """禁止されたサフィックスを除去（最終段で実行）"""
-        # 禁止パターン（受信通知・納付情報からの_市町村・_都道府県 + 強化版）
+        # 禁止パターン（受信通知・納付情報からの_市町村・_都道府県）
         FORBIDDEN_SUFFIX_PATTERNS = [
             r'_市町村_(\d{4})$',  # _市町村_2508 → _2508
             r'_都道府県_(\d{4})$',  # _都道府県_2508 → _2508
             r'_市町村$',         # _市町村 → 削除
-            r'_都道府県$',       # _都道府県 → 削除
-            # 強化版：汎用語パターンの完全削除
-            r'_受信通知_市町村_(\d{4})$',     # _受信通知_市町村_2508 → _受信通知_2508
-            r'_受信通知_都道府県_(\d{4})$',   # _受信通知_都道府県_2508 → _受信通知_2508
-            r'_納付情報_市町村_(\d{4})$',     # _納付情報_市町村_2508 → _納付情報_2508
-            r'_納付情報_都道府県_(\d{4})$',   # _納付情報_都道府県_2508 → _納付情報_2508
-            # 汎用語単体削除（汎用的すぎるラベル）
-            r'_法人市民税_(\d{4})$',         # 具体自治体名がある場合のみ有効なので削除対象
-            r'_法人都道府県民税_(\d{4})$'    # 同上
+            r'_都道府県$'        # _都道府県 → 削除
         ]
         
         original_filename = filename
@@ -407,116 +374,6 @@ class RenameEngine:
                 self.logger.debug(f"[rename] Forbidden suffix removed: '{original_filename}' → '{filename}'")
         
         return filename
-    
-    def _select_final_label_with_overlay(self, final_code: str, fields: RenameFields, 
-                                       snapshot: PreExtractSnapshot, doc_item_id: DocItemID) -> 'FinalLabel':
-        """
-        最終ラベル（code/name/pref/city）を単一点で決定。
-        overlay(自治体変更版)があれば全面採用、なければ元コード。
-        """
-        from dataclasses import dataclass
-        from typing import Optional
-        
-        @dataclass
-        class FinalLabel:
-            code: str
-            title: str
-            municipality: str
-            period: str
-            source: str = "base"  # base/overlay
-        
-        # 基本ラベル（フォールバック）
-        base_code = final_code or fields.code_hint or "9999"
-        base_title = self._get_title_for_code(base_code, fields)
-        base_muni = self._format_municipality(fields.muni_name)
-        base_period = self._format_period(fields.period_yyyymm)
-        
-        # classification_resultからoverlay情報を取得（スナップショットベース）
-        if doc_item_id.page_index < len(snapshot.pages):
-            page_result = snapshot.pages[doc_item_id.page_index]
-            
-            # overlay情報がある場合（自治体変更版）
-            if hasattr(page_result, 'original_doc_type_code') and page_result.original_doc_type_code:
-                # 現在のdocument_typeが変更後、original_doc_type_codeが元コード
-                if hasattr(page_result, 'document_type') and page_result.document_type != page_result.original_doc_type_code:
-                    overlay_code = page_result.document_type
-                    overlay_title = self._get_title_for_code(overlay_code, fields)
-                    
-                    # 自治体名の詳細情報を抽出
-                    overlay_muni = self._extract_municipality_from_overlay(overlay_code, fields)
-                    
-                    self.logger.info(f"[OVERLAY] Final label selection: {page_result.original_doc_type_code} → {overlay_code}")
-                    self.logger.info(f"[OVERLAY] Municipality extracted: {overlay_muni}")
-                    
-                    return FinalLabel(
-                        code=overlay_code,
-                        title=overlay_title,
-                        municipality=overlay_muni,
-                        period=base_period,
-                        source="overlay"
-                    )
-        
-        # フォールバック：基本ラベル
-        self.logger.debug(f"[LABEL] Using base label: code={base_code}, title={base_title}")
-        
-        return FinalLabel(
-            code=base_code,
-            title=base_title,
-            municipality=base_muni,
-            period=base_period,
-            source="base"
-        )
-    
-    def _extract_municipality_from_overlay(self, overlay_code: str, fields: RenameFields) -> str:
-        """overlayコードから自治体名を抽出"""
-        # overlayコード形式: 1011_愛知県_..., 2013_愛知県蒲郡市_... など
-        if '_' in overlay_code:
-            parts = overlay_code.split('_')
-            if len(parts) >= 2:
-                # 2番目の部分が自治体名
-                muni_part = parts[1]
-                # 禁止サフィックス除去適用
-                muni_part = self._remove_forbidden_suffixes(f"dummy_{muni_part}_dummy").replace("dummy_", "").replace("_dummy", "")
-                return muni_part
-        
-        # フォールバック：元の自治体名
-        return self._format_municipality(fields.muni_name)
-    
-    def _log_ui_forced_code_verification(self, classification_code: str, yymm: str, yymm_source: str):
-        """UI強制コード（6001/6002/6003/0000）の監査ログ強化"""
-        from helpers.yymm_policy import log_yymm_audit, log_yymm_fatal
-        
-        code4 = classification_code[:4] if classification_code else ""
-        ui_forced_codes = {"6001", "6002", "6003", "0000"}
-        
-        if code4 in ui_forced_codes:
-            # UI強制コードの場合は特別監査ログ
-            if yymm_source in ("UI", "UI_FORCED", "UI_FALLBACK"):
-                # 成功ケース：UI値が正しく適用
-                log_yymm_audit("UI_FORCED_SUCCESS", {
-                    "code": code4,
-                    "yymm": yymm,
-                    "source": yymm_source,
-                    "validation": "PASSED",
-                    "mandatory": "TRUE"
-                }, self.logger)
-                
-                # 回帰防止のための詳細ログ
-                self.logger.info(f"[UI_FORCED][{code4}] ✅ UI YYMM mandatory application SUCCESS")
-                self.logger.info(f"[UI_FORCED][{code4}] value={yymm} source={yymm_source} status=APPLIED")
-                
-            else:
-                # 失敗ケース：UI値が適用されていない
-                log_yymm_fatal(code4, f"UI YYMM mandatory but not applied: yymm={yymm}, source={yymm_source}", self.logger)
-                
-                self.logger.error(f"[UI_FORCED][{code4}] ❌ UI YYMM mandatory application FAILED")
-                self.logger.error(f"[UI_FORCED][{code4}] expected=UI_FORCED actual={yymm_source}")
-                
-                raise ValueError(f"[FATAL] UI强制码 {code4} 需要UI输入的YYMM值，但未获得: source={yymm_source}")
-        else:
-            # 通常コードの場合は簡潔ログ
-            if yymm and yymm_source:
-                self.logger.debug(f"[YYMM_VERIFY] code={code4} yymm={yymm} source={yymm_source}")
     
     def _ensure_unique_filename(self, filename: str, doc_item_id: DocItemID) -> str:
         """ファイル名の一意性確保（決定論的サフィックス）"""
