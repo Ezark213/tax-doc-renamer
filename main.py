@@ -647,7 +647,7 @@ class TaxDocumentRenamerV5:
                 try:
                     if file_path.lower().endswith('.pdf'):
                         # Bundle detection and split
-                        def processing_callback(temp_path, page_num, bundle_type):
+                        def processing_callback(temp_path, page_num, bundle_type, doc_item_id=None):
                             # Process each split page through existing pipeline
                             self._process_single_file_v5(temp_path, output_folder)
                         
@@ -938,7 +938,7 @@ class TaxDocumentRenamerV5:
         if self.auto_split_var.get():
             try:
                 # v5.2 Bundle PDF Auto-Split を使用
-                def processing_callback(temp_path, page_num, bundle_type):
+                def processing_callback(temp_path, page_num, bundle_type, doc_item_id=None):
                     # 分割されたページを v5.2 分類エンジンで処理
                     self._process_regular_pdf_v5(temp_path, output_folder)
                     self._log(f"Bundle split page processed: {os.path.basename(temp_path)} (page {page_num}, type: {bundle_type})")
