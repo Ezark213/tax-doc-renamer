@@ -313,4 +313,3 @@ def validate_policy_result(yymm: str, source: str, class_code: str = None) -> bo
         return source in ("UI_FORCED", "UI_FALLBACK")
     
     return True
->>>>>>> ff12ea5b228436ff1d1bf6ef0fa83a3bb54b3ac7
