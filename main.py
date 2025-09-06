@@ -1326,38 +1326,13 @@ class TaxDocumentRenamerV5:
             document_type = classification_result.document_type if classification_result else "9999_未分類"
             self._log(f"[v5.3] 分類結果そのまま: {document_type}")
         
-        # 分割・非分割に関係ない統一命名処理
-        if doc_item_id:
-            # 分割ファイル：v5.3決定論的リネーム
-            fallback_ocr_text = text if not snapshot.pages else None
-            deterministic_filename = self.rename_engine.compute_filename(
-                doc_item_id, snapshot, document_type, fallback_ocr_text
-            )
-            new_filename = f"{deterministic_filename}.pdf"
-        else:
-            # 非分割ファイル：v5.3決定論的リネーム（同じ処理）
-            # 疑似DocItemIDを作成して統一処理
-            from core.models import DocItemID, PageFingerprint, compute_text_sha1, compute_file_md5
-            
-            # ファイルパスから基本情報を取得
-            file_md5 = compute_file_md5(file_path)
-            page_fp = PageFingerprint(
-                page_md5=file_md5[:16], 
-                text_sha1=compute_text_sha1(text[:1000])  # テキストの先頭部分
-            )
-            pseudo_doc_item_id = DocItemID(
-                source_doc_md5=file_md5,
-                page_index=0,
-                fp=page_fp
-            )
-            
-            fallback_ocr_text = text if not snapshot.pages else None
-            deterministic_filename = self.rename_engine.compute_filename(
-                pseudo_doc_item_id, snapshot, document_type, fallback_ocr_text
-            )
-            new_filename = f"{deterministic_filename}.pdf"
+        # YYMMポリシーシステムでYYMM値を取得
+        user_yymm = self._resolve_yymm_with_policy(file_path, document_type)
         
-        self._log(f"[v5.3] 決定論的独立化命名完了: {new_filename}")
+        # 単純なファイル名生成（v5.1.7と同様）
+        new_filename = self._generate_filename(document_type, user_yymm, "pdf")
+        
+        self._log(f"[v5.3] 統一ファイル名生成完了: {new_filename}")
         
         # ファイルコピー
         output_path = os.path.join(output_folder, new_filename)
