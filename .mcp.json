@@ -5,7 +5,7 @@
       "args": [
         "mcp_server.py"
       ],
-      "cwd": "C:\\Users\\mayum\\tax-doc-renamer"
+      "cwd": "C:\\Users\\pukur\\tax-doc-renamer"
     },
     "serena-workflow": {
       "command": "python",
@@ -13,7 +13,7 @@
         "-c",
         "import sys; sys.path.append('.'); from workflows.workflow_manager import WorkflowManager; WorkflowManager().run_mcp_server()"
       ],
-      "cwd": "C:\\Users\\mayum\\tax-doc-renamer"
+      "cwd": "C:\\Users\\pukur\\tax-doc-renamer"
     }
   }
 }
