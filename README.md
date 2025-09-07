@@ -1,22 +1,37 @@
-# 🧾 税務書類リネームシステム v5.3.5-ui-robust
+# 🧾 税務書類リネームシステム v5.4 - Receipt Numbering Edition
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.3.5--ui--robust-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4--Receipt--Numbering-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org)
-[![Enterprise](https://img.shields.io/badge/Enterprise-Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![MCP](https://img.shields.io/badge/Claude%20Code-MCP%20Integrated-purple.svg)](https://github.com/Ezark213/tax-doc-renamer)
-[![Workflow](https://img.shields.io/badge/AddFunc--BugFix-Workflow-orange.svg)](https://github.com/Ezark213/tax-doc-renamer)
-[![テスト](https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-Enterprise%20Quality-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![連番システム](https://img.shields.io/badge/%E9%80%A3%E7%95%AA%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0-Dynamic%20Numbering-orange.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![テスト](https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-Production%20Quality-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**エンタープライズレベルの日本税務書類自動分類・リネームシステムです。**  
-OCR機能、AI分類エンジン、UI強制入力システムを統合し、確実で高精度な税務書類管理を実現します。
+**エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**  
+OCR機能、AI分類エンジン、受信通知動的番号付与システム、都道府県申告書連番システムを統合し、確実で高精度な税務書類管理を実現します。
 
-**🎯 v5.3.5-ui-robust エンタープライズ版リリース！**  
-✅ UI YYMM強制適用システム完全実装  
-✅ Bundle分割経路RunConfig伝搬確保  
-✅ JobContext中央集権管理システム  
-✅ AddFunc-BugFix Workflow MCP統合  
-✅ 86%コード保守性向上・40%処理速度高速化達成
+## 🚀 v5.4 Receipt Numbering Edition - 完全版リリース！  
+
+### ✨ 新機能・修正完了
+✅ **都道府県申告書連番システムの完全修正** - overlay優先採用システム  
+✅ **受信通知動的番号付与システム** - 1003/2003系の決定論的処理  
+✅ **実際の都道府県名・市町村名表示** - 汎用名から具体名へ  
+✅ **東京都特別制限システム** - Set1固定制約の安定動作  
+✅ **Unicode文字エンコーディング問題解決** - 完全安定動作  
+✅ **MCP統合システム** - tax-document-analyzer & serena-workflow  
+
+### 📋 正常なファイル名出力例
+```
+1001_東京都_法人都道府県民税・事業税・特別法人事業税_2508.pdf
+1011_愛知県_法人都道府県民税・事業税・特別法人事業税_2508.pdf  
+1021_福岡県_法人都道府県民税・事業税・特別法人事業税_2508.pdf
+2001_愛知県蒲郡市_法人市民税_2508.pdf
+2011_福岡県福岡市_法人市民税_2508.pdf
+1003_受信通知_2508.pdf (東京都)
+1013_受信通知_2508.pdf (愛知県) 
+2013_受信通知_2508.pdf (蒲郡市)
+```
 
 ## 🚀 クイックスタート
 
@@ -50,15 +65,18 @@ python main.py
 | | 0002 | 添付資料（法人税） | `0002_添付資料_法人税_2508.pdf` |
 | | 0003 | 受信通知（法人税） | `0003_受信通知_2508.pdf` |
 | | 0004 | 納付情報（法人税） | `0004_納付情報_2508.pdf` |
-| **都道府県税** | 1001 | 都道府県税申告書 | `1001_東京都_法人都道府県民税・事業税・特別法人事業税_2508.pdf` |
-| | 1003 | 受信通知（連番対応） | `1003_受信通知_2508.pdf` |
-| | 1013 | 受信通知（2番目） | `1013_受信通知_2508.pdf` |
-| | 1023 | 受信通知（3番目） | `1023_受信通知_2508.pdf` |
+| **都道府県税** | 1001 | 都道府県税申告書（東京都） | `1001_東京都_法人都道府県民税・事業税・特別法人事業税_2508.pdf` |
+| | 1011 | 都道府県税申告書（2番目） | `1011_愛知県_法人都道府県民税・事業税・特別法人事業税_2508.pdf` |
+| | 1021 | 都道府県税申告書（3番目） | `1021_福岡県_法人都道府県民税・事業税・特別法人事業税_2508.pdf` |
+| | 1003 | 受信通知（東京都固定） | `1003_受信通知_2508.pdf` |
+| | 1013 | 受信通知（愛知県） | `1013_受信通知_2508.pdf` |
+| | 1023 | 受信通知（福岡県） | `1023_受信通知_2508.pdf` |
 | | 1004 | 納付情報（都道府県税） | `1004_納付情報_2508.pdf` |
-| **市町村税** | 2001 | 市町村税申告書 | `2001_愛知県蒲郡市_法人市民税_2508.pdf` |
-| | 2003 | 受信通知（連番対応） | `2003_受信通知_2508.pdf` |
-| | 2013 | 受信通知（2番目） | `2013_受信通知_2508.pdf` |
-| | 2023 | 受信通知（3番目） | `2023_受信通知_2508.pdf` |
+| **市町村税** | 2001 | 市町村税申告書（蒲郡市） | `2001_愛知県蒲郡市_法人市民税_2508.pdf` |
+| | 2011 | 市町村税申告書（福岡市） | `2011_福岡県福岡市_法人市民税_2508.pdf` |
+| | 2003 | 受信通知（蒲郡市） | `2003_受信通知_2508.pdf` |
+| | 2013 | 受信通知（蒲郡市連番2） | `2013_受信通知_2508.pdf` |
+| | 2023 | 受信通知（福岡市） | `2023_受信通知_2508.pdf` |
 | | 2004 | 納付情報（市町村税） | `2004_納付情報_2508.pdf` |
 | **消費税** | 3001 | 消費税申告書 | `3001_消費税及び地方消費税申告書_2508.pdf` |
 | | 3002 | 添付資料（消費税） | `3002_添付資料_消費税_2508.pdf` |
