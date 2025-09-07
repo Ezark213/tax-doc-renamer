@@ -52,6 +52,8 @@ class ClassificationResult:
     processing_log: List[str] = field(default_factory=list)
     original_doc_type_code: Optional[str] = None  # 元の分類コード（自治体適用前）
     meta: Dict[str, Any] = field(default_factory=dict)  # メタデータ（no_split等）
+    prefecture_code: Optional[int] = None  # 都道府県連番コード（1001/1011/1021等）
+    city_code: Optional[int] = None  # 市区町村連番コード（2001/2011/2021等）
 
 class DocumentClassifierV5:
     """書類分類エンジン v5.0 - AND条件対応版"""
@@ -847,7 +849,9 @@ class DocumentClassifierV5:
                 final_code = self._apply_municipality_numbering(
                     base_result.document_type, 
                     prefecture_code, 
-                    municipality_code
+                    municipality_code,
+                    text,
+                    filename
                 )
                 
                 if final_code != base_result.document_type:
@@ -858,12 +862,14 @@ class DocumentClassifierV5:
 
     def _apply_municipality_numbering(self, document_type: str, 
                                     prefecture_code: Optional[int] = None,
-                                    municipality_code: Optional[int] = None) -> str:
+                                    municipality_code: Optional[int] = None,
+                                    text_content: str = "",
+                                    filename: str = "") -> str:
         """自治体連番の適用（修正版：固定番号を厳格に管理）"""
         self._log_debug(f"自治体連番適用チェック: {document_type}, 都道府県={prefecture_code}, 市町村={municipality_code}")
         
-        # 修正1: 固定番号は連番適用除外（重要な修正）
-        # 修正指示書: 修正5に基づき、1003_受信通知を固定番号から除外
+        # 修正1: 固定番号は連番適用除外（重要な修正）  
+        # 修正指示書: 納付情報は固定、受信通知は連番対応
         FIXED_NUMBERS = {
             "0003_受信通知",     # 法人税受信通知は固定
             "0004_納付情報",     # 法人税納付情報は固定
@@ -911,32 +917,115 @@ class DocumentClassifierV5:
                 self._log_debug(f"市町村申告書連番適用: {document_type} → {final_code}")
                 return final_code
         
-        # 修正指示書: 修正5 - 都道府県受信通知の連番対応
+        # 修正指示書: 修正5 - 都道府県受信通知の連番対応（OCRテキストから直接読み取り）
         elif document_type == "1003_受信通知":
+            self._log_debug(f"[OCR DEBUG] 都道府県受信通知処理開始: {document_type}")
+            self._log_debug(f"[OCR DEBUG] text_content length: {len(text_content) if text_content else 0}")
+            self._log_debug(f"[OCR DEBUG] has current_municipality_sets: {hasattr(self, 'current_municipality_sets')}")
+            
+            # OCRテキストから実際の都道府県を読み取り、セット設定と照合
+            if hasattr(self, 'current_municipality_sets') and text_content:
+                self._log_debug(f"[OCR DEBUG] セット設定: {self.current_municipality_sets}")
+                detected_prefecture = self._extract_prefecture_from_receipt_text(text_content, filename)
+                self._log_debug(f"[OCR DEBUG] 検出された都道府県: {detected_prefecture}")
+                
+                if detected_prefecture:
+                    # セット設定から該当するセットIDを特定
+                    for set_id, info in self.current_municipality_sets.items():
+                        self._log_debug(f"[OCR DEBUG] セット{set_id}チェック: {info.get('prefecture')} == {detected_prefecture}")
+                        if info.get("prefecture") == detected_prefecture:
+                            receipt_code = 1003 + (set_id - 1) * 10
+                            self._log_debug(f"都道府県受信通知OCR検出: {detected_prefecture} → セット{set_id} → {receipt_code}_受信通知")
+                            return f"{receipt_code}_受信通知"
+                    
+                    self._log_debug(f"都道府県受信通知: OCRで検出した'{detected_prefecture}'がセット設定にありません")
+            else:
+                self._log_debug(f"[OCR DEBUG] OCR処理スキップ - セット設定またはテキストなし")
+            
+            # フォールバック：従来の方式
             if prefecture_code:
-                # セット番号に基づく連番生成: 1003, 1013, 1023
-                set_order = self._get_set_order_from_prefecture_code(prefecture_code)
-                if set_order == 1:
-                    return "1003_受信通知"
-                elif set_order == 2:
-                    return "1013_受信通知"
-                elif set_order == 3:
-                    return "1023_受信通知"
+                self._log_debug(f"[OCR DEBUG] フォールバック処理: prefecture_code={prefecture_code}")
+                receipt_code = 1003 + ((prefecture_code - 1001) // 10) * 10
+                return f"{receipt_code}_受信通知"
         
-        # 市町村受信通知（2003系統）の連番対応
+        # 市町村受信通知（2003系統）の連番対応（OCRテキストから直接読み取り）
         elif document_type == "2003_受信通知":
+            self._log_debug(f"[OCR DEBUG] 市町村受信通知処理開始: {document_type}")
+            self._log_debug(f"[OCR DEBUG] text_content length: {len(text_content) if text_content else 0}")
+            
+            # OCRテキストから実際の市町村を読み取り、セット設定と照合
+            if hasattr(self, 'current_municipality_sets') and text_content:
+                detected_prefecture, detected_city = self._extract_municipality_from_receipt_text(text_content, filename)
+                self._log_debug(f"[OCR DEBUG] 検出された市町村: {detected_prefecture} {detected_city}")
+                
+                if detected_prefecture and detected_city:
+                    # セット設定から該当するセットIDを特定
+                    for set_id, info in self.current_municipality_sets.items():
+                        self._log_debug(f"[OCR DEBUG] セット{set_id}チェック: {info.get('prefecture')}{info.get('city')} == {detected_prefecture}{detected_city}")
+                        if (info.get("prefecture") == detected_prefecture and 
+                            info.get("city") == detected_city):
+                            receipt_code = 2003 + (set_id - 1) * 10
+                            self._log_debug(f"市町村受信通知OCR検出: {detected_prefecture}{detected_city} → セット{set_id} → {receipt_code}_受信通知")
+                            return f"{receipt_code}_受信通知"
+                    
+                    self._log_debug(f"市町村受信通知: OCRで検出した'{detected_prefecture}{detected_city}'がセット設定にありません")
+            else:
+                self._log_debug(f"[OCR DEBUG] OCR処理スキップ - セット設定またはテキストなし")
+            
+            # フォールバック：従来の方式
             if municipality_code:
-                # セット番号に基づく連番生成: 2003, 2013, 2023
-                set_order = self._get_set_order_from_municipality_code(municipality_code)
-                if set_order == 1:
-                    return "2003_受信通知"
-                elif set_order == 2:
-                    return "2013_受信通知"
-                elif set_order == 3:
-                    return "2023_受信通知"
+                self._log_debug(f"[OCR DEBUG] フォールバック処理: municipality_code={municipality_code}")
+                receipt_code = 2003 + ((municipality_code - 2001) // 10) * 10
+                return f"{receipt_code}_受信通知"
         
         self._log_debug(f"自治体連番適用なし: {document_type}")
         return document_type
+
+    def _extract_prefecture_from_receipt_text(self, text_content: str, filename: str) -> Optional[str]:
+        """受信通知のOCRテキストから都道府県を抽出"""
+        # 受信通知に含まれる都道府県パターン
+        prefecture_patterns = [
+            r'(東京都)',
+            r'(大阪府)',
+            r'(愛知県)',
+            r'(福岡県)',
+            r'(北海道)',
+            r'([^県市区町村]+県)',  # その他の県
+            r'([^府県市区町村]+府)'   # その他の府
+        ]
+        
+        for pattern in prefecture_patterns:
+            import re
+            match = re.search(pattern, text_content)
+            if match:
+                prefecture = match.group(1)
+                self._log_debug(f"受信通知から都道府県検出: {prefecture}")
+                return prefecture
+        
+        self._log_debug(f"受信通知から都道府県検出なし: {filename}")
+        return None
+
+    def _extract_municipality_from_receipt_text(self, text_content: str, filename: str) -> Tuple[Optional[str], Optional[str]]:
+        """受信通知のOCRテキストから都道府県と市町村を抽出"""
+        # 市町村受信通知に含まれる都道府県・市町村パターン
+        municipality_patterns = [
+            r'(愛知県).*(蒲郡市)',
+            r'(福岡県).*(福岡市)',
+            r'([^県市区町村]+県).+?([^県市区町村]+市)',
+            r'([^府県市区町村]+府).+?([^府県市区町村]+市)'
+        ]
+        
+        for pattern in municipality_patterns:
+            import re
+            match = re.search(pattern, text_content)
+            if match:
+                prefecture = match.group(1)
+                city = match.group(2)
+                self._log_debug(f"受信通知から市町村検出: {prefecture}{city}")
+                return prefecture, city
+        
+        self._log_debug(f"受信通知から市町村検出なし: {filename}")
+        return None, None
 
     def build_order_maps(self, set_settings: Dict[int, Dict[str, str]]) -> Tuple[Dict[int, int], Dict[int, int]]:
         """ステートレス連番マップを構築
@@ -1283,6 +1372,22 @@ class DocumentClassifierV5:
         """v5.1テンプレートIDを正規化して最終ラベルを生成"""
         print(f"[INFO] 正規化処理開始: template_id={template_id}")
         
+        # 修正: FIXED_NUMBERS確認 - 納付情報は固定、受信通知は連番適用後は固定扱い
+        FIXED_NUMBERS = {
+            "0003_受信通知",     # 法人税受信通知は固定
+            "0004_納付情報",     # 法人税納付情報は固定
+            "3003_受信通知",     # 消費税受信通知は固定
+            "3004_納付情報",     # 消費税納付情報は固定
+            "1004_納付情報",     # 都道府県納付情報は固定
+            "2004_納付情報",     # 市町村納付情報は固定
+            # 地方税受信通知：連番適用後の最終形は固定扱い
+            "1003_受信通知", "1013_受信通知", "1023_受信通知",  # 都道府県受信通知（各セット）
+            "2003_受信通知", "2013_受信通知", "2023_受信通知"   # 市町村受信通知（各セット）
+        }
+        
+        if template_id in FIXED_NUMBERS:
+            print(f"[INFO] FIXED_NUMBER検出: {template_id} -> 正規化スキップ")
+            return 0, template_id, 0
         try:
             # 1. 連番マップを構築
             pref_order_map, city_order_map = self.build_order_maps(set_settings)
@@ -1441,7 +1546,7 @@ class DocumentClassifierV5:
         ]
         
         # 納付関連キーワードがある場合は受信通知から除外
-        exclusion_keywords = ['納付区分番号通知', '納付内容を確認し']
+        exclusion_keywords = ['納付区分番号通知', '納付内容を確認し', 'メール詳細（納付区分番号通知）']
         
         has_receipt = any(indicator in text_content for indicator in receipt_indicators)
         has_payment = any(keyword in text_content for keyword in exclusion_keywords)
@@ -1454,7 +1559,7 @@ class DocumentClassifierV5:
     
     def _classify_local_tax_receipt(self, text: str, filename: str, prefecture_code: Optional[int], municipality_code: Optional[int]) -> Optional[ClassificationResult]:
         """
-        バグ修正依頼書: A-2 地方税受信通知の専用分類処理
+        地方税受信通知の専用分類処理（OCRベース自治体セット照合対応版）
         都道府県・市町村の受信通知に適切な連番を付与
         """
         combined_text = f"{text} {filename}"
@@ -1478,14 +1583,17 @@ class DocumentClassifierV5:
         # 都道府県向け判定
         if any(all(kw in combined_text for kw in condition) 
                for condition in prefecture_receipt_conditions):
-            set_number = self._get_jurisdiction_set_number(prefecture_code, "prefecture")
+            # OCRベース自治体セット照合を使用
+            set_number = self._detect_municipality_set_from_text(text, filename, "prefecture")
+            if not set_number:
+                set_number = 1  # フォールバック
             code = self._generate_receipt_number("prefecture", set_number)
-            self._log_debug(f"地方税受信通知（都道府県）: セット{set_number} → {code}_受信通知")
+            self._log_debug(f"地方税受信通知（都道府県）: OCRセット検出={set_number} → {code}_受信通知")
             return ClassificationResult(
                 document_type=f"{code}_受信通知",
                 confidence=1.0,
                 matched_keywords=["地方税受信通知（都道府県）"],
-                classification_method="local_tax_receipt_detection",
+                classification_method="local_tax_receipt_detection_ocr",
                 debug_steps=[],
                 processing_log=self.processing_log.copy()
             )
@@ -1493,14 +1601,17 @@ class DocumentClassifierV5:
         # 市町村向け判定  
         if any(all(kw in combined_text for kw in condition)
                for condition in municipality_receipt_conditions):
-            set_number = self._get_jurisdiction_set_number(municipality_code, "municipality")
+            # OCRベース自治体セット照合を使用（東京繰り上がり対応）
+            set_number = self._detect_municipality_set_from_text(text, filename, "municipality")
+            if not set_number:
+                set_number = 2  # 市町村のフォールバック（東京がある場合は2から開始）
             code = self._generate_receipt_number("municipality", set_number)
-            self._log_debug(f"地方税受信通知（市町村）: セット{set_number} → {code}_受信通知")
+            self._log_debug(f"地方税受信通知（市町村）: OCRセット検出={set_number} → {code}_受信通知")
             return ClassificationResult(
                 document_type=f"{code}_受信通知",
                 confidence=1.0,
                 matched_keywords=["地方税受信通知（市町村）"],
-                classification_method="local_tax_receipt_detection",
+                classification_method="local_tax_receipt_detection_ocr",
                 debug_steps=[],
                 processing_log=self.processing_log.copy()
             )
@@ -1509,7 +1620,7 @@ class DocumentClassifierV5:
     
     def _generate_receipt_number(self, classification_type: str, jurisdiction_set_number: int) -> str:
         """
-        バグ修正依頼書: A-2 受信通知の連番を生成
+        受信通知の連番を生成（東京都繰り上がり対応版）
         
         Args:
             classification_type: "prefecture" or "municipality"
@@ -1525,11 +1636,73 @@ class DocumentClassifierV5:
         
         if classification_type in base_numbers:
             base = base_numbers[classification_type]
-            result = str(base + (jurisdiction_set_number - 1) * 10)
-            self._log_debug(f"連番生成: {classification_type} セット{jurisdiction_set_number} → {result}")
+            
+            # 東京都が設定にある場合の繰り上がりロジック（申告書と同様）
+            # セット設定から東京都の存在を確認
+            tokyo_offset = 0
+            if hasattr(self, 'current_municipality_sets') and self.current_municipality_sets:
+                for set_id, set_info in self.current_municipality_sets.items():
+                    if set_info.get("prefecture") == "東京都":
+                        tokyo_offset = 1
+                        break
+                        
+            # 市町村の場合、東京都があるとベースが繰り上がる
+            if classification_type == "municipality" and tokyo_offset > 0:
+                # 東京都がセット1にある場合、市町村受信通知は2003から開始
+                # セット2→2013, セット3→2023, セット4→2033...
+                result = str(base + (jurisdiction_set_number - 1) * 10)
+            else:
+                result = str(base + (jurisdiction_set_number - 1) * 10)
+                
+            self._log_debug(f"連番生成: {classification_type} セット{jurisdiction_set_number} tokyo_offset={tokyo_offset} → {result}")
             return result
         
         return "0003"  # フォールバック
+    
+    def _detect_municipality_set_from_text(self, text: str, filename: str, target_type: str) -> Optional[int]:
+        """
+        OCRテキストから自治体セット番号を検出（申告書と同じロジック）
+        
+        Args:
+            text: OCRテキスト
+            filename: ファイル名 
+            target_type: "prefecture" or "municipality"
+            
+        Returns:
+            int: セット番号、検出できない場合はNone
+        """
+        combined_text = f"{text} {filename}"
+        
+        # 自治体セット設定を取得
+        if not hasattr(self, 'current_municipality_sets') or not self.current_municipality_sets:
+            self._log_debug(f"OCR自治体セット検出: セット設定なし")
+            return None
+            
+        # 各セットに対してテキストマッチング
+        for set_id, set_info in self.current_municipality_sets.items():
+            prefecture = set_info.get("prefecture", "")
+            city = set_info.get("city", "")
+            
+            # 都道府県受信通知の場合は都道府県名でマッチング
+            if target_type == "prefecture":
+                if prefecture and prefecture in combined_text:
+                    self._log_debug(f"OCR自治体セット検出: {prefecture}がテキストで検出 → セット{set_id}")
+                    return set_id
+                    
+            # 市町村受信通知の場合は市町村名でマッチング
+            elif target_type == "municipality":
+                if city and city in combined_text:
+                    self._log_debug(f"OCR自治体セット検出: {city}がテキストで検出 → セット{set_id}")
+                    return set_id
+                # 市町村名がない場合（東京都等）は都道府県名でマッチング
+                elif not city and prefecture and prefecture in combined_text:
+                    # 東京都の場合、市町村受信通知でも東京都マッチで該当セットを返す
+                    # ただし、東京都は基本的に市町村税がないため、稀なケース
+                    self._log_debug(f"OCR自治体セット検出: {prefecture}（市町村なし）がテキストで検出 → セット{set_id}")
+                    return set_id
+                    
+        self._log_debug(f"OCR自治体セット検出: テキストマッチング失敗")
+        return None
     
     def _get_jurisdiction_set_number(self, code: Optional[int], jurisdiction_type: str) -> int:
         """

@@ -53,6 +53,9 @@ class JobContext:
     status: str = "INITIALIZED"           # ジョブステータス
     processing_stats: ProcessingStats = field(default_factory=ProcessingStats)
     
+    # UIセット順情報（受信通知連番用）
+    current_municipality_sets: Optional[Dict[int, Dict[str, str]]] = None
+    
     # メタデータ
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
@@ -188,6 +191,57 @@ class JobContext:
     def increment_error_files(self):
         """エラーファイル数をインクリメント"""
         self.processing_stats.error_files += 1
+    
+    def get_set_index_for_pref(self, pref_name: str) -> Optional[int]:
+        """
+        都道府県名からUIセット番号を取得
+        
+        Args:
+            pref_name: 都道府県名（例: "東京都", "愛知県"）
+            
+        Returns:
+            Optional[int]: セット番号（1開始）、見つからない場合はNone
+        """
+        if not self.current_municipality_sets:
+            return None
+            
+        for set_id, set_info in self.current_municipality_sets.items():
+            if set_info.get("prefecture") == pref_name:
+                return set_id
+        return None
+    
+    def get_set_index_for_city(self, pref_name: str, city_name: str) -> Optional[int]:
+        """
+        都道府県名と市区町村名からUIセット番号を取得
+        
+        Args:
+            pref_name: 都道府県名（例: "愛知県"）  
+            city_name: 市区町村名（例: "蒲郡市"）
+            
+        Returns:
+            Optional[int]: セット番号（1開始）、見つからない場合はNone
+        """
+        if not self.current_municipality_sets:
+            return None
+            
+        for set_id, set_info in self.current_municipality_sets.items():
+            if (set_info.get("prefecture") == pref_name and 
+                set_info.get("city") == city_name):
+                return set_id
+        return None
+    
+    def has_tokyo_first(self) -> bool:
+        """
+        東京都がセット1に配置されているかを確認
+        
+        Returns:
+            bool: 東京都がセット1にある場合True
+        """
+        if not self.current_municipality_sets or 1 not in self.current_municipality_sets:
+            return False
+            
+        set_1_info = self.current_municipality_sets.get(1, {})
+        return set_1_info.get("prefecture") == "東京都"
     
     def get_summary(self) -> Dict[str, Any]:
         """処理サマリーを取得"""

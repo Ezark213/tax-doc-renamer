@@ -274,6 +274,20 @@ def log_yymm_decision(class_code: str, yymm: str, source: str, logger=None):
     else:
         print(f"[YYMM][POLICY] code={class_code} value={yymm} source={source}")
 
+def log_yymm_fatal(code: str, message: str, logger=None):
+    """YYMM致命的エラーログ"""
+    if logger:
+        logger.error(f"[FATAL][YYMM][{code}] {message}")
+    else:
+        print(f"[FATAL][YYMM][{code}] {message}")
+
+def log_yymm_audit(event_type: str, data: dict, logger=None):
+    """YYMM監査ログ"""
+    if logger:
+        logger.info(f"[AUDIT][YYMM][{event_type}] {data}")
+    else:
+        print(f"[AUDIT][YYMM][{event_type}] {data}")
+
 def validate_policy_result(yymm: str, source: str, class_code: str = None) -> bool:
     """ポリシー適用結果の検証"""
     if not _validate_yymm(yymm):
@@ -281,6 +295,6 @@ def validate_policy_result(yymm: str, source: str, class_code: str = None) -> bo
     
     # UI強制コードの場合はUI由来であることを確認
     if class_code and class_code[:4] in FORCE_UI_YYMM_CODES:
-        return source in ("UI_FORCED", "UI_FALLBACK")
+        return source in ("UI_FORCED", "UI_FALLBACK", "UI")
     
     return True

@@ -886,8 +886,26 @@ class TaxDocumentRenamerV5:
                 
                 try:
                     if file_path.lower().endswith('.pdf'):
+                        # UI設定を構築して伝搬
+                        gui_yymm = self.year_month_var.get()
+                        ui_context = create_ui_context_from_gui(
+                            yymm_var_value=gui_yymm,
+                            municipality_sets=getattr(self, 'municipality_sets', {}),
+                            batch_mode=True,
+                            debug_mode=self.auto_split_control.get_settings().get('debug_mode', False)
+                        )
+                        
+                        # Pre-Extract スナップショット生成
+                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                        
+                        # 分割後の個別ファイル処理コールバック
+                        def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
+                            # 分割されたファイルをv5.3スナップショット参照で処理
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                        
                         was_split = self.pdf_processor.maybe_split_pdf(
-                            file_path, output_folder, force=False, processing_callback=None
+                            file_path, output_folder, force=False, processing_callback=processing_callback
                         )
                         
                         if was_split:
@@ -940,8 +958,26 @@ class TaxDocumentRenamerV5:
                 
                 try:
                     if file_path.lower().endswith('.pdf'):
+                        # UI設定を構築して伝搬
+                        gui_yymm = self.year_month_var.get()
+                        ui_context = create_ui_context_from_gui(
+                            yymm_var_value=gui_yymm,
+                            municipality_sets=getattr(self, 'municipality_sets', {}),
+                            batch_mode=True,
+                            debug_mode=self.auto_split_control.get_settings().get('debug_mode', False)
+                        )
+                        
+                        # Pre-Extract スナップショット生成
+                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                        
+                        # 分割後の個別ファイル処理コールバック
+                        def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
+                            # 分割されたファイルをv5.3スナップショット参照で処理
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                        
                         was_split = self.pdf_processor.maybe_split_pdf(
-                            file_path, output_folder, force=True, processing_callback=None
+                            file_path, output_folder, force=True, processing_callback=processing_callback
                         )
                         
                         if was_split:
@@ -1257,8 +1293,8 @@ class TaxDocumentRenamerV5:
         # 年月決定
         year_month = self.year_month_var.get() or self._extract_year_month_from_pdf(text, filename)
         
-        # 新ファイル名生成
-        new_filename = self._generate_filename(classification_result.document_type, year_month, "pdf")
+        # 新ファイル名生成（最新市町村連番システム対応）
+        new_filename = self._generate_filename(classification_result.document_type, year_month, "pdf", classification_result)
         
         # ファイルコピー
         import shutil
@@ -1318,19 +1354,23 @@ class TaxDocumentRenamerV5:
         # 決定論的独立化：統一された処理フロー
         self._log(f"[v5.3] 決定論的独立化命名開始")
         
-        # 元の分類コードを優先使用
+        # ファイル名用には最終結果（オーバーレイ適用後）を使用
+        final_document_type = classification_result.document_type if classification_result else "9999_未分類"
+        
+        # 表示用に元コードと最終結果を比較
         if classification_result and hasattr(classification_result, 'original_doc_type_code') and classification_result.original_doc_type_code:
-            document_type = classification_result.original_doc_type_code
-            self._log(f"[v5.3] 🎯 元の分類コード使用: {document_type} (自治体変更版: {classification_result.document_type})")
+            if classification_result.original_doc_type_code != classification_result.document_type:
+                self._log(f"[v5.3] 🎯 市町村連番適用: {classification_result.original_doc_type_code} → {final_document_type}")
+            else:
+                self._log(f"[v5.3] 🎯 分類結果: {final_document_type}")
         else:
-            document_type = classification_result.document_type if classification_result else "9999_未分類"
-            self._log(f"[v5.3] 分類結果そのまま: {document_type}")
+            self._log(f"[v5.3] 🎯 分類結果: {final_document_type}")
         
         # YYMMポリシーシステムでYYMM値を取得
-        user_yymm = self._resolve_yymm_with_policy(file_path, document_type)
+        user_yymm = self._resolve_yymm_with_policy(file_path, final_document_type)
         
-        # 単純なファイル名生成（v5.1.7と同様）
-        new_filename = self._generate_filename(document_type, user_yymm, "pdf")
+        # ファイル名生成（市町村連番システム対応）
+        new_filename = self._generate_filename(final_document_type, user_yymm, "pdf", classification_result)
         
         self._log(f"[v5.3] 統一ファイル名生成完了: {new_filename}")
         
@@ -1352,7 +1392,7 @@ class TaxDocumentRenamerV5:
             matched_keywords = []
         
         self.root.after(0, lambda: self._add_result_success(
-            file_path, os.path.basename(output_path), document_type, 
+            file_path, os.path.basename(output_path), final_document_type, 
             method, confidence, matched_keywords
         ))
         
@@ -1492,9 +1532,97 @@ class TaxDocumentRenamerV5:
         
         return "YYMM"
 
-    def _generate_filename(self, doc_type: str, year_month: str, ext: str) -> str:
-        """ファイル名生成"""
-        return f"{doc_type}_{year_month}.{ext}"
+    def _generate_filename(self, doc_type: str, year_month: str, ext: str, classification_result=None) -> str:
+        """
+        ファイル名生成（市町村連番システム対応版 - 修正版）
+        
+        Args:
+            doc_type: 分類結果 (基本は使わない、classification_resultから取得)
+            year_month: YYMM形式の年月  
+            ext: 拡張子
+            classification_result: 分類結果オブジェクト（オーバーレイ情報含む）
+        """
+        # classification_resultから最終的なdocument_typeを取得
+        final_doc_type = doc_type
+        if classification_result:
+            # オーバーレイが適用されている場合は classification_result.document_type を使用
+            if hasattr(classification_result, 'document_type') and classification_result.document_type:
+                final_doc_type = classification_result.document_type
+                self._log(f"[市町村連番システム] 分類結果からdocument_type使用: {final_doc_type}")
+            
+            # さらに、元コードと違う場合は自治体変更版が適用されていることを確認
+            if (hasattr(classification_result, 'original_doc_type_code') and 
+                classification_result.original_doc_type_code and 
+                final_doc_type != classification_result.original_doc_type_code):
+                self._log(f"[市町村連番システム] 自治体変更版適用: {classification_result.original_doc_type_code} → {final_doc_type}")
+        
+        # 最終ファイル名生成
+        filename = f"{final_doc_type}_{year_month}.{ext}"
+        self._log(f"[最終ファイル名] {filename}")
+        return filename
+    
+    def _apply_municipality_serial_numbering(self, filename: str, classification_result) -> str:
+        """
+        市町村連番システム適用（GitHub ff12ea5準拠）
+        
+        基本仕様：
+        - 東京都: 1001番台（固定）
+        - 愛知県: 1011番台（1001 + 10）
+        - 福岡県: 1021番台（1001 + 20）
+        - 市レベル: 2001→2011→2021（+10刻み）
+        """
+        if not hasattr(classification_result, 'prefecture_code') or not hasattr(classification_result, 'city_code'):
+            # 市町村情報がない場合はそのまま返す
+            return filename
+        
+        pref_code = classification_result.prefecture_code
+        city_code = classification_result.city_code
+        
+        # ファイル名から現在のコードを抽出
+        parts = filename.split('_')
+        if len(parts) < 2:
+            return filename
+            
+        current_code = parts[0]
+        
+        # 地方税系コードの場合のみ処理
+        if not current_code.isdigit() or len(current_code) != 4:
+            return filename
+            
+        code_int = int(current_code)
+        
+        # 都道府県レベル（1000番台）の連番処理
+        if 1000 <= code_int < 2000:
+            if pref_code and pref_code != 1001:  # 東京都以外
+                # 新しいコードに置換
+                new_parts = parts.copy()
+                new_parts[0] = str(pref_code)
+                
+                # 都道府県名も更新（可能なら）
+                if len(parts) > 1 and pref_code == 1011:
+                    new_parts[1] = "愛知県"
+                elif len(parts) > 1 and pref_code == 1021:
+                    new_parts[1] = "福岡県"
+                
+                return '_'.join(new_parts)
+        
+        # 市区町村レベル（2000番台）の連番処理
+        elif 2000 <= code_int < 3000:
+            if city_code and city_code != 2001:  # 基本市以外
+                # 新しいコードに置換
+                new_parts = parts.copy()
+                new_parts[0] = str(city_code)
+                
+                # 市区町村名も更新（可能なら）
+                if len(parts) > 1:
+                    if city_code == 2011:
+                        new_parts[1] = "愛知県蒲郡市"
+                    elif city_code == 2021:
+                        new_parts[1] = "福岡県福岡市"
+                
+                return '_'.join(new_parts)
+        
+        return filename
 
     def _get_method_display(self, method: str) -> str:
         """判定方法の表示用文字列を取得"""
@@ -1585,21 +1713,31 @@ class TaxDocumentRenamerV5:
         return split_files
 
     def _generate_unique_filename(self, filepath: str) -> str:
-        """重複しないファイル名を生成"""
-        if not os.path.exists(filepath):
-            return filepath
+        """重複しないファイル名を生成（スレッドセーフ）"""
+        # スレッドセーフなロック機構を使用
+        if not hasattr(self, '_filename_lock'):
+            import threading
+            self._filename_lock = threading.Lock()
+            self._used_filenames = set()
         
-        dir_name = os.path.dirname(filepath)
-        base_name = os.path.splitext(os.path.basename(filepath))[0]
-        ext = os.path.splitext(filepath)[1]
-        
-        counter = 1
-        while True:
-            new_filename = f"{base_name}_{counter:03d}{ext}"
-            new_filepath = os.path.join(dir_name, new_filename)
-            if not os.path.exists(new_filepath):
-                return new_filepath
-            counter += 1
+        with self._filename_lock:
+            # 既に使用されているファイル名をチェック
+            if filepath not in self._used_filenames and not os.path.exists(filepath):
+                self._used_filenames.add(filepath)
+                return filepath
+            
+            dir_name = os.path.dirname(filepath)
+            base_name = os.path.splitext(os.path.basename(filepath))[0]
+            ext = os.path.splitext(filepath)[1]
+            
+            counter = 1
+            while True:
+                new_filename = f"{base_name}_{counter:03d}{ext}"
+                new_filepath = os.path.join(dir_name, new_filename)
+                if new_filepath not in self._used_filenames and not os.path.exists(new_filepath):
+                    self._used_filenames.add(new_filepath)
+                    return new_filepath
+                counter += 1
 
     def _split_processing_finished(self):
         """分割処理完了時の処理"""
@@ -1612,6 +1750,11 @@ class TaxDocumentRenamerV5:
         """リネーム処理完了時の処理"""
         self.rename_processing = False
         self._update_button_states()
+        
+        # 使用済みファイル名セットをクリア
+        if hasattr(self, '_used_filenames'):
+            self._used_filenames.clear()
+        
         self.notebook.select(1)  # 結果タブに切り替え
         messagebox.showinfo("完了", "v5.3リネーム処理が完了しました")
 
