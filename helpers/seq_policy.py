@@ -40,7 +40,7 @@ class ReceiptSequencer:
         
     def _ensure_tokyo_rule(self):
         """
-        東京都の必須セット1制約を検証
+        東京都の必須セット1制約を検証（強化版）
         
         Raises:
             ValueError: 東京都がセット1以外にある場合のFATALエラー
@@ -48,14 +48,26 @@ class ReceiptSequencer:
         if self._tokyo_first_checked:
             return
             
+        # JobContextレベルでの東京都制約検証を実行
+        try:
+            self.ctx.validate_tokyo_constraint()
+        except ValueError as e:
+            # JobContextからの制約違反を再スロー
+            logger.error(f"[SEQ] Tokyo constraint failed at JobContext level: {e}")
+            raise
+            
+        # 追加の個別チェック（冗長だがより確実）
         tokyo_idx = self.ctx.get_set_index_for_pref("東京都")
         if tokyo_idx is not None and tokyo_idx != 1:
-            error_msg = f"[FATAL][SEQ] Tokyo must be Set #1 (found at Set #{tokyo_idx})"
+            error_msg = f"[FATAL][SEQ] Tokyo must be Set #1 (found at Set #{tokyo_idx}). 修正指示書に基づく制約違反です。"
             logger.error(error_msg)
             raise ValueError(error_msg)
             
         self._tokyo_first_checked = True
-        logger.debug(f"[SEQ] Tokyo rule validation passed (set_index={tokyo_idx})")
+        if tokyo_idx == 1:
+            logger.info(f"[SEQ] Tokyo rule validation passed: Tokyo is at Set #1")
+        else:
+            logger.debug(f"[SEQ] Tokyo rule validation passed: Tokyo not found in sets (set_index={tokyo_idx})")
     
     def assign_pref_seq(self, code: str, ocr_pref: str) -> str:
         """
@@ -88,13 +100,14 @@ class ReceiptSequencer:
             raise ValueError(error_msg)
         
         # 都道府県は入力順序をそのまま使用
+        # 修正指示書の連番計算式: 基本番号 + (入力順序 - 1) × 10
         final_code = BASE_PREF + (set_idx - 1) * 10
         final_code_str = f"{final_code:04d}"
         
         # キャッシュに保存
         self._assigned_codes[cache_key] = final_code_str
         
-        logger.debug(f"[SEQ][PREF] UI set={set_idx} pref={ocr_pref} -> {final_code_str}")
+        logger.info(f"[SEQ][PREF] 都道府県連番決定: UI_set={set_idx}, pref={ocr_pref}, formula={BASE_PREF}+({set_idx}-1)*10={final_code_str}")
         return final_code_str
     
     def assign_city_seq(self, code: str, ocr_pref: str, ocr_city: str) -> str:
@@ -129,20 +142,22 @@ class ReceiptSequencer:
             raise ValueError(error_msg)
         
         # 東京都がセット1に存在する場合、市町村の順序を繰り上げ（東京都スキップ）
+        # 修正指示書: 東京都は市町村なし（2000番台スキップで市町村順序繰り上げ）
         tokyo_idx = self.ctx.get_set_index_for_pref("東京都")
         adjusted_idx = set_idx
         
         if tokyo_idx == 1 and set_idx > 1:
             adjusted_idx = set_idx - 1
-            logger.debug(f"[SEQ][CITY] Tokyo-skip applied: set {set_idx} -> adjusted {adjusted_idx}")
+            logger.info(f"[SEQ][CITY] Tokyo-skip applied: original_set={set_idx} -> adjusted_set={adjusted_idx}")
         
+        # 修正指示書の連番計算式: 基本番号 + (調整後入力順序 - 1) × 10
         final_code = BASE_CITY + (adjusted_idx - 1) * 10
         final_code_str = f"{final_code:04d}"
         
         # キャッシュに保存
         self._assigned_codes[cache_key] = final_code_str
         
-        logger.debug(f"[SEQ][CITY] UI set={set_idx} city={ocr_pref} {ocr_city} (tokyo-skip applied) -> {final_code_str}")
+        logger.info(f"[SEQ][CITY] 市町村連番決定: UI_set={set_idx}, city={ocr_pref} {ocr_city}, tokyo_skip={tokyo_idx==1 and set_idx>1}, formula={BASE_CITY}+({adjusted_idx}-1)*10={final_code_str}")
         return final_code_str
 
 def is_receipt_notice(document_type: str) -> bool:

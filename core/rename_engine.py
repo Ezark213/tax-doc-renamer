@@ -537,7 +537,7 @@ class RenameEngine:
     def _apply_receipt_numbering_hook(self, code: str, fields: RenameFields, 
                                      job_context: Optional['JobContext']) -> Optional[str]:
         """
-        v5.3.5-ui-robust: 受信通知OCRベース連番処理フック
+        v5.3.5-ui-robust: 受信通知OCRベース連番処理フック（修正版）
         
         Args:
             code: 分類器による分類コード（例: "1003_受信通知"）
@@ -560,14 +560,28 @@ class RenameEngine:
             # ReceiptSequencerインスタンス作成
             sequencer = ReceiptSequencer(job_context)
             
-            # OCRテキストから都道府県・市町村を抽出
-            ocr_text = fields.document_text if hasattr(fields, 'document_text') else ""
+            # OCRテキストを複数のソースから取得を試行
+            ocr_text = ""
+            if hasattr(fields, 'document_text') and fields.document_text:
+                ocr_text = fields.document_text
+            elif hasattr(fields, 'ocr_text') and fields.ocr_text:
+                ocr_text = fields.ocr_text
+            elif hasattr(fields, 'full_text') and fields.full_text:
+                ocr_text = fields.full_text
+            
+            # デバッグ用のフィールド内容出力
+            self.logger.debug(f"[RECEIPT_HOOK] fields attributes: {[attr for attr in dir(fields) if not attr.startswith('_')]}")
+            self.logger.debug(f"[RECEIPT_HOOK] OCR text length: {len(ocr_text) if ocr_text else 0}")
+            
+            if not ocr_text:
+                self.logger.warning(f"[RECEIPT_HOOK] No OCR text available in fields for code: {code}")
+                return None
             
             if is_pref_receipt(code):
                 # 都道府県受信通知
                 ocr_pref = self._extract_prefecture_from_ocr(ocr_text)
                 if not ocr_pref:
-                    self.logger.warning(f"[RECEIPT_HOOK][PREF] No prefecture detected in OCR text")
+                    self.logger.warning(f"[RECEIPT_HOOK][PREF] No prefecture detected in OCR text: '{ocr_text[:200]}'")
                     return None
                     
                 final_code = sequencer.assign_pref_seq(code, ocr_pref)
@@ -578,7 +592,7 @@ class RenameEngine:
                 # 市町村受信通知  
                 ocr_pref, ocr_city = self._extract_prefecture_city_from_ocr(ocr_text)
                 if not ocr_pref or not ocr_city:
-                    self.logger.warning(f"[RECEIPT_HOOK][CITY] Incomplete OCR: pref={ocr_pref}, city={ocr_city}")
+                    self.logger.warning(f"[RECEIPT_HOOK][CITY] Incomplete OCR: pref={ocr_pref}, city={ocr_city}, text: '{ocr_text[:200]}'")
                     return None
                     
                 final_code = sequencer.assign_city_seq(code, ocr_pref, ocr_city)
@@ -591,33 +605,61 @@ class RenameEngine:
             raise
         except Exception as e:
             self.logger.error(f"[RECEIPT_HOOK] Unexpected error: {e}")
+            import traceback
+            self.logger.error(f"[RECEIPT_HOOK] Traceback: {traceback.format_exc()}")
             return None
             
         return None
     
     def _extract_prefecture_from_ocr(self, ocr_text: str) -> Optional[str]:
-        """OCRテキストから都道府県名を抽出"""
+        """OCRテキストから都道府県名を抽出（強化版）"""
         if not ocr_text:
             return None
             
-        # 都道府県パターン（基本的な抽出）
-        prefectures = [
-            "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
-            "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
-            "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
-            "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
-            "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
-            "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
-            "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+        # 修正指示書に基づく詳細なOCR検出パターン
+        ocr_patterns = [
+            # 都道府県税務署パターン
+            r"([^県都府道]*(?:県|都|府|道))[^県都府道]*(?:県税事務所|都税事務所)",
+            r"発行元\s*([^県都府道]*(?:県|都|府|道))[^県都府道]*(?:県税事務所|都税事務所)",
+            # 市役所から県名を推定するパターンを追加
+            r"([^県都府道]*(?:県|都|府|道))[^県都府道]*(?:市|区|町|村)",
+            # 直接的な都道府県名パターン
+            r"([^県都府道]*(?:県|都|府|道))",
         ]
         
+        # 都道府県リスト（優先度順）
+        prefectures = [
+            "東京都", "愛知県", "福岡県", "大阪府", "神奈川県",  # 優先都道府県
+            "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+            "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "新潟県", "富山県", 
+            "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "三重県", 
+            "滋賀県", "京都府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", 
+            "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", 
+            "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+        ]
+        
+        # パターンマッチングで詳細検索
+        import re
+        for pattern in ocr_patterns:
+            matches = re.findall(pattern, ocr_text)
+            for match in matches:
+                # マッチした文字列を正規化
+                normalized = match.strip()
+                if normalized in prefectures:
+                    self.logger.debug(f"[OCR_PREF] Pattern matched: '{normalized}' from text: '{ocr_text[:100]}'")
+                    return normalized
+        
+        # 直接検索（フォールバック）
         for pref in prefectures:
             if pref in ocr_text:
+                self.logger.debug(f"[OCR_PREF] Direct match: '{pref}' from text: '{ocr_text[:100]}'")
                 return pref
+                
+        self.logger.debug(f"[OCR_PREF] No prefecture found in text: '{ocr_text[:100]}'")
         return None
     
     def _extract_prefecture_city_from_ocr(self, ocr_text: str) -> Tuple[Optional[str], Optional[str]]:
-        """OCRテキストから都道府県名と市区町村名を抽出"""
+        """OCRテキストから都道府県名と市区町村名を抽出（強化版）"""
         if not ocr_text:
             return None, None
             
@@ -625,16 +667,49 @@ class RenameEngine:
         if not pref:
             return None, None
             
-        # 市区町村パターン（簡易版）
+        # 修正指示書に基づく市町村税務署パターン
         import re
+        city_patterns = [
+            # 市町村税務署パターン  
+            r"([^市区町村]*(?:市|区|町|村))役所",
+            r"発行元\s*([^市区町村]*(?:市|区|町|村))",
+            r"提出先名\s*([^市区町村]*(?:市|区|町|村))長?",
+            # 直接的な市区町村名パターン
+            r"([^県都府道市区町村]*(?:市|区|町|村))",
+        ]
+        
+        # 除外すべき都道府県関連の語句
+        prefecture_suffixes = ["県", "都", "府", "道"]
+        
+        for pattern in city_patterns:
+            matches = re.findall(pattern, ocr_text)
+            for match in matches:
+                normalized = match.strip()
+                
+                # 都道府県名を除外し、有効な市区町村名のみ抽出
+                if (normalized and 
+                    normalized != pref and 
+                    len(normalized) >= 2 and
+                    not any(normalized.endswith(suffix) for suffix in prefecture_suffixes)):
+                    
+                    self.logger.debug(f"[OCR_CITY] Pattern matched: pref='{pref}', city='{normalized}' from text: '{ocr_text[:100]}'")
+                    return pref, normalized
+                    
+        # フォールバック：直接検索
         city_pattern = r'([^県都府道]*(?:市|区|町|村))'
         matches = re.findall(city_pattern, ocr_text)
         
-        # 都道府県名を除外した市区町村名を探す
         for match in matches:
-            if match and match != pref and len(match) >= 2:
-                return pref, match
+            normalized = match.strip()
+            if (normalized and 
+                normalized != pref and 
+                len(normalized) >= 2 and
+                not any(normalized.endswith(suffix) for suffix in prefecture_suffixes)):
                 
+                self.logger.debug(f"[OCR_CITY] Direct match: pref='{pref}', city='{normalized}' from text: '{ocr_text[:100]}'")
+                return pref, normalized
+                
+        self.logger.debug(f"[OCR_CITY] No city found for pref='{pref}' from text: '{ocr_text[:100]}'")
         return pref, None
     
     def precompute_all_serials(self, snapshot: PreExtractSnapshot) -> Dict[str, SerialAllocation]:

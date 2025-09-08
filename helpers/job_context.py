@@ -243,6 +243,51 @@ class JobContext:
         set_1_info = self.current_municipality_sets.get(1, {})
         return set_1_info.get("prefecture") == "東京都"
     
+    def set_sample_municipality_sets(self):
+        """
+        修正指示書に基づくサンプル自治体セットを設定
+        テスト・デバッグ用の標準セット構成
+        """
+        self.current_municipality_sets = {
+            1: {'prefecture': '東京都', 'city': ''}, 
+            2: {'prefecture': '愛知県', 'city': '蒲郡市'}, 
+            3: {'prefecture': '福岡県', 'city': '福岡市'}
+        }
+        
+        self.audit_log.append(f"[{datetime.now()}] Sample municipality sets applied")
+        logger.info(f"[JOB_CONTEXT] Sample municipality sets configured: {self.current_municipality_sets}")
+    
+    def validate_tokyo_constraint(self) -> bool:
+        """
+        東京都制約の検証（東京都は必ずセット1）
+        
+        Returns:
+            bool: 制約を満たしている場合True
+            
+        Raises:
+            ValueError: 東京都制約に違反している場合
+        """
+        if not self.current_municipality_sets:
+            return True  # セット設定がない場合はスキップ
+            
+        # 東京都の位置を探す
+        tokyo_set = None
+        for set_id, set_info in self.current_municipality_sets.items():
+            if set_info.get("prefecture") == "東京都":
+                tokyo_set = set_id
+                break
+        
+        # 東京都がセット1以外にある場合はエラー
+        if tokyo_set is not None and tokyo_set != 1:
+            error_msg = f"[FATAL] Tokyo constraint violation: Tokyo found at Set #{tokyo_set}, must be Set #1"
+            self.add_error(error_msg)
+            raise ValueError(error_msg)
+        
+        if tokyo_set == 1:
+            logger.info(f"[JOB_CONTEXT] Tokyo constraint validated: Tokyo is at Set #1")
+            
+        return True
+    
     def get_summary(self) -> Dict[str, Any]:
         """処理サマリーを取得"""
         return {

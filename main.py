@@ -29,6 +29,7 @@ from ui.drag_drop import DropZoneFrame, AutoSplitControlFrame
 from core.pre_extract import create_pre_extract_engine
 from core.rename_engine import create_rename_engine
 from core.models import DocItemID, PreExtractSnapshot
+from helpers.job_context import JobContext
 
 
 def _init_tesseract():
@@ -742,8 +743,24 @@ class TaxDocumentRenamerV5:
                         # Step 2: Bundle検出（グローバル除外対応）
                         # Step 3: 分割実行 or 単一処理
                         def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
-                            # v5.3: スナップショット参照での決定論的リネーム
-                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                            # v5.3: Bundle分割用JobContext作成
+                            municipality_sets = self._get_municipality_sets()
+                            job_context = JobContext(
+                                job_id=f"bundle_split_{page_num}",
+                                confirmed_yymm=user_yymm,
+                                yymm_source="UI",
+                                run_config=None,
+                                batch_mode=True,
+                                debug_mode=False,
+                                output_directory=output_folder
+                            )
+                            job_context.current_municipality_sets = municipality_sets
+                            job_context.split_source = True
+                            job_context.bundle_type = bundle_type
+                            job_context.page_number = page_num
+                            
+                            # v5.3: スナップショット参照での決定論的リネーム（JobContext付き）
+                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
                         
                         was_split = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=False, processing_callback=processing_callback
@@ -901,8 +918,59 @@ class TaxDocumentRenamerV5:
                         
                         # 分割後の個別ファイル処理コールバック
                         def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
-                            # 分割されたファイルをv5.3スナップショット参照で処理
-                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                            import time
+                            from helpers.job_context import JobContext
+                            
+                            print(f"[BUNDLE_CALLBACK] コールバック開始: {os.path.basename(temp_path)}")
+                            print(f"[BUNDLE_CALLBACK] ページ: {page_num}, Bundle種別: {bundle_type}")
+                            
+                            # 段階1で修正済みの自治体セット取得
+                            municipality_sets = self._get_municipality_sets()
+                            print(f"[BUNDLE_CALLBACK] 自治体セット取得結果: {municipality_sets}")
+                            
+                            # Bundle分割用JobContext作成（完全版）
+                            job_context = JobContext(
+                                job_id=f"bundle_split_{page_num}_{int(time.time())}",
+                                confirmed_yymm=user_yymm,  # 確定YYMM値を設定
+                                yymm_source="UI",  # UI入力由来
+                                run_config=None,  # Bundle分割時は簡易作成
+                                batch_mode=True,
+                                debug_mode=False,
+                                output_directory=output_folder
+                            )
+                            
+                            print(f"[BUNDLE_CALLBACK] JobContext基本設定完了: {job_context.job_id}")
+                            
+                            # 重要：自治体セット情報を確実に設定
+                            job_context.current_municipality_sets = municipality_sets
+                            job_context.split_source = True  # Bundle分割フラグ
+                            job_context.bundle_type = bundle_type
+                            
+                            print(f"[BUNDLE_CALLBACK] JobContext作成完了")
+                            print(f"[BUNDLE_CALLBACK] municipality_sets設定: {job_context.current_municipality_sets}")
+                            print(f"[BUNDLE_CALLBACK] Bundle分割フラグ: {job_context.split_source}")
+                            print(f"[BUNDLE_CALLBACK] Bundle種別: {job_context.bundle_type}")
+                            
+                            # 自治体セット情報の検証
+                            if not job_context.current_municipality_sets:
+                                print(f"[BUNDLE_CALLBACK] ❌ 警告: municipality_setsが空です！")
+                                self._log(f"[BUNDLE_CALLBACK] ❌ 警告: municipality_setsが空 - 連番処理に影響")
+                            else:
+                                print(f"[BUNDLE_CALLBACK] ✅ municipality_sets確認OK: {len(job_context.current_municipality_sets)}セット")
+                                self._log(f"[BUNDLE_CALLBACK] ✅ municipality_sets設定完了: {len(job_context.current_municipality_sets)}セット")
+                            
+                            self._log(f"[BUNDLE_SPLIT] 分割ページ処理開始: page={page_num}, bundle_type={bundle_type}, temp_file={os.path.basename(temp_path)}")
+                            
+                            try:
+                                # 分割されたファイルをv5.3スナップショット参照で処理
+                                print(f"[BUNDLE_CALLBACK] 分類処理実行: job_context渡し開始")
+                                self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
+                                print(f"[BUNDLE_CALLBACK] 分類処理完了")
+                                
+                            except Exception as e:
+                                print(f"[BUNDLE_CALLBACK] 分類処理エラー: {e}")
+                                self._log(f"[BUNDLE_CALLBACK] ❌ 分類処理エラー: {e}")
+                                raise
                         
                         was_split = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=False, processing_callback=processing_callback
@@ -973,8 +1041,59 @@ class TaxDocumentRenamerV5:
                         
                         # 分割後の個別ファイル処理コールバック
                         def processing_callback(temp_path, page_num, bundle_type, doc_item_id: Optional[DocItemID] = None):
-                            # 分割されたファイルをv5.3スナップショット参照で処理
-                            self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id)
+                            import time
+                            from helpers.job_context import JobContext
+                            
+                            print(f"[BUNDLE_FORCE_CALLBACK] 強制分割コールバック開始: {os.path.basename(temp_path)}")
+                            print(f"[BUNDLE_FORCE_CALLBACK] ページ: {page_num}, Bundle種別: {bundle_type}")
+                            
+                            # 段階1で修正済みの自治体セット取得
+                            municipality_sets = self._get_municipality_sets()
+                            print(f"[BUNDLE_FORCE_CALLBACK] 自治体セット取得結果: {municipality_sets}")
+                            
+                            # Bundle分割用JobContext作成（完全版）
+                            job_context = JobContext(
+                                job_id=f"bundle_force_split_{page_num}_{int(time.time())}",
+                                confirmed_yymm=user_yymm,  # 確定YYMM値を設定
+                                yymm_source="UI",  # UI入力由来
+                                run_config=None,  # Bundle分割時は簡易作成
+                                batch_mode=True,
+                                debug_mode=False,
+                                output_directory=output_folder
+                            )
+                            
+                            print(f"[BUNDLE_FORCE_CALLBACK] JobContext基本設定完了: {job_context.job_id}")
+                            
+                            # 重要：自治体セット情報を確実に設定
+                            job_context.current_municipality_sets = municipality_sets
+                            job_context.split_source = True  # Bundle分割フラグ
+                            job_context.bundle_type = bundle_type
+                            
+                            print(f"[BUNDLE_FORCE_CALLBACK] JobContext作成完了")
+                            print(f"[BUNDLE_FORCE_CALLBACK] municipality_sets設定: {job_context.current_municipality_sets}")
+                            print(f"[BUNDLE_FORCE_CALLBACK] Bundle分割フラグ: {job_context.split_source}")
+                            print(f"[BUNDLE_FORCE_CALLBACK] Bundle種別: {job_context.bundle_type}")
+                            
+                            # 自治体セット情報の検証
+                            if not job_context.current_municipality_sets:
+                                print(f"[BUNDLE_FORCE_CALLBACK] ❌ 警告: municipality_setsが空です！")
+                                self._log(f"[BUNDLE_FORCE_CALLBACK] ❌ 警告: municipality_setsが空 - 連番処理に影響")
+                            else:
+                                print(f"[BUNDLE_FORCE_CALLBACK] ✅ municipality_sets確認OK: {len(job_context.current_municipality_sets)}セット")
+                                self._log(f"[BUNDLE_FORCE_CALLBACK] ✅ municipality_sets設定完了: {len(job_context.current_municipality_sets)}セット")
+                            
+                            self._log(f"[BUNDLE_FORCE_SPLIT] 分割ページ処理開始: page={page_num}, bundle_type={bundle_type}, temp_file={os.path.basename(temp_path)}")
+                            
+                            try:
+                                # 分割されたファイルをv5.3スナップショット参照で処理
+                                print(f"[BUNDLE_FORCE_CALLBACK] 分類処理実行: job_context渡し開始")
+                                self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
+                                print(f"[BUNDLE_FORCE_CALLBACK] 分類処理完了")
+                                
+                            except Exception as e:
+                                print(f"[BUNDLE_FORCE_CALLBACK] 分類処理エラー: {e}")
+                                self._log(f"[BUNDLE_FORCE_CALLBACK] ❌ 分類処理エラー: {e}")
+                                raise
                         
                         was_split = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=True, processing_callback=processing_callback
@@ -1160,7 +1279,7 @@ class TaxDocumentRenamerV5:
             raise ValueError(f"未対応ファイル形式: {ext}")
     
     def _process_single_file_v5_with_snapshot(self, file_path: str, output_folder: str, 
-                                             snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None):
+                                             snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None, job_context: Optional['JobContext'] = None):
         """v5.3 スナップショット方式を使用したファイル処理（決定論的命名）"""
         filename = os.path.basename(file_path)
         ext = os.path.splitext(file_path)[1].lower()
@@ -1168,7 +1287,7 @@ class TaxDocumentRenamerV5:
         self._log(f"[v5.3] 決定論的処理開始: {filename}")
         
         if ext == '.pdf':
-            self._process_pdf_file_v5_with_snapshot(file_path, output_folder, snapshot, doc_item_id)
+            self._process_pdf_file_v5_with_snapshot(file_path, output_folder, snapshot, doc_item_id, job_context)
         elif ext == '.csv':
             self._process_csv_file(file_path, output_folder)  # CSVは従来通り
         else:
@@ -1314,9 +1433,16 @@ class TaxDocumentRenamerV5:
         ))
     
     def _process_pdf_file_v5_with_snapshot(self, file_path: str, output_folder: str, 
-                                          snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None):
+                                          snapshot: PreExtractSnapshot, doc_item_id: Optional[DocItemID] = None, job_context: Optional['JobContext'] = None):
         """v5.3 スナップショット方式PDFファイル処理（決定論的命名）"""
         filename = os.path.basename(file_path)
+        
+        # Debug log for Bundle splitting files
+        if filename.startswith("__split_"):
+            print(f"[DEBUG_TEST] Bundle分割ファイル処理: {filename}")
+            print(f"[DEBUG_TEST] job_context存在: {job_context is not None}")
+            if job_context:
+                print(f"[DEBUG_TEST] job_context.current_municipality_sets: {getattr(job_context, 'current_municipality_sets', None)}")
         
         # 分類実行（従来通り）
         try:
@@ -1338,9 +1464,17 @@ class TaxDocumentRenamerV5:
 
         # 決定論的独立化：分割・非分割に関係なく統一処理
         municipality_sets = self._get_municipality_sets()
-        classification_result = self.classifier_v5.classify_with_municipality_info_v5(
-            text, filename, municipality_sets=municipality_sets
-        )
+        
+        # job_contextがある場合（Bundle分割）は連番処理対応のメソッドを使用
+        if job_context is not None:
+            self._log(f"[BUNDLE_SPLIT] JobContext付き分類開始: page={job_context.page_number}")
+            classification_result = self.classifier_v5.classify_document_v5(
+                text, filename, job_context=job_context
+            )
+        else:
+            classification_result = self.classifier_v5.classify_with_municipality_info_v5(
+                text, filename, municipality_sets=municipality_sets, job_context=job_context
+            )
         self._log(f"[v5.3] 決定論的独立化処理：分割・非分割統一")
         
         # 信頼度チェック：0.00かつ9999_未分類の場合は空白ページ可能性を再チェック
@@ -1372,6 +1506,11 @@ class TaxDocumentRenamerV5:
         # ファイル名生成（市町村連番システム対応）
         new_filename = self._generate_filename(final_document_type, user_yymm, "pdf", classification_result)
         
+        # 🔥 段階3：最終ファイル名生成の確認ログ
+        if filename.startswith("__split_"):
+            print(f"[FILENAME_DEBUG] 分類結果: {final_document_type}")
+            print(f"[FILENAME_DEBUG] 最終ファイル名: {new_filename}")
+        
         self._log(f"[v5.3] 統一ファイル名生成完了: {new_filename}")
         
         # ファイルコピー
@@ -1399,20 +1538,55 @@ class TaxDocumentRenamerV5:
         self._log_detailed_classification_info(classification_result, text, filename)
 
     def _get_municipality_sets(self) -> Dict[int, Dict[str, str]]:
-        """UI設定からセット情報を取得"""
+        """自治体セット情報を取得 - Bundle分割対応版"""
         municipality_sets = {}
         
-        # セット1-5の設定を取得
-        for i in range(1, 6):
-            prefecture_var = getattr(self, f'prefecture_var_{i}', None)
+        print(f"[MUNICIPALITY_SETS] 自治体セット情報取得開始")
+        
+        # UI変数からの取得を試行
+        for i in range(1, 4):  # Bundle分割では1-3のみを使用
+            pref_var = getattr(self, f'prefecture_var_{i}', None)
             city_var = getattr(self, f'city_var_{i}', None)
             
-            if prefecture_var and prefecture_var.get().strip():
-                municipality_sets[i] = {
-                    "prefecture": prefecture_var.get().strip(),
-                    "city": city_var.get().strip() if city_var else ""
-                }
-                
+            print(f"[MUNICIPALITY_SETS] セット{i}: 変数存在確認 pref={pref_var is not None}, city={city_var is not None}")
+            
+            # UI変数が正常に設定されている場合
+            if pref_var and city_var:
+                try:
+                    pref = pref_var.get().strip()
+                    city = city_var.get().strip()
+                    print(f"[MUNICIPALITY_SETS] セット{i}: UI値取得 '{pref}', '{city}'")
+                    
+                    if pref:  # 都道府県名が設定されている場合のみセット作成
+                        municipality_sets[i] = {
+                            'prefecture': pref,
+                            'city': city
+                        }
+                        print(f"[MUNICIPALITY_SETS] UI設定取得: セット{i} = {pref} {city}")
+                except Exception as e:
+                    print(f"[MUNICIPALITY_SETS] UI変数アクセスエラー: セット{i}, {e}")
+            else:
+                print(f"[MUNICIPALITY_SETS] セット{i}: 変数が存在しないためスキップ")
+        
+        print(f"[MUNICIPALITY_SETS] UI取得結果: {municipality_sets}")
+        
+        # フォールバック: UI変数から取得できない場合はデフォルト設定を使用
+        if not municipality_sets:
+            print(f"[MUNICIPALITY_SETS] フォールバック: デフォルト設定を適用")
+            municipality_sets = {
+                1: {'prefecture': '東京都', 'city': ''},
+                2: {'prefecture': '愛知県', 'city': '蒲郡市'},
+                3: {'prefecture': '福岡県', 'city': '福岡市'}
+            }
+            print(f"[MUNICIPALITY_SETS] デフォルト設定適用完了")
+        
+        print(f"[MUNICIPALITY_SETS] 最終セット情報: {municipality_sets}")
+        
+        # UI変数が取得できない場合の警告
+        if len(municipality_sets) < 3:
+            print(f"[MUNICIPALITY_SETS] 警告: 自治体セット情報が不完全です（{len(municipality_sets)}/3セット）")
+            print(f"[MUNICIPALITY_SETS] Bundle分割連番処理に影響する可能性があります")
+        
         self._log(f"セット設定情報: {municipality_sets}")
         return municipality_sets
     

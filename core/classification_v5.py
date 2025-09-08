@@ -402,14 +402,14 @@ class DocumentClassifierV5:
             
             # ===== 5000番台 - 会計書類（修正版） =====
             "5001_決算書": {
-                "priority": 135,
+                "priority": 130,  # 残高試算表より低い優先度
                 "highest_priority_conditions": [
                     AndCondition(["決算報告書"], "any"),
                     AndCondition(["貸借対照表", "損益計算書"], "all")
                 ],
                 "exact_keywords": ["決算書", "決算報告書", "貸借対照表", "損益計算書"],
                 "partial_keywords": ["決算", "B/S", "P/L"],
-                "exclude_keywords": [],
+                "exclude_keywords": ["残高試算表", "試算表", "残高試算"],  # 試算表関連を除外
                 "filename_keywords": ["決算書", "決算報告書"]
             },
             
@@ -436,13 +436,16 @@ class DocumentClassifierV5:
             },
             
             "5004_残高試算表": {
-                "priority": 135,
+                "priority": 140,  # 最高優先度（決算書より高い）
                 "highest_priority_conditions": [
                     AndCondition(["残高試算表"], "any"),
                     AndCondition(["試算表"], "any")
                 ],
                 "exact_keywords": ["残高試算表", "試算表"],
-                "partial_keywords": ["残高試算", "試算"],
+                "partial_keywords": [
+                    "残高試算", "借方金額", "貸方金額", "期末残高", "構成比",
+                    "合計残高", "月次試算", "年次試算", "勘定残高"
+                ],
                 "exclude_keywords": [],
                 "filename_keywords": ["残高試算表", "試算表"]
             },
@@ -487,12 +490,37 @@ class DocumentClassifierV5:
             "6003_少額減価償却資産明細表": {
                 "priority": 140,  # 最高優先度
                 "highest_priority_conditions": [
-                    AndCondition(["少額減価償却資産明細表"], "any")
+                    AndCondition(["少額減価償却資産明細表"], "any"),
+                    AndCondition(["少額減価"], "any"),
+                    AndCondition(["少額"], "any")
                 ],
                 "exact_keywords": ["少額減価償却資産明細表"],
-                "partial_keywords": ["少額減価償却", "少額償却"],
+                "partial_keywords": [
+                    "少額減価償却", "少額償却", "少額減価償却資産", "少額資産",
+                    "取得価額", "損金算入", "30万円未満", "減価償却資産", "明細表",
+                    "少額固定資産", "償却資産明細", "一時損金算入"
+                ],
                 "exclude_keywords": ["一括"],
-                "filename_keywords": ["少額減価償却資産明細表", "少額"],
+                "filename_keywords": [],  # ファイル名判定を削除してOCR内容ベースに統一
+                "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
+            },
+            
+            "6003_固定資産台帳少額": {
+                "priority": 120,  # 中優先度（ANDキーワード条件）
+                "highest_priority_conditions": [
+                    AndCondition(["固定資産台帳", "取得価額"], "all"),
+                    AndCondition(["資産番号", "耐用年数"], "all"),
+                    AndCondition(["供用開始", "減価償却資産"], "all"),
+                    AndCondition(["明細表", "少額"], "all")
+                ],
+                "exact_keywords": [],
+                "partial_keywords": [
+                    "固定資産台帳", "資産番号", "耐用年数", "供用開始",
+                    "取得価額", "減価償却資産", "明細表", "少額"
+                ],
+                "exclude_keywords": ["一括"],
+                "filename_keywords": [],
+                "output_override": "6003_少額減価償却資産明細表",  # 出力は6003に統一
                 "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
             
@@ -587,10 +615,19 @@ class DocumentClassifierV5:
         self._log_debug("最優先AND条件マッチなし - 通常分類処理に移行")
         return None
 
-    def classify_document_v5(self, text: str, filename: str = "") -> ClassificationResult:
-        """v5.0 書類分類（AND条件対応版）"""
+    def classify_document_v5(self, text: str, filename: str = "", job_context=None) -> ClassificationResult:
+        """v5.0 書類分類（AND条件対応版）+ 受信通知連番処理強制実行"""
         self.processing_log = []  # ログをリセット
         self.current_filename = filename
+        
+        # 🔥 Bundle分割ファイルの特別ログ（段階1）
+        if filename.startswith("__split_"):
+            print(f"[BUNDLE_SPLIT_DEBUG] Bundle分割ファイル処理開始: {filename}")
+            print(f"[BUNDLE_SPLIT_DEBUG] JobContext存在: {job_context is not None}")
+            if job_context:
+                print(f"[BUNDLE_SPLIT_DEBUG] JobContext内容: {type(job_context)}")
+                municipality_sets = getattr(job_context, 'current_municipality_sets', None)
+                print(f"[BUNDLE_SPLIT_DEBUG] municipality_sets: {municipality_sets}")
         
         self._log(f"書類分類開始 (v5.0): {filename}")
         
@@ -612,20 +649,362 @@ class DocumentClassifierV5:
         
         local_tax_result = self._classify_local_tax_receipt(text_cleaned, filename_cleaned, prefecture_code, municipality_code)
         if local_tax_result:
-            return local_tax_result
+            # 🔥 地方税受信通知の特別ログ（段階1）
+            if (filename.startswith("__split_") and 
+                hasattr(local_tax_result, 'classification_method') and
+                local_tax_result.classification_method == "local_tax_receipt_detection_ocr"):
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 地方税受信通知検出！")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 分類結果: {local_tax_result.document_type}")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 判定方法: {local_tax_result.classification_method}")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] JobContext for numbering: {job_context is not None}")
+            
+            # 🔥 修正指示書対応: 受信通知の場合、即座に連番処理を実行
+            if job_context is not None:
+                print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理開始")
+            final_result = self._apply_receipt_numbering_if_needed(local_tax_result, text_cleaned, job_context)
+            return final_result
         
         # 修正指示書: 修正3 - 納付情報・受信通知の判別強化
         enhanced_result = self._check_enhanced_payment_receipt_detection(text_cleaned, filename_cleaned)
         if enhanced_result:
-            return enhanced_result
+            # 🔥 地方税受信通知の特別ログ（段階1）
+            if (filename.startswith("__split_") and 
+                hasattr(enhanced_result, 'classification_method') and
+                enhanced_result.classification_method == "local_tax_receipt_detection_ocr"):
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 地方税受信通知検出！")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 分類結果: {enhanced_result.document_type}")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 判定方法: {enhanced_result.classification_method}")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] JobContext for numbering: {job_context is not None}")
+            
+            # 🔥 修正指示書対応: 受信通知の場合、即座に連番処理を実行
+            if job_context is not None:
+                print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理開始")
+            final_result = self._apply_receipt_numbering_if_needed(enhanced_result, text_cleaned, job_context)
+            return final_result
         
         # 最優先AND条件判定
         priority_result = self._check_highest_priority_conditions(text_cleaned, filename_cleaned)
         if priority_result:
-            return priority_result
+            # 🔥 地方税受信通知の特別ログ（段階1）
+            if (filename.startswith("__split_") and 
+                hasattr(priority_result, 'classification_method') and
+                priority_result.classification_method == "local_tax_receipt_detection_ocr"):
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 地方税受信通知検出！")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 分類結果: {priority_result.document_type}")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] 判定方法: {priority_result.classification_method}")
+                print(f"[LOCAL_TAX_RECEIPT_DEBUG] JobContext for numbering: {job_context is not None}")
+            
+            # 🔥 修正指示書対応: 受信通知の場合、即座に連番処理を実行
+            if job_context is not None:
+                print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理開始")
+            final_result = self._apply_receipt_numbering_if_needed(priority_result, text_cleaned, job_context)
+            return final_result
         
         # 通常の分類処理（従来ルールも維持）
-        return self._standard_classification(text_cleaned, filename_cleaned)
+        standard_result = self._standard_classification(text_cleaned, filename_cleaned)
+        
+        # 🔥 地方税受信通知の特別ログ（段階1）
+        if (filename.startswith("__split_") and 
+            hasattr(standard_result, 'classification_method') and
+            standard_result.classification_method == "local_tax_receipt_detection_ocr"):
+            print(f"[LOCAL_TAX_RECEIPT_DEBUG] 地方税受信通知検出！")
+            print(f"[LOCAL_TAX_RECEIPT_DEBUG] 分類結果: {standard_result.document_type}")
+            print(f"[LOCAL_TAX_RECEIPT_DEBUG] 判定方法: {standard_result.classification_method}")
+            print(f"[LOCAL_TAX_RECEIPT_DEBUG] JobContext for numbering: {job_context is not None}")
+        
+        # 🔥 修正指示書対応: 受信通知の場合、即座に連番処理を実行
+        if job_context is not None:
+            print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理開始")
+        final_result = self._apply_receipt_numbering_if_needed(standard_result, text_cleaned, job_context)
+        return final_result
+
+    def _apply_receipt_numbering_if_needed(self, classification_result: ClassificationResult, 
+                                         ocr_text: str, job_context) -> ClassificationResult:
+        """
+        🔥 修正指示書対応: 受信通知分類時の連番処理強制実行
+        
+        Args:
+            classification_result: 基本分類結果
+            ocr_text: OCRテキスト
+            job_context: JobContext（自治体セット情報）
+            
+        Returns:
+            ClassificationResult: 連番処理後の最終分類結果
+        """
+        from helpers.seq_policy import is_receipt_notice, is_pref_receipt, is_city_receipt
+        
+        base_code = classification_result.document_type
+        
+        # 🔥 段階1：詳細ログ追加 - 連番処理呼び出し部分
+        if self.current_filename.startswith("__split_"):
+            print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理開始")
+            print(f"[RECEIPT_NUMBERING_DEBUG] 処理前分類結果: {classification_result.document_type}")
+            
+            # 🔥 地方税受信通知の場合の特別処理確認
+            if classification_result.document_type in ["1003_受信通知", "2013_受信通知"]:
+                print(f"[RECEIPT_NUMBERING_DEBUG] 地方税受信通知連番処理対象確認")
+                municipality_sets = getattr(job_context, 'current_municipality_sets', None)
+                print(f"[RECEIPT_NUMBERING_DEBUG] 自治体セット: {municipality_sets}")
+        
+        print(f"[APPLY_NUMBERING_DEBUG] 連番処理メソッド開始: {base_code}")
+        
+        # 受信通知判定
+        if not is_receipt_notice(base_code):
+            print(f"[APPLY_NUMBERING_DEBUG] 受信通知ではないためスキップ: {base_code}")
+            return classification_result
+            
+        print(f"[APPLY_NUMBERING_DEBUG] 受信通知確認OK: {base_code}")
+        
+        # JobContext確認
+        if not job_context:
+            print(f"[APPLY_NUMBERING_DEBUG] JobContext未設定のため連番処理スキップ")
+            self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] JobContext未設定のため連番処理スキップ: {base_code}")
+            return classification_result
+            
+        print(f"[APPLY_NUMBERING_DEBUG] JobContext確認OK")
+        
+        # municipality_sets確認
+        municipality_sets = getattr(job_context, 'current_municipality_sets', None)
+        if not municipality_sets:
+            print(f"[APPLY_NUMBERING_DEBUG] municipality_sets未設定のためスキップ")
+            return classification_result
+            
+        print(f"[APPLY_NUMBERING_DEBUG] municipality_sets確認OK: {municipality_sets}")
+        
+        # 地方税受信通知の特別処理（段階2強化版）
+        if (base_code in ["1003_受信通知", "2013_受信通知"] and 
+            hasattr(classification_result, 'classification_method') and
+            classification_result.classification_method == "local_tax_receipt_detection_ocr"):
+            
+            print(f"[RECEIPT_NUMBERING] 地方税受信通知連番処理開始: {base_code}")
+            
+            if not job_context or not hasattr(job_context, 'current_municipality_sets'):
+                print(f"[RECEIPT_NUMBERING] JobContext不足エラー")
+                return classification_result
+                
+            # 連番処理を強制実行
+            numbered_result = self._calculate_simplified_receipt_number(
+                base_code, ocr_text, job_context
+            )
+            
+            if numbered_result:
+                print(f"[RECEIPT_NUMBERING] 連番処理成功: {base_code} → {numbered_result}")
+                # 新しい分類結果を作成
+                new_result = ClassificationResult(
+                    document_type=numbered_result,
+                    confidence=classification_result.confidence,
+                    matched_keywords=classification_result.matched_keywords,
+                    classification_method="local_tax_receipt_forced_numbering",
+                    debug_steps=classification_result.debug_steps,
+                    processing_log=classification_result.processing_log + [f"地方税受信通知連番処理: {base_code} -> {numbered_result}"],
+                    original_doc_type_code=base_code
+                )
+                return new_result
+            else:
+                print(f"[RECEIPT_NUMBERING] 連番処理失敗: {base_code}")
+        
+        # 🔥 地方税受信通知の場合の詳細処理
+        if base_code in ["1003_受信通知", "2013_受信通知"]:
+            print(f"[APPLY_NUMBERING_DEBUG] 地方税受信通知連番処理開始: {base_code}")
+            
+        # 地方税受信通知Bundle分割時の詳細ログ
+        if base_code.endswith("_受信通知") and (base_code.startswith("1003") or base_code.startswith("2013")):
+            self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] 地方税受信通知検出: {base_code}")
+            self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] JobContext: {job_context}")
+            if hasattr(job_context, 'current_municipality_sets'):
+                self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] municipality_sets: {job_context.current_municipality_sets}")
+            else:
+                self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] municipality_sets属性なし")
+            
+        if not hasattr(job_context, 'current_municipality_sets') or not job_context.current_municipality_sets:
+            self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] current_municipality_sets不足のため連番処理スキップ: {base_code}")
+            return classification_result
+            
+        self._log(f"[RECEIPT_FORCED] 受信通知連番処理を強制実行: {base_code}")
+        
+        try:
+            # 🔥 地方税受信通知の場合の連番計算実行
+            if base_code in ["1003_受信通知", "2013_受信通知"]:
+                # 連番計算実行
+                final_code = self._calculate_simplified_receipt_number(base_code, ocr_text, job_context)
+                
+                if final_code and final_code != base_code:
+                    print(f"[APPLY_NUMBERING_DEBUG] 連番処理成功: {base_code} → {final_code}")
+                else:
+                    print(f"[APPLY_NUMBERING_DEBUG] 連番処理失敗または変更なし: {base_code}")
+            else:
+                # 通常の連番計算
+                final_code = self._calculate_simplified_receipt_number(base_code, ocr_text, job_context)
+            
+            if final_code and final_code != base_code:
+                # 連番処理成功：新しい分類結果を作成
+                new_result = ClassificationResult(
+                    document_type=final_code,
+                    confidence=classification_result.confidence,
+                    matched_keywords=classification_result.matched_keywords,
+                    classification_method="receipt_forced_numbering",
+                    debug_steps=classification_result.debug_steps,
+                    processing_log=classification_result.processing_log + [f"連番処理適用: {base_code} -> {final_code}"],
+                    original_doc_type_code=base_code  # 元のコードを保存
+                )
+                
+                self._log(f"[RECEIPT_FORCED] 連番処理成功: {base_code} -> {final_code}")
+                
+                # 🔥 段階1：詳細ログ追加 - 連番処理完了
+                if self.current_filename.startswith("__split_"):
+                    print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理完了")
+                    print(f"[RECEIPT_NUMBERING_DEBUG] 処理後分類結果: {final_code}")
+                
+                return new_result
+            else:
+                self._log(f"[RECEIPT_FORCED] 連番処理失敗またはスキップ: {base_code}")
+                
+                # 🔥 段階1：詳細ログ追加 - 連番処理完了（変更なし）
+                if self.current_filename.startswith("__split_"):
+                    print(f"[RECEIPT_NUMBERING_DEBUG] 連番処理完了")
+                    print(f"[RECEIPT_NUMBERING_DEBUG] 処理後分類結果: {base_code} (変更なし)")
+                
+                return classification_result
+                
+        except Exception as e:
+            self._log(f"[RECEIPT_FORCED] 連番処理エラー: {e}")
+            import traceback
+            self._log_debug(f"[RECEIPT_FORCED] Traceback: {traceback.format_exc()}")
+            return classification_result
+
+    def _calculate_simplified_receipt_number(self, base_code: str, ocr_text: str, job_context) -> Optional[str]:
+        """
+        簡素化された受信通知連番計算（修正指示書対応）
+        
+        Args:
+            base_code: 基本分類コード（例: "1003_受信通知"）
+            ocr_text: OCRテキスト
+            job_context: JobContext
+            
+        Returns:
+            Optional[str]: 連番コード（例: "1013_受信通知"）、計算失敗時はNone
+        """
+        from helpers.seq_policy import is_pref_receipt, is_city_receipt
+        
+        # OCRから都道府県・市町村を抽出
+        if is_pref_receipt(base_code):
+            # 都道府県受信通知
+            prefecture = self._extract_prefecture_from_ocr_simple(ocr_text)
+            if not prefecture:
+                self._log_debug(f"[SIMPLIFIED_CALC] 都道府県抽出失敗: {ocr_text[:100]}")
+                return None
+                
+            set_number = job_context.get_set_index_for_pref(prefecture)
+            if set_number is None:
+                self._log_debug(f"[SIMPLIFIED_CALC] 都道府県セット番号取得失敗: {prefecture}")
+                return None
+                
+            # 連番計算: 1003 + (set_number - 1) * 10
+            final_number = 1003 + (set_number - 1) * 10
+            result_code = f"{final_number:04d}_受信通知"
+            
+            self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] 都道府県連番処理成功: OCR={prefecture} → セット{set_number} → {result_code}")
+            return result_code
+            
+        elif is_city_receipt(base_code):
+            # 市町村受信通知
+            prefecture, city = self._extract_prefecture_city_from_ocr_simple(ocr_text)
+            if not prefecture or not city:
+                self._log_debug(f"[SIMPLIFIED_CALC] 市町村抽出失敗: pref={prefecture}, city={city}")
+                return None
+                
+            set_number = job_context.get_set_index_for_city(prefecture, city)
+            if set_number is None:
+                self._log_debug(f"[SIMPLIFIED_CALC] 市町村セット番号取得失敗: {prefecture} {city}")
+                return None
+                
+            # 東京都スキップ処理
+            tokyo_set = job_context.get_set_index_for_pref("東京都")
+            adjusted_set = set_number - 1 if (tokyo_set == 1 and set_number > 1) else set_number
+            
+            # 連番計算: 2003 + (adjusted_set - 1) * 10
+            final_number = 2003 + (adjusted_set - 1) * 10
+            result_code = f"{final_number:04d}_受信通知"
+            
+            self._log(f"[BUNDLE_SPLIT_LOCAL_TAX] 市町村連番処理成功: OCR={prefecture} {city} → セット{set_number}→調整{adjusted_set} → {result_code}")
+            return result_code
+            
+        return None
+
+    def _extract_prefecture_from_ocr_simple(self, ocr_text: str) -> Optional[str]:
+        """簡素化された都道府県抽出（段階3精度向上版）"""
+        print(f"[RECEIPT_CALC] OCR解析開始")
+        print(f"[RECEIPT_CALC] 検索対象テキスト: {ocr_text[:200]}...")
+        
+        # 発行元パターンを詳細化（段階3強化）
+        prefecture_patterns = {
+            "東京都": ["東京都", "港都税事務所", "都税事務所"],
+            "愛知県": ["愛知県", "東三河県税事務所", "県税事務所"],
+            "福岡県": ["福岡県", "西福岡県税事務所", "福岡県税"]
+        }
+        
+        # より精密な突合処理
+        for prefecture, patterns in prefecture_patterns.items():
+            for pattern in patterns:
+                if pattern in ocr_text:
+                    print(f"[RECEIPT_CALC] 都道府県マッチ: {pattern} → {prefecture}")
+                    return prefecture
+        
+        # フォールバック: 基本的な都道府県名検索
+        prefectures = ["東京都", "愛知県", "福岡県", "大阪府", "神奈川県"]
+        for pref in prefectures:
+            if pref in ocr_text:
+                print(f"[RECEIPT_CALC] 都道府県フォールバックマッチ: {pref}")
+                return pref
+        
+        print(f"[RECEIPT_CALC] 都道府県マッチなし")
+        return None
+
+    def _extract_prefecture_city_from_ocr_simple(self, ocr_text: str) -> Tuple[Optional[str], Optional[str]]:
+        """簡素化された都道府県・市町村抽出（段階3精度向上版）"""
+        print(f"[RECEIPT_CALC] 市町村OCR解析開始")
+        print(f"[RECEIPT_CALC] 検索対象テキスト: {ocr_text[:200]}...")
+        
+        # 段階3：市町村パターンを詳細化
+        city_patterns = {
+            "蒲郡市": ["蒲郡市", "蒲郡市役所"],
+            "福岡市": ["福岡市", "福岡市長"]
+        }
+        
+        # まず都道府県を抽出
+        prefectures_cities = {
+            "東京都": ["港区", "新宿区", "渋谷区"],
+            "愛知県": ["蒲郡市", "名古屋市", "豊田市"],
+            "福岡県": ["福岡市", "北九州市", "久留米市"],
+            "大阪府": ["大阪市", "堺市", "東大阪市"],
+            "神奈川県": ["横浜市", "川崎市", "相模原市"]
+        }
+        
+        # より精密な突合処理（段階3強化）
+        for pref, cities in prefectures_cities.items():
+            if pref in ocr_text:
+                # 該当都道府県の市町村を探す
+                for city in cities:
+                    # 拡張パターンでの検索
+                    if city in city_patterns:
+                        for pattern in city_patterns[city]:
+                            if pattern in ocr_text:
+                                print(f"[RECEIPT_CALC] 市町村マッチ: {pattern} → {pref}({city})")
+                                return pref, city
+                    elif city in ocr_text:
+                        print(f"[RECEIPT_CALC] 市町村基本マッチ: {city} → {pref}({city})")
+                        return pref, city
+                
+                # 都道府県は見つかったが市町村が見つからない場合
+                print(f"[RECEIPT_CALC] 都道府県マッチ、市町村検索中: {pref}")
+                # 役所パターンで市名を抽出を試行
+                import re
+                city_match = re.search(r'([^県都府道市区町村]+(?:市|区|町|村))役所', ocr_text)
+                if city_match:
+                    found_city = city_match.group(1)
+                    return pref, found_city
+                    
+        return None, None
 
     def _standard_classification(self, text: str, filename: str) -> ClassificationResult:
         """標準分類処理（従来ルール）"""
@@ -807,10 +1186,11 @@ class DocumentClassifierV5:
     def classify_with_municipality_info_v5(self, text: str, filename: str, 
                                          prefecture_code: Optional[int] = None,
                                          municipality_code: Optional[int] = None,
-                                         municipality_sets: Optional[Dict[int, Dict[str, str]]] = None) -> ClassificationResult:
+                                         municipality_sets: Optional[Dict[int, Dict[str, str]]] = None,
+                                         job_context=None) -> ClassificationResult:
         """v5.0 自治体情報を考慮した分類（ステートレス対応）"""
         # v5.0 分類実行
-        base_result = self.classify_document_v5(text, filename)
+        base_result = self.classify_document_v5(text, filename, job_context)
         
         # 正規化処理でラベル解決（必ず実行）
         if municipality_sets:
@@ -1577,7 +1957,9 @@ class DocumentClassifierV5:
             ["申告受付完了通知", "法人市民税"],
             ["申告受付完了通知", "法人市町村民税"],
             ["市役所", "申告受付完了通知"],
-            ["市長", "法人市民税", "受付完了通知"]
+            ["市長", "法人市民税", "受付完了通知"],
+            ["市役所", "法人市民税申告書", "受付完了通知"],  # 追加
+            ["法人市民税申告書", "受付完了通知"]  # 追加
         ]
         
         # 都道府県向け判定

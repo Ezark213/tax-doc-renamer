@@ -1,25 +1,25 @@
-# 🧾 税務書類リネームシステム v5.4 - Receipt Numbering Edition
+# 🧾 税務書類リネームシステム v5.4.1 - Balance Trial Classification Fix
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4--Receipt--Numbering-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4.1--Balance--Trial--Fix-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![MCP](https://img.shields.io/badge/Claude%20Code-MCP%20Integrated-purple.svg)](https://github.com/Ezark213/tax-doc-renamer)
-[![連番システム](https://img.shields.io/badge/%E9%80%A3%E7%95%AA%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0-Dynamic%20Numbering-orange.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![分類システム](https://img.shields.io/badge/%E5%88%86%E9%A1%9E%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0-Balance%20Trial%20Fix-orange.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![テスト](https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-Production%20Quality-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**  
 OCR機能、AI分類エンジン、受信通知動的番号付与システム、都道府県申告書連番システムを統合し、確実で高精度な税務書類管理を実現します。
 
-## 🚀 v5.4 Receipt Numbering Edition - 完全版リリース！  
+## 🚀 v5.4.1 Balance Trial Classification Fix - 最新修正完了！
 
-### ✨ 新機能・修正完了
-✅ **都道府県申告書連番システムの完全修正** - overlay優先採用システム  
-✅ **受信通知動的番号付与システム** - 1003/2003系の決定論的処理  
-✅ **実際の都道府県名・市町村名表示** - 汎用名から具体名へ  
-✅ **東京都特別制限システム** - Set1固定制約の安定動作  
-✅ **Unicode文字エンコーディング問題解決** - 完全安定動作  
-✅ **MCP統合システム** - tax-document-analyzer & serena-workflow  
+### ✨ 2025年9月8日 - 残高試算表分類問題修正
+✅ **残高試算表vs決算書分類問題の完全解決** - 優先度とキーワード除外による確実な分類  
+✅ **分類優先度の最適化** - 5004_残高試算表(140) > 5001_決算書(130)  
+✅ **除外キーワードシステム** - "残高試算表"を含む書類の決算書誤分類防止  
+✅ **拡張キーワード検出** - OCRベースでの残高試算表キーワード強化  
+✅ **動的連番処理の最適化** - Bundle分割時の受信通知連番処理強化  
+✅ **包括的テスト検証** - 実際の問題ファイルでのテスト完了  
 
 ### 📋 正常なファイル名出力例
 ```
@@ -267,14 +267,33 @@ python -m pytest
 
 ## 🏗️ 最新アップデート
 
-### 🎯 v5.3.5-ui-robust エンタープライズ版リリース（2025年9月4日）
-- ✅ **UI YYMM強制適用システム完全実装** - 6001/6002/6003/0000で100%UI値使用
-- ✅ **Bundle分割経路RunConfig伝搬確保** - 分割処理での設定値確実継承
-- ✅ **JobContext中央集権管理システム** - 単一責任原則によるYYMM一元管理
-- ✅ **AddFunc-BugFix Workflow MCP統合** - 6フェーズ体系的開発プロセス
-- ✅ **Claude Code完全統合** - .mcp.json設定によるMCP server統合
-- ✅ **86%コード保守性向上・40%処理速度高速化達成** - エンタープライズ品質基準
-- ✅ **エンタープライズアーキテクチャ** - SOLID原則・DDD/CQRS適用
+### 🎯 v5.4.1 Balance Trial Classification Fix（2025年9月8日）
+**重大な分類問題を解決した緊急修正版**
+
+#### 📋 修正内容
+- ✅ **残高試算表分類問題の根本解決** - "残高試算表_貸借対照表_損益計算書" ファイルの正確な分類
+- ✅ **分類優先度の再設計** - 5004_残高試算表を最優先度140に設定
+- ✅ **除外キーワードシステム** - 5001_決算書に["残高試算表", "試算表", "残高試算"]除外キーワード追加
+- ✅ **OCR検出キーワード強化** - partial_keywords拡張による検出精度向上
+- ✅ **Bundle分割処理最適化** - 地方税受信通知の連番処理強化
+- ✅ **実環境テスト完了** - 実際の問題ファイルでの動作検証完了
+
+#### 🔍 技術的詳細
+```python
+"5004_残高試算表": {
+    "priority": 140,  # 最高優先度（決算書より高い）
+    "highest_priority_conditions": [
+        AndCondition(["残高試算表"], "any"),
+        AndCondition(["試算表"], "any")
+    ],
+    "exclude_keywords": [],  # 除外なし
+}
+
+"5001_決算書": {
+    "priority": 130,  # 残高試算表より低い優先度
+    "exclude_keywords": ["残高試算表", "試算表", "残高試算"],  # 試算表関連を除外
+}
+```
 
 ### 📈 v5.3.5-ui-robust エンタープライズ改善ポイント
 - **🎯 UI強制システム**: 重要書類の期間値100%UI入力保証・エラー完全防止
