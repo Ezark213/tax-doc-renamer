@@ -260,9 +260,7 @@ class TaxDocumentRenamerV5:
         
         # コールバック設定
         self.auto_split_control.set_callbacks(
-            batch_callback=self._start_batch_processing,
-            split_callback=self._start_split_only_processing,
-            force_callback=self._start_force_split_processing
+            folder_callback=self._start_folder_processing
         )
         
         # 年月設定
@@ -290,33 +288,8 @@ class TaxDocumentRenamerV5:
         
         self._create_municipality_settings(municipality_frame)
         
-        # 処理オプション
-        options_frame = ttk.LabelFrame(right_frame, text="処理オプション")
-        options_frame.pack(fill='x', pady=(0, 10))
-        
-        self.auto_split_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(options_frame, text="PDF自動分割", variable=self.auto_split_var).pack(anchor='w')
-        
-        self.ocr_enhanced_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(options_frame, text="OCR強化モード", variable=self.ocr_enhanced_var).pack(anchor='w')
-        
-        # v5.3 専用オプション
-        self.v5_mode_var = tk.BooleanVar(value=True)
-        v5_checkbox = ttk.Checkbutton(
-            options_frame, 
-            text="v5.3 YYMM Policy System・AND条件判定モード（推奨）", 
-            variable=self.v5_mode_var
-        )
-        v5_checkbox.pack(anchor='w')
-        
-        # v5.3 モードの説明
-        v5_info = ttk.Label(
-            options_frame,
-            text="※AND条件で受信通知・納付情報を高精度判定",
-            font=('Arial', 8),
-            foreground='gray'
-        )
-        v5_info.pack(anchor='w', padx=20)
+        # 処理オプション（機能常時有効のため設定UI削除）
+        # self.auto_split_var, self.ocr_enhanced_var, self.v5_mode_var は常にTrueとして動作
         
         # エクスポート設定
         export_frame = ttk.LabelFrame(right_frame, text="エクスポート設定")
@@ -337,40 +310,8 @@ class TaxDocumentRenamerV5:
         )
         export_info.pack(anchor='w', padx=20)
         
-        # 処理ボタン（分割・リネーム独立化）
-        process_frame = ttk.Frame(right_frame)
-        process_frame.pack(fill='x', pady=20)
-        
-        # 分割実行ボタン
-        self.split_button = ttk.Button(
-            process_frame, 
-            text="📄 分割実行", 
-            command=self._start_split_processing,
-            style='Accent.TButton'
-        )
-        self.split_button.pack(fill='x', pady=(0, 5))
-        
-        # リネーム実行ボタン（v5.3対応）
-        self.rename_button = ttk.Button(
-            process_frame, 
-            text="✏️ リネーム実行 (v5.3)", 
-            command=self._start_rename_processing,
-            style='Accent.TButton'
-        )
-        self.rename_button.pack(fill='x')
-        
-        # プログレスバー
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(
-            process_frame, 
-            variable=self.progress_var, 
-            maximum=100
-        )
-        self.progress_bar.pack(fill='x', pady=(10, 0))
-        
-        # ステータス
-        self.status_var = tk.StringVar(value="待機中 (v5.3モード)")
-        ttk.Label(process_frame, textvariable=self.status_var).pack(pady=(5, 0))
+        # 処理ボタン（簡素化版 - フォルダ指定による自動処理）
+        # ※従来の分割実行・リネーム実行ボタンは削除し、フォルダ指定による一括自動処理に統一
 
     def _create_municipality_settings(self, parent):
         """自治体設定UIの作成"""
@@ -575,7 +516,7 @@ class TaxDocumentRenamerV5:
         self._update_button_states()
         
         # v5.3モードの確認
-        use_v5_mode = self.v5_mode_var.get()
+        use_v5_mode = True  # 機能常時有効
         self._log(f"リネーム処理開始: v5.3モード={'有効' if use_v5_mode else '無効'}")
         
         thread = threading.Thread(
@@ -586,6 +527,268 @@ class TaxDocumentRenamerV5:
         thread.start()
 
     # ===== v5.2 Auto-Split Processing Methods =====
+    
+    def _start_folder_processing(self, folder_path: str):
+        """フォルダ自動処理開始"""
+        if self.auto_split_processing or self.rename_processing or self.split_processing:
+            messagebox.showwarning("警告", "処理中です")
+            return
+        
+        # フォルダ内のPDF・CSVファイルを取得
+        import glob
+        pdf_files = glob.glob(os.path.join(folder_path, "*.pdf"))
+        csv_files = glob.glob(os.path.join(folder_path, "*.csv"))
+        all_files = pdf_files + csv_files
+        
+        if not all_files:
+            messagebox.showinfo("情報", "処理対象のPDF・CSVファイルが見つかりません")
+            return
+        
+        # YYMMフォルダを作成
+        yymm_folder = self._create_yymm_folder(folder_path)
+        if not yymm_folder:
+            return
+        
+        # ファイルリストを設定
+        self.files_list = all_files
+        
+        # RunConfig作成
+        try:
+            gui_yymm = self.year_month_var.get()
+            self.run_config = create_run_config_from_gui(
+                yymm_var_value=gui_yymm,
+                batch_mode=True,
+                debug_mode=False  # 設定簡素化のため固定
+            )
+            self.run_config.log_config()
+            
+            self._log(f"[FOLDER_PROCESSING] Folder processing started with {len(all_files)} files")
+            
+        except Exception as e:
+            self.logger.error(f"[RUN_CONFIG] Failed to create RunConfig: {e}")
+            messagebox.showerror("設定エラー", f"YYMM設定エラー: {e}")
+            return
+        
+        # 設定取得
+        self.auto_split_settings = self.auto_split_control.get_settings()
+        
+        # バックグラウンド処理開始
+        self.auto_split_processing = True
+        self._update_auto_split_button_states()
+        
+        thread = threading.Thread(
+            target=self._folder_processing_background,
+            args=(yymm_folder,),
+            daemon=True
+        )
+        thread.start()
+    
+    def _create_yymm_folder(self, base_folder: str) -> Optional[str]:
+        """YYMMフォルダを作成"""
+        import datetime
+        
+        # 現在の年月を取得
+        now = datetime.datetime.now()
+        yymm = f"{now.year % 100:02d}{now.month:02d}"
+        
+        # 基本のYYMMフォルダパス
+        yymm_folder = os.path.join(base_folder, yymm)
+        
+        # 既存フォルダがある場合は連番を追加
+        counter = 1
+        original_yymm_folder = yymm_folder
+        
+        while os.path.exists(yymm_folder):
+            counter += 1
+            yymm_folder = f"{original_yymm_folder}_{counter}"
+        
+        try:
+            os.makedirs(yymm_folder, exist_ok=True)
+            self._log(f"[YYMM_FOLDER] Created: {yymm_folder}")
+            return yymm_folder
+        except Exception as e:
+            self.logger.error(f"[YYMM_FOLDER] Failed to create folder: {e}")
+            messagebox.showerror("エラー", f"YYMMフォルダの作成に失敗しました: {e}")
+            return None
+    
+    def _process_single_pdf_rename(self, file_path: str, output_folder: str, snapshot, ui_context) -> Optional[str]:
+        """単一PDFファイルのリネーム処理"""
+        try:
+            self._log(f"[SINGLE_PDF] Processing: {os.path.basename(file_path)}")
+            
+            # 既存のPDF処理メソッドを使用し、リネーム後のファイルパスを取得
+            renamed_file_path = self._process_pdf_file_v5_with_snapshot(
+                file_path=file_path,
+                output_folder=output_folder,
+                snapshot=snapshot,
+                doc_item_id=None,
+                job_context=None
+            )
+            
+            # リネーム後のファイルパスを返す
+            if renamed_file_path:
+                return renamed_file_path
+            else:
+                # 処理が失敗した場合はNoneを返す
+                return None
+            
+        except Exception as e:
+            self._log(f"[SINGLE_PDF_ERROR] Failed to process {file_path}: {e}")
+            return None
+    
+    def _folder_processing_background(self, output_folder: str):
+        """フォルダ処理のバックグラウンド処理"""
+        try:
+            total_files = len(self.files_list)
+            processed_count = 0
+            split_count = 0
+            
+            self.root.after(0, lambda: self.auto_split_control.update_progress("自動処理開始...", "blue"))
+            
+            for i, file_path in enumerate(self.files_list):
+                progress = (i / total_files) * 100
+                filename = os.path.basename(file_path)
+                
+                self.root.after(0, lambda f=filename: self.auto_split_control.update_progress(
+                    f"処理中: {f} ({i+1}/{total_files})", "blue"
+                ))
+                
+                try:
+                    if file_path.lower().endswith('.pdf'):
+                        # PDF処理（分割→リネーム）
+                        gui_yymm = self.year_month_var.get()
+                        ui_context = create_ui_context_from_gui(
+                            yymm_var_value=gui_yymm,
+                            municipality_sets=getattr(self, 'municipality_sets', {}),
+                            batch_mode=True,
+                            debug_mode=False
+                        )
+                        
+                        # Pre-Extract スナップショット生成
+                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                        
+                        # 全PDFファイルを処理対象にする（Bundle判定無視）
+                        processed_file = False
+                        
+                        # まず分割を試行（Bundleファイルの場合）
+                        split_result = self.pdf_processor.maybe_split_pdf(
+                            input_pdf_path=file_path,
+                            out_dir=output_folder,
+                            force=False,
+                            processing_callback=None
+                        )
+                        
+                        if split_result['success']:
+                            # Bundle分割が成功した場合
+                            split_count += 1
+                            processed_count += 1
+                            processed_file = True
+                            self._log(f"Bundle split completed: {filename}")
+                            
+                            # Bundle分割後の各ファイルをリネーム処理
+                            if split_result.get('split_files'):
+                                split_files = split_result.get('split_files', [])
+                                for split_file_path in split_files:
+                                    try:
+                                        # 分割後ファイルにもリネーム処理を適用
+                                        gui_yymm = self.year_month_var.get()
+                                        ui_context = create_ui_context_from_gui(
+                                            yymm_var_value=gui_yymm,
+                                            municipality_sets=getattr(self, 'municipality_sets', {}),
+                                            batch_mode=True,
+                                            debug_mode=False
+                                        )
+                                        user_yymm = self._resolve_yymm_with_policy(split_file_path, None)
+                                        snapshot = self.pre_extract_engine.build_snapshot(
+                                            split_file_path, 
+                                            user_provided_yymm=user_yymm,
+                                            ui_context=ui_context.to_dict()
+                                        )
+                                        
+                                        # 分割後ファイルをリネーム処理
+                                        renamed_split_file = self._process_pdf_file_v5_with_snapshot(
+                                            file_path=split_file_path,
+                                            output_folder=output_folder,
+                                            snapshot=snapshot,
+                                            doc_item_id=None,
+                                            job_context=None
+                                        )
+                                        
+                                        if renamed_split_file:
+                                            self._log(f"Split file rename completed: {os.path.basename(split_file_path)} -> {os.path.basename(renamed_split_file)}")
+                                        
+                                    except Exception as e:
+                                        self._log(f"Split file rename error: {os.path.basename(split_file_path)} - {str(e)}")
+                        else:
+                            # Bundle分割されなかった場合、単一ファイルとしてリネーム処理
+                            try:
+                                # OCR・分類を実行してリネーム
+                                renamed_file = self._process_single_pdf_rename(file_path, output_folder, snapshot, ui_context)
+                                if renamed_file:
+                                    processed_count += 1
+                                    processed_file = True
+                                    self._log(f"Single PDF rename completed: {filename} -> {os.path.basename(renamed_file)}")
+                                else:
+                                    # リネーム失敗の場合、元ファイルをコピー
+                                    destination_path = os.path.join(output_folder, os.path.basename(file_path))
+                                    import shutil
+                                    shutil.copy2(file_path, destination_path)
+                                    processed_count += 1
+                                    processed_file = True
+                                    self._log(f"PDF copied (rename failed): {filename}")
+                            except Exception as e:
+                                self._log(f"PDF processing error: {filename} - {str(e)}")
+                                # エラーでも元ファイルをコピー
+                                try:
+                                    destination_path = os.path.join(output_folder, os.path.basename(file_path))
+                                    import shutil
+                                    shutil.copy2(file_path, destination_path)
+                                    processed_count += 1
+                                    processed_file = True
+                                    self._log(f"PDF copied (error backup): {filename}")
+                                except Exception as copy_error:
+                                    self._log(f"PDF copy failed: {filename} - {str(copy_error)}")
+                        
+                        # 結果をUIに反映
+                        if processed_file:
+                            self.root.after(0, lambda f=file_path: self._add_result_success(
+                                f, "PDF処理済み", "PDF分割・リネーム", "Auto Process", "1.00", ["PDF処理実行"]
+                            ))
+                        else:
+                            self.root.after(0, lambda f=file_path: self._add_result_error(
+                                f, "PDF処理失敗"
+                            ))
+                    
+                    elif file_path.lower().endswith('.csv'):
+                        # CSV処理（リネームのみ）
+                        destination_path = os.path.join(output_folder, f"CSV_{os.path.basename(file_path)}")
+                        import shutil
+                        shutil.copy2(file_path, destination_path)
+                        processed_count += 1
+                        self._log(f"CSV processed: {filename}")
+                        self.root.after(0, lambda f=file_path: self._add_result_success(
+                            f, "CSV処理済み", "ファイルコピー", "CSV Process", "1.00", ["CSV処理実行"]
+                        ))
+                    
+                except Exception as e:
+                    self._log(f"Auto processing error: {filename} - {str(e)}")
+                    self.root.after(0, lambda f=filename, e=str(e): self._add_result_error(
+                        f, f"処理エラー: {e}"
+                    ))
+            
+            # 処理完了
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"自動処理完了: {processed_count}件処理 (分割: {split_count}件)", "green"
+            ))
+            
+        except Exception as e:
+            self._log(f"Folder processing error: {str(e)}")
+            self.root.after(0, lambda: self.auto_split_control.update_progress(
+                f"処理エラー: {str(e)}", "red"
+            ))
+        finally:
+            self.root.after(0, self._auto_split_processing_finished)
     
     def _start_batch_processing(self):
         """v5.2 一括処理（分割&出力）処理開始"""
@@ -762,11 +965,11 @@ class TaxDocumentRenamerV5:
                             # v5.3: スナップショット参照での決定論的リネーム（JobContext付き）
                             self._process_single_file_v5_with_snapshot(temp_path, output_folder, snapshot, doc_item_id, job_context)
                         
-                        was_split = self.pdf_processor.maybe_split_pdf(
+                        split_result = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=False, processing_callback=processing_callback
                         )
                         
-                        if was_split:
+                        if split_result['success']:
                             split_count += 1
                             self._log(f"[v5.3] Bundle分割完了: {filename}")
                         else:
@@ -972,11 +1175,11 @@ class TaxDocumentRenamerV5:
                                 self._log(f"[BUNDLE_CALLBACK] ❌ 分類処理エラー: {e}")
                                 raise
                         
-                        was_split = self.pdf_processor.maybe_split_pdf(
+                        split_result = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=False, processing_callback=processing_callback
                         )
                         
-                        if was_split:
+                        if split_result['success']:
                             split_count += 1
                             self._log(f"Bundle split completed (split-only): {filename}")
                             self.root.after(0, lambda f=file_path: self._add_result_success(
@@ -1095,11 +1298,11 @@ class TaxDocumentRenamerV5:
                                 self._log(f"[BUNDLE_FORCE_CALLBACK] ❌ 分類処理エラー: {e}")
                                 raise
                         
-                        was_split = self.pdf_processor.maybe_split_pdf(
+                        split_result = self.pdf_processor.maybe_split_pdf(
                             file_path, output_folder, force=True, processing_callback=processing_callback
                         )
                         
-                        if was_split:
+                        if split_result['success']:
                             force_split_count += 1
                             self._log(f"Force split completed: {filename}")
                             self.root.after(0, lambda f=file_path: self._add_result_success(
@@ -1195,8 +1398,8 @@ class TaxDocumentRenamerV5:
             
             for i, file_path in enumerate(self.files_list):
                 progress = (i / total_files) * 100
-                self.root.after(0, lambda p=progress: self.progress_var.set(p))
-                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"分割処理中: {f}"))
+                # プログレス更新は削除（フォルダ処理では自動処理制御フレームで表示）
+                self.root.after(0, lambda f=os.path.basename(file_path): self._log(f"分割処理中: {f}"))
                 
                 try:
                     if self._is_split_target(file_path):
@@ -1215,8 +1418,8 @@ class TaxDocumentRenamerV5:
                     self.root.after(0, lambda f=file_path, e=str(e): self._add_result_error(f, f"分割エラー: {e}"))
             
             # 処理完了
-            self.root.after(0, lambda: self.progress_var.set(100))
-            self.root.after(0, lambda c=split_count: self.status_var.set(f"分割完了: {c}ページ処理"))
+            # プログレス完了表示は削除
+            self.root.after(0, lambda c=split_count: self._log(f"分割完了: {c}ページ処理"))
             
         except Exception as e:
             self._log(f"分割処理エラー: {str(e)}")
@@ -1230,8 +1433,8 @@ class TaxDocumentRenamerV5:
             
             for i, file_path in enumerate(self.files_list):
                 progress = (i / total_files) * 100
-                self.root.after(0, lambda p=progress: self.progress_var.set(p))
-                self.root.after(0, lambda f=os.path.basename(file_path): self.status_var.set(f"v5.3処理中: {f}"))
+                # プログレス更新は削除（フォルダ処理では自動処理制御フレームで表示）
+                self.root.after(0, lambda f=os.path.basename(file_path): self._log(f"v5.3処理中: {f}"))
                 
                 try:
                     if use_v5_mode:
@@ -1243,8 +1446,8 @@ class TaxDocumentRenamerV5:
                     self.root.after(0, lambda f=file_path, e=str(e): self._add_result_error(f, f"リネームエラー: {e}"))
             
             # 処理完了
-            self.root.after(0, lambda: self.progress_var.set(100))
-            self.root.after(0, lambda: self.status_var.set(f"v5.3リネーム完了: {total_files}件処理"))
+            # プログレス完了表示は削除
+            self.root.after(0, lambda: self._log(f"v5.3リネーム完了: {total_files}件処理"))
             
         except Exception as e:
             self._log(f"v5.3リネーム処理エラー: {str(e)}")
@@ -1460,7 +1663,7 @@ class TaxDocumentRenamerV5:
         if self._should_exclude_blank_page(text, filename):
             self._log(f"[exclude] 空白ページとして除外: {filename}")
             self._log(f"[exclude] テキスト長: {len(text)}, 内容: {text[:100]}...")
-            return  # 空白ページは処理をスキップ
+            return None  # 空白ページは処理をスキップ
 
         # 決定論的独立化：分割・非分割に関係なく統一処理
         municipality_sets = self._get_municipality_sets()
@@ -1483,7 +1686,7 @@ class TaxDocumentRenamerV5:
             classification_result.document_type == "9999_未分類" and
             len(text.strip()) < 100):  # より厳格な条件
             self._log(f"[exclude] 信頼度0.00かつ未分類の短いテキスト - 空白ページとして除外: {filename}")
-            return
+            return None
             
         # 決定論的独立化：統一された処理フロー
         self._log(f"[v5.3] 決定論的独立化命名開始")
@@ -1536,6 +1739,9 @@ class TaxDocumentRenamerV5:
         ))
         
         self._log_detailed_classification_info(classification_result, text, filename)
+        
+        # リネーム後のファイルパスを返す
+        return output_path
 
     def _get_municipality_sets(self) -> Dict[int, Dict[str, str]]:
         """自治体セット情報を取得 - Bundle分割対応版"""
@@ -1933,17 +2139,9 @@ class TaxDocumentRenamerV5:
         messagebox.showinfo("完了", "v5.3リネーム処理が完了しました")
 
     def _update_button_states(self):
-        """ボタンの状態を更新"""
-        if self.split_processing:
-            self.split_button.config(state='disabled', text="分割処理中...")
-            self.rename_button.config(state='disabled')
-        elif self.rename_processing:
-            self.split_button.config(state='disabled')
-            self.rename_button.config(state='disabled', text="v5.3処理中...")
-        else:
-            # 両方とも処理中でない場合
-            self.split_button.config(state='normal', text="📄 分割実行")
-            self.rename_button.config(state='normal', text="✏️ リネーム実行 (v5.3)")
+        """ボタンの状態を更新（簡素化版）"""
+        # フォルダ指定による自動処理に統一したため、ボタン状態更新は不要
+        pass
 
     def _add_result_success(self, original_file: str, new_filename: str, doc_type: str, method: str, confidence: str, matched_keywords: List[str] = None):
         """成功結果を追加（v5.3拡張版・YYMM Policy対応）"""

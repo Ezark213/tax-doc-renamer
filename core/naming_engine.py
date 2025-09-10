@@ -111,7 +111,7 @@ class FilenameBuilder:
             muni_label = f"{context.prefecture}{context.city}"
             logger.debug("Municipal label from context: %s", muni_label)
         
-        core = f"{final_code}_{muni_label}_法人市民税"
+        core = f"{final_code}_{muni_label}_市町村申告書"
         logger.debug("Municipal core built: %s", core)
         return core
     
@@ -119,8 +119,8 @@ class FilenameBuilder:
         """都道府県税ファイル名構築"""
         prefecture = context.prefecture or "都道府県不詳"
         
-        # v5.3.4形式: XXXX_都道府県名_法人都道府県民税・事業税・特別法人事業税
-        core = f"{final_code}_{prefecture}_法人都道府県民税・事業税・特別法人事業税"
+        # v5.3.4形式: XXXX_都道府県名_都道府県申告書
+        core = f"{final_code}_{prefecture}_都道府県申告書"
         logger.debug("Prefecture core built: %s", core)
         return core
     
@@ -220,12 +220,12 @@ def create_naming_examples() -> Dict[str, str]:
         "0003_受信通知": "0003_受信通知_2507.pdf",
         
         # 地方税（v5.3.4県別コード化）
-        "1011_愛知県税": "1011_愛知県_法人都道府県民税・事業税・特別法人事業税_2507.pdf",
-        "1021_福岡県税": "1021_福岡県_法人都道府県民税・事業税・特別法人事業税_2507.pdf",
-        "1001_東京都税": "1001_東京都_法人都道府県民税・事業税・特別法人事業税_2507.pdf",
+        "1011_愛知県税": "1011_愛知県_都道府県申告書_2507.pdf",
+        "1021_福岡県税": "1021_福岡県_都道府県申告書_2507.pdf",
+        "1001_東京都税": "1001_東京都_都道府県申告書_2507.pdf",
         
-        "2001_愛知県蒲郡市": "2001_愛知県蒲郡市_法人市民税_2507.pdf",
-        "2011_福岡県福岡市": "2011_福岡県福岡市_法人市民税_2507.pdf",
+        "2001_愛知県蒲郡市": "2001_愛知県蒲郡市_市町村申告書_2507.pdf",
+        "2011_福岡県福岡市": "2011_福岡県福岡市_市町村申告書_2507.pdf",
         
         # 消費税
         "3001_消費税": "3001_消費税及び地方消費税申告書_2507.pdf",
@@ -263,10 +263,10 @@ if __name__ == "__main__":
          NamingContext(), "国税書類"),
         
         # 地方税（県別コード化）
-        (ClassifyResult("1001", "1011", "2507", "DOC/HEURISTIC", "法人都道府県民税・事業税・特別法人事業税申告書"),
+        (ClassifyResult("1001", "1011", "2507", "DOC/HEURISTIC", "都道府県申告書申告書"),
          NamingContext("愛知県"), "愛知県都道府県税"),
         
-        (ClassifyResult("2001", None, "2507", "DOC/HEURISTIC", "法人市民税申告書"),
+        (ClassifyResult("2001", None, "2507", "DOC/HEURISTIC", "市町村申告書申告書"),
          NamingContext("愛知県", "蒲郡市"), "愛知県蒲郡市市民税"),
         
         # UI入力必須（エラーケース）

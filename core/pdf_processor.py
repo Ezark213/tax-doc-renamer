@@ -826,7 +826,7 @@ class PDFProcessor:
     # ===== v5.2 New Bundle Detection and Auto-Split Methods =====
     
     def maybe_split_pdf(self, input_pdf_path: str, out_dir: str, force: bool = False, 
-                       processing_callback: Optional[Callable] = None) -> bool:
+                       processing_callback: Optional[Callable] = None) -> dict:
         """
         Bundle PDF Auto-Split Main Function
         束ねPDF限定オート分割のメイン関数
@@ -838,7 +838,7 @@ class PDFProcessor:
             processing_callback: 分割後各ページの処理コールバック関数
             
         Returns:
-            bool: 分割実行された場合True、対象外や失敗の場合False
+            dict: {'success': bool, 'split_files': list} 分割成功時はsplit_filesに分割後のファイルパスのリスト
         """
         self.logger.info(f"[split] Bundle detection started: {os.path.basename(input_pdf_path)}")
         
@@ -854,7 +854,7 @@ class PDFProcessor:
                 if any("Global exclusion triggered" in info for info in detection_result.debug_info):
                     self.logger.info(f"[split] EXCLUDED by global rules - single document treatment")
                     
-                return False
+                return {'success': False, 'split_files': []}
             
             bundle_type = detection_result.bundle_type or "unknown"
             self.logger.info(f"[split] Bundle detected: type={bundle_type}, confidence={detection_result.confidence:.2f}")
@@ -867,7 +867,7 @@ class PDFProcessor:
             
         except Exception as e:
             self.logger.error(f"[split] Bundle split error: {input_pdf_path} - {e}")
-            return False
+            return {'success': False, 'split_files': []}
     
     def filename_or_heads_match_assets(self, pdf_path: str, head_pages: int = 3) -> bool:
         """
@@ -1160,7 +1160,7 @@ class PDFProcessor:
             return False
     
     def _execute_bundle_split(self, input_pdf_path: str, out_dir: str, bundle_type: str,
-                             processing_callback: Optional[Callable] = None) -> bool:
+                             processing_callback: Optional[Callable] = None) -> dict:
         """
         束ねPDFの実際の分割処理を実行
         
@@ -1171,7 +1171,7 @@ class PDFProcessor:
             processing_callback: 各ページ処理後のコールバック関数
             
         Returns:
-            bool: 分割成功した場合True
+            dict: {'success': bool, 'split_files': list} 分割成功時はsplit_filesに分割後のファイルパスのリスト
         """
         try:
             # Use pypdf for splitting
@@ -1181,6 +1181,7 @@ class PDFProcessor:
             self.logger.info(f"[split] Executing split: {total_pages} pages, type={bundle_type}")
             
             temp_files = []
+            processed_files = []  # 処理済みファイルのリスト
             
             for i, page in enumerate(reader.pages, start=1):
                 # Create single-page PDF
@@ -1221,25 +1222,31 @@ class PDFProcessor:
                         doc_item_id = self._create_doc_item_id(input_pdf_path, i-1, page_text)  # i-1 for 0-based indexing
                         
                         # Enhanced callback with DocItemID
-                        processing_callback(temp_path, i, bundle_type, doc_item_id)
+                        result_file = processing_callback(temp_path, i, bundle_type, doc_item_id)
+                        if result_file and os.path.exists(result_file):
+                            processed_files.append(result_file)
                     except Exception as e:
                         self.logger.error(f"[split] Processing callback error for page {i}: {e}")
+                else:
+                    # No callback provided, keep temp file as processed file
+                    processed_files.append(temp_path)
             
-            # Cleanup temporary files if configured
+            # Cleanup temporary files if configured (only cleanup if processed)
             if self.config.get("output", {}).get("auto_cleanup_temp", True):
                 for temp_file in temp_files:
                     try:
-                        if os.path.exists(temp_file):
+                        # Only cleanup if this temp file is not in processed_files list
+                        if temp_file not in processed_files and os.path.exists(temp_file):
                             os.remove(temp_file)
                     except Exception as e:
                         self.logger.warning(f"[split] Cleanup warning: {temp_file} - {e}")
             
             self.logger.info(f"[split] Split completed: {input_pdf_path} -> {total_pages} pages (bundle={bundle_type})")
-            return True
+            return {'success': True, 'split_files': processed_files}
             
         except Exception as e:
             self.logger.error(f"[split] Split execution error: {e}")
-            return False
+            return {'success': False, 'split_files': []}
 
 if __name__ == "__main__":
     # テスト用
