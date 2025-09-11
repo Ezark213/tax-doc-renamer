@@ -1,0 +1,118 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧/地方税.pdf",
+  "source_doc_md5": "0a5d16c374be6e8440a83f6319bd4dde",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "納付情報"
+      ],
+      "muni_name": "市町村",
+      "tax_kind": "地方税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 643,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "納付情報"
+      ],
+      "muni_name": "都道府県",
+      "tax_kind": "地方税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 1,
+        "text_length": 668,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "市町村",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 2,
+        "text_length": 607,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "市町村",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 3,
+        "text_length": 606,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "都道府県",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 4,
+        "text_length": 716,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "都道府県",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 5,
+        "text_length": 722,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "都道府県",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 6,
+        "text_length": 713,
+        "has_date": true
+      }
+    }
+  ],
+  "created_at": "2025-09-08T17:51:29.850931",
+  "version": "5.3"
+}

@@ -1,8 +1,8 @@
-# 税務書類リネームシステム v5.2 - セキュリティ情報
+# 税務書類リネームシステム v5.4.1 - セキュリティ情報
 
 ## 実行ファイル情報
-- ファイル名: TaxDocumentRenamer_v5.2_ProperLogic.exe
-- 生成日時: 2025-09-06 18:06:57
+- ファイル名: TaxDocumentRenamer_v5.4.1_BalanceTrialFix.exe
+- 生成日時: 2025-09-08 17:25:44
 - ビルド方法: PyInstaller (Windows Defender回避型)
 
 ## セキュリティ対応
@@ -27,7 +27,7 @@
 
 ## 開発者情報
 - プロジェクト: 税務書類リネームシステム
-- バージョン: v5.2 Final
-- ビルド: Secure Build for Windows
+- バージョン: v5.4.1 Balance Trial Classification Fix
+- ビルド: Secure Build for Windows with Enhanced Protection
 
 このソフトウェアは税務書類の整理を目的とした正当なアプリケーションです。

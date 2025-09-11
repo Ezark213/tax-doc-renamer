@@ -271,88 +271,56 @@ class DropZoneFrame(ttk.Frame):
         self.configure(relief='solid', borderwidth=2)
 
 class AutoSplitControlFrame(ttk.Frame):
-    """Auto-Split制御フレーム v5.2"""
+    """フォルダ処理制御フレーム（簡素化版）"""
     
     def __init__(self, parent, **kwargs):
         """初期化"""
         super().__init__(parent, **kwargs)
         
-        # 設定変数
-        self.auto_split_bundles = tk.BooleanVar(value=True)  # デフォルトON
-        self.debug_mode = tk.BooleanVar(value=False)
-        
         # コールバック関数
-        self.batch_process_callback = None
-        self.split_only_callback = None
-        self.force_split_callback = None
+        self.folder_process_callback = None
+        
+        # 選択されたフォルダパス
+        self.selected_folder = None
         
         self._create_controls()
     
     def _create_controls(self):
         """制御UI作成"""
         # タイトル
-        title_label = ttk.Label(self, text="Bundle PDF Auto-Split v5.2", 
+        title_label = ttk.Label(self, text="税務書類自動処理", 
                                font=('Arial', 11, 'bold'), foreground='blue')
         title_label.pack(pady=(0, 10))
         
-        # 設定セクション
-        settings_frame = ttk.LabelFrame(self, text="Auto-Split設定")
-        settings_frame.pack(fill='x', pady=(0, 10))
+        # フォルダ選択セクション
+        folder_frame = ttk.LabelFrame(self, text="処理フォルダ")
+        folder_frame.pack(fill='x', pady=(0, 10))
         
-        # 自動分割トグル
-        auto_split_cb = ttk.Checkbutton(
-            settings_frame, 
-            text="アップロード時に束ねPDFを自動分割 (推奨)", 
-            variable=self.auto_split_bundles
-        )
-        auto_split_cb.pack(anchor='w', padx=10, pady=5)
-        
-        # デバッグモード（必要時のみ表示）
-        debug_cb = ttk.Checkbutton(
-            settings_frame,
-            text="詳細ログ出力 (Debug)",
-            variable=self.debug_mode
-        )
-        debug_cb.pack(anchor='w', padx=10, pady=2)
-        
-        # 情報テキスト
-        info_text = ("対象: 地方税系(1003/1013/1023 + 1004/2004)、国税系(0003/0004 + 3003/3004)の束ね")
-        info_label = ttk.Label(settings_frame, text=info_text, 
-                              font=('Arial', 8), foreground='gray')
-        info_label.pack(anchor='w', padx=10, pady=2)
-        
-        # アクションボタンセクション
-        action_frame = ttk.LabelFrame(self, text="一括処理アクション")
-        action_frame.pack(fill='x', pady=(0, 10))
-        
-        # メインCTAボタン: 一括処理（分割&出力）
-        self.batch_button = ttk.Button(
-            action_frame,
-            text="🚀 一括処理（分割&出力）",
-            command=self._on_batch_process,
+        # フォルダ選択ボタン
+        self.folder_button = ttk.Button(
+            folder_frame,
+            text="📁 フォルダを選択",
+            command=self._select_folder,
             style='Accent.TButton'
         )
-        self.batch_button.pack(fill='x', padx=10, pady=5)
+        self.folder_button.pack(fill='x', padx=10, pady=5)
         
-        # サブボタン用フレーム
-        sub_button_frame = ttk.Frame(action_frame)
-        sub_button_frame.pack(fill='x', padx=10, pady=2)
-        
-        # 分割のみボタン（検証用）
-        self.split_button = ttk.Button(
-            sub_button_frame,
-            text="📄 分割のみ（検証）",
-            command=self._on_split_only
+        # 選択されたフォルダパスの表示
+        self.folder_path_var = tk.StringVar(value="フォルダが選択されていません")
+        folder_path_label = ttk.Label(
+            folder_frame, 
+            textvariable=self.folder_path_var,
+            font=('Arial', 8), 
+            foreground='gray'
         )
-        self.split_button.pack(side='left', padx=(0, 5))
+        folder_path_label.pack(anchor='w', padx=10, pady=2)
         
-        # 強制分割ボタン（曖昧な場合用）
-        self.force_button = ttk.Button(
-            sub_button_frame,
-            text="⚡ 強制分割",
-            command=self._on_force_split
-        )
-        self.force_button.pack(side='left')
+        # 処理説明
+        info_text = "フォルダ内のPDF・CSVファイルを自動分割・リネームし、YYMMフォルダに保存します"
+        info_label = ttk.Label(folder_frame, text=info_text, 
+                              font=('Arial', 8), foreground='gray',
+                              wraplength=350)
+        info_label.pack(anchor='w', padx=10, pady=2)
         
         # プログレス表示エリア
         self.progress_var = tk.StringVar(value="待機中...")
@@ -360,26 +328,22 @@ class AutoSplitControlFrame(ttk.Frame):
                                        font=('Arial', 9), foreground='green')
         self.progress_label.pack(pady=5)
     
-    def _on_batch_process(self):
-        """一括処理（分割&出力）ボタン"""
-        if self.batch_process_callback:
-            self.batch_process_callback()
+    def _select_folder(self):
+        """フォルダ選択ダイアログを開く"""
+        from tkinter import filedialog
+        
+        folder_path = filedialog.askdirectory(title="処理するフォルダを選択してください")
+        if folder_path:
+            self.selected_folder = folder_path
+            self.folder_path_var.set(f"選択: {folder_path}")
+            
+            # フォルダが選択されたら自動処理を開始
+            if self.folder_process_callback:
+                self.folder_process_callback(folder_path)
     
-    def _on_split_only(self):
-        """分割のみボタン"""
-        if self.split_only_callback:
-            self.split_only_callback()
-    
-    def _on_force_split(self):
-        """強制分割ボタン"""
-        if self.force_split_callback:
-            self.force_split_callback()
-    
-    def set_callbacks(self, batch_callback=None, split_callback=None, force_callback=None):
+    def set_callbacks(self, folder_callback=None):
         """コールバック関数を設定"""
-        self.batch_process_callback = batch_callback
-        self.split_only_callback = split_callback
-        self.force_split_callback = force_callback
+        self.folder_process_callback = folder_callback
     
     def update_progress(self, message: str, color: str = 'green'):
         """プログレス表示更新"""
@@ -387,18 +351,16 @@ class AutoSplitControlFrame(ttk.Frame):
         self.progress_label.config(foreground=color)
     
     def get_settings(self) -> Dict[str, Any]:
-        """現在の設定を取得"""
+        """現在の設定を取得（機能常時有効のため固定値）"""
         return {
-            'auto_split_bundles': self.auto_split_bundles.get(),
-            'debug_mode': self.debug_mode.get()
+            'auto_split_bundles': True,
+            'debug_mode': False
         }
     
     def set_button_states(self, enabled: bool):
         """ボタンの有効/無効を設定"""
         state = 'normal' if enabled else 'disabled'
-        self.batch_button.config(state=state)
-        self.split_button.config(state=state)
-        self.force_button.config(state=state)
+        self.folder_button.config(state=state)
 
 
 

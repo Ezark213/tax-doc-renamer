@@ -31,7 +31,7 @@ def build_secure_exe():
         "pyinstaller",
         "--onefile",  # 単一ファイル
         "--windowed",  # コンソールなし
-        "--name", "TaxDocumentRenamer_v5.2_ProperLogic",  # 信頼できる名前
+        "--name", "TaxDocumentRenamer_v5.4.1_BalanceTrialFix",  # 信頼できる名前
         
         # Windows Defender bypass options
         "--noupx",  # UPX圧縮を無効化（誤検知回避）
@@ -43,6 +43,10 @@ def build_secure_exe():
         "--exclude-module", "tkinter.test",
         "--exclude-module", "test",
         "--exclude-module", "unittest",
+        "--exclude-module", "setuptools",  # セキュリティ対策追加
+        "--exclude-module", "distutils",
+        "--exclude-module", "pip",
+        "--exclude-module", "wheel",
         
         # Paths
         "--workpath", str(build_dir),
@@ -65,7 +69,11 @@ def build_secure_exe():
         "--hidden-import", "core.csv_processor",
         "--hidden-import", "core.classification_v5",
         "--hidden-import", "core.runtime_paths",
+        "--hidden-import", "core.rename_engine",
         "--hidden-import", "ui.drag_drop",
+        "--hidden-import", "helpers.job_context",
+        "--hidden-import", "helpers.seq_policy",
+        "--hidden-import", "helpers.yymm_policy",
         
         # Target file
         "main.py"
@@ -86,7 +94,7 @@ def build_secure_exe():
         print("PyInstaller完了")
         
         # Post-build security enhancements
-        exe_path = dist_dir / "TaxDocumentRenamer_v5.2_ProperLogic.exe"
+        exe_path = dist_dir / "TaxDocumentRenamer_v5.4.1_BalanceTrialFix.exe"
         if exe_path.exists():
             print(f"生成されたexeファイル: {exe_path}")
             print(f"ファイルサイズ: {exe_path.stat().st_size / 1024 / 1024:.2f} MB")
@@ -109,7 +117,7 @@ def create_security_metadata(exe_path):
     metadata_path = exe_path.parent / "SECURITY_INFO.txt"
     
     with open(metadata_path, 'w', encoding='utf-8') as f:
-        f.write(f"""# 税務書類リネームシステム v5.2 - セキュリティ情報
+        f.write(f"""# 税務書類リネームシステム v5.4.1 - セキュリティ情報
 
 ## 実行ファイル情報
 - ファイル名: {exe_path.name}
@@ -138,8 +146,8 @@ def create_security_metadata(exe_path):
 
 ## 開発者情報
 - プロジェクト: 税務書類リネームシステム
-- バージョン: v5.2 Final
-- ビルド: Secure Build for Windows
+- バージョン: v5.4.1 Balance Trial Classification Fix
+- ビルド: Secure Build for Windows with Enhanced Protection
 
 このソフトウェアは税務書類の整理を目的とした正当なアプリケーションです。
 """)
@@ -148,7 +156,7 @@ if __name__ == "__main__":
     success = build_secure_exe()
     if success:
         print("\nWindows保護機能回避型exeビルド完了！")
-        print("出力: ./dist_secure/TaxDocumentRenamer_v5.2_ProperLogic.exe")
+        print("出力: ./dist_secure/TaxDocumentRenamer_v5.4.1_BalanceTrialFix.exe")
     else:
         print("\nビルド失敗")
         sys.exit(1)

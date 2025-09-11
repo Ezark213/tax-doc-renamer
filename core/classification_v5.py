@@ -162,7 +162,7 @@ class DocumentClassifierV5:
                 "filename_keywords": ["納税一覧", "税額一覧"]
             },
             
-            "0001_法人税及び地方法人税申告書": {
+            "0001_法人税等申告書": {
                 "priority": 200,  # 最高優先度に変更
                 "highest_priority_conditions": [
                     # 修正指示書に基づく新しい最優先条件を追加
@@ -330,7 +330,7 @@ class DocumentClassifierV5:
             },
             
             # ===== 3000番台 - 消費税関連 =====
-            "3001_消費税及び地方消費税申告書": {
+            "3001_消費税等申告書": {
                 "priority": 135,
                 "highest_priority_conditions": [
                     AndCondition(["課税期間分の消費税及び", "基準期間の"], "all"),
