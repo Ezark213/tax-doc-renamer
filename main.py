@@ -574,12 +574,13 @@ class TaxDocumentRenamerV5:
         )
         thread.start()
 
-    def _start_folder_batch_processing(self):
+    def _start_folder_batch_processing(self, source_folder=None):
         """v5.4.2 フォルダ一括処理開始（オリジナルの処理フロー復元）"""
-        # フォルダ選択ダイアログ
-        source_folder = filedialog.askdirectory(title="処理対象フォルダを選択（PDFファイルが含まれるフォルダ）")
+        # フォルダが指定されていない場合はダイアログで選択
         if not source_folder:
-            return
+            source_folder = filedialog.askdirectory(title="処理対象フォルダを選択（PDFファイルが含まれるフォルダ）")
+            if not source_folder:
+                return
         
         # PDFファイルを検索
         pdf_files = []
@@ -634,7 +635,6 @@ class TaxDocumentRenamerV5:
         
         # ファイル名重複追跡の初期化
         if not hasattr(self, '_filename_lock'):
-            import threading
             self._filename_lock = threading.Lock()
             self._used_filenames = set()
         else:
@@ -1420,7 +1420,6 @@ class TaxDocumentRenamerV5:
         """重複しないファイル名を生成（スレッドセーフ）"""
         # スレッドセーフなロック機構を使用
         if not hasattr(self, '_filename_lock'):
-            import threading
             self._filename_lock = threading.Lock()
             self._used_filenames = set()
         
