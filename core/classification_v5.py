@@ -2457,4 +2457,28 @@ if __name__ == "__main__":
             
         except Exception as e:
             self._log(f"[BUNDLE_ALTERNATIVE] エラー発生: {str(e)}")
-            return classification_result
+            return classification_result    
+    
+    def _generate_receipt_number(self, classification_type: str, jurisdiction_set_number: int) -> str:
+        """
+        バグ修正依頼書: A-2 受信通知の連番を生成
+        
+        Args:
+            classification_type: "prefecture" or "municipality" 
+            jurisdiction_set_number: セット番号 (1-5)
+        
+        Returns:
+            str: 生成された番号 (例: "1003", "2013")
+        """
+        base_numbers = {
+            "prefecture": 1003,
+            "municipality": 2003
+        }
+        
+        if classification_type in base_numbers:
+            base = base_numbers[classification_type]
+            result = str(base + (jurisdiction_set_number - 1) * 10)
+            self._log_debug(f"連番生成: {classification_type} セット{jurisdiction_set_number} → {result}")
+            return result
+        
+        return "0003"  # フォールバック

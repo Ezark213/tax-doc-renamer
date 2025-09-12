@@ -321,38 +321,20 @@ class AutoSplitControlFrame(ttk.Frame):
                               font=('Arial', 8), foreground='gray')
         info_label.pack(anchor='w', padx=10, pady=2)
         
-        # アクションボタンセクション
-        action_frame = ttk.LabelFrame(self, text="一括処理アクション")
+        # アクションボタンセクション - v5.4.2 簡素化版
+        action_frame = ttk.LabelFrame(self, text="ワンボタン処理")
         action_frame.pack(fill='x', pady=(0, 10))
         
-        # メインCTAボタン: 一括処理（分割&出力）
+        # メイン処理ボタン: フォルダ選択→リネーム一括処理
         self.batch_button = ttk.Button(
             action_frame,
-            text="🚀 一括処理（分割&出力）",
+            text="🚀 フォルダ選択→一括リネーム実行",
             command=self._on_batch_process,
             style='Accent.TButton'
         )
-        self.batch_button.pack(fill='x', padx=10, pady=5)
+        self.batch_button.pack(fill='x', padx=10, pady=10)
         
-        # サブボタン用フレーム
-        sub_button_frame = ttk.Frame(action_frame)
-        sub_button_frame.pack(fill='x', padx=10, pady=2)
-        
-        # 分割のみボタン（検証用）
-        self.split_button = ttk.Button(
-            sub_button_frame,
-            text="📄 分割のみ（検証）",
-            command=self._on_split_only
-        )
-        self.split_button.pack(side='left', padx=(0, 5))
-        
-        # 強制分割ボタン（曖昧な場合用）
-        self.force_button = ttk.Button(
-            sub_button_frame,
-            text="⚡ 強制分割",
-            command=self._on_force_split
-        )
-        self.force_button.pack(side='left')
+        # 簡素化: その他のボタンは削除済み
         
         # プログレス表示エリア
         self.progress_var = tk.StringVar(value="待機中...")
@@ -365,21 +347,11 @@ class AutoSplitControlFrame(ttk.Frame):
         if self.batch_process_callback:
             self.batch_process_callback()
     
-    def _on_split_only(self):
-        """分割のみボタン"""
-        if self.split_only_callback:
-            self.split_only_callback()
+    # 簡素化: 分割のみ・強制分割ボタンは削除
     
-    def _on_force_split(self):
-        """強制分割ボタン"""
-        if self.force_split_callback:
-            self.force_split_callback()
-    
-    def set_callbacks(self, batch_callback=None, split_callback=None, force_callback=None):
-        """コールバック関数を設定"""
+    def set_callbacks(self, batch_callback=None):
+        """コールバック関数を設定 - v5.4.2 簡素化版"""
         self.batch_process_callback = batch_callback
-        self.split_only_callback = split_callback
-        self.force_split_callback = force_callback
     
     def update_progress(self, message: str, color: str = 'green'):
         """プログレス表示更新"""
@@ -394,11 +366,9 @@ class AutoSplitControlFrame(ttk.Frame):
         }
     
     def set_button_states(self, enabled: bool):
-        """ボタンの有効/無効を設定"""
+        """ボタンの有効/無効を設定 - v5.4.2 簡素化版"""
         state = 'normal' if enabled else 'disabled'
         self.batch_button.config(state=state)
-        self.split_button.config(state=state)
-        self.force_button.config(state=state)
 
 
 
