@@ -1,0 +1,24 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧\\2509\\__split_004_1757481110099118.pdf",
+  "source_doc_md5": "6ae1b08da9b5dd38d1bb927eb0f15a96",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "市町村",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 606,
+        "has_date": true
+      }
+    }
+  ],
+  "created_at": "2025-09-10T14:11:51.010280",
+  "version": "5.3"
+}

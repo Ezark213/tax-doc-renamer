@@ -1,0 +1,36 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧/メトロノーム　株式会社_福岡市_250731.pdf",
+  "source_doc_md5": "17be528138f0bb4fad1a70eb75820b7e",
+  "pages": [
+    {
+      "code_hint": "0001",
+      "doc_hints": [
+        "申告書"
+      ],
+      "muni_name": "市町村",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 2022,
+        "has_date": true
+      }
+    },
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": "福岡市",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 1,
+        "text_length": 521,
+        "has_date": true
+      }
+    }
+  ],
+  "created_at": "2025-09-08T17:51:20.718732",
+  "version": "5.3"
+}

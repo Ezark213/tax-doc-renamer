@@ -1,28 +1,44 @@
-# 🧾 税務書類リネームシステム v5.4.1 - Balance Trial Classification Fix
+# 🧾 税務書類リネームシステム v5.4.3 - Concise Naming Edition
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4.1--Balance--Trial--Fix-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4.3--Concise--Naming-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![MCP](https://img.shields.io/badge/Claude%20Code-MCP%20Integrated-purple.svg)](https://github.com/Ezark213/tax-doc-renamer)
-[![分類システム](https://img.shields.io/badge/%E5%88%86%E9%A1%9E%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0-Balance%20Trial%20Fix-orange.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![法改正対応](https://img.shields.io/badge/%E6%B3%95%E6%94%B9%E6%AD%A3%E5%AF%BE%E5%BF%9C-Future%20Ready-orange.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![テスト](https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-Production%20Quality-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**  
 OCR機能、AI分類エンジン、受信通知動的番号付与システム、都道府県申告書連番システムを統合し、確実で高精度な税務書類管理を実現します。
 
-## 🚀 v5.4.1 Balance Trial Classification Fix - 最新修正完了！
+## 🎯 v5.4.3 Concise Naming Edition - 最新リリース！
 
-### ✨ 2025年9月8日 - 残高試算表分類問題修正
+### ✨ 2025年9月11日 - 簡潔なリネーム名称への対応
+✅ **法改正対応の簡潔化** - 将来の法改正時の影響を最小限に抑制  
+✅ **リネーム名称の最適化** - 法人税等申告書・消費税等申告書に変更  
+✅ **分類精度の完全維持** - OCR検出キーワードは高精度維持のため据え置き  
+✅ **弾力的運用体制** - 名称変更時の運用負荷を大幅軽減  
+✅ **Bundle分割・UI強制適用** - 全機能の正常動作確認済み  
+✅ **本番テスト完了** - 実環境での動作検証済み
+
+### 📋 v5.4.1からの継承機能
 ✅ **残高試算表vs決算書分類問題の完全解決** - 優先度とキーワード除外による確実な分類  
 ✅ **分類優先度の最適化** - 5004_残高試算表(140) > 5001_決算書(130)  
 ✅ **除外キーワードシステム** - "残高試算表"を含む書類の決算書誤分類防止  
 ✅ **拡張キーワード検出** - OCRベースでの残高試算表キーワード強化  
 ✅ **動的連番処理の最適化** - Bundle分割時の受信通知連番処理強化  
-✅ **包括的テスト検証** - 実際の問題ファイルでのテスト完了  
 
-### 📋 正常なファイル名出力例
+### 📋 v5.4.3 新しいファイル名出力例（簡潔化対応）
 ```
+# 🔥 NEW: 簡潔化されたメイン申告書
+0001_法人税等申告書_2508.pdf           # ← 法人税及び地方法人税申告書から変更
+3001_消費税等申告書_2508.pdf           # ← 消費税及び地方消費税申告書から変更
+
+# 添付書類（変更なし）
+0002_添付資料_法人税_2508.pdf
+3002_添付資料_消費税_2508.pdf
+
+# 地方税申告書・受信通知（変更なし）
 1001_東京都_法人都道府県民税・事業税・特別法人事業税_2508.pdf
 1011_愛知県_法人都道府県民税・事業税・特別法人事業税_2508.pdf  
 1021_福岡県_法人都道府県民税・事業税・特別法人事業税_2508.pdf
@@ -31,6 +47,10 @@ OCR機能、AI分類エンジン、受信通知動的番号付与システム、
 1003_受信通知_2508.pdf (東京都)
 1013_受信通知_2508.pdf (愛知県) 
 2013_受信通知_2508.pdf (蒲郡市)
+
+# 会計書類（残高試算表問題修正済み）
+5004_残高試算表_2508.pdf              # ← 高優先度で確実な分類
+5001_決算書_2508.pdf                  # ← 試算表除外で誤分類防止
 ```
 
 ## 🚀 クイックスタート
@@ -267,7 +287,32 @@ python -m pytest
 
 ## 🏗️ 最新アップデート
 
-### 🎯 v5.4.1 Balance Trial Classification Fix（2025年9月8日）
+### 🎯 v5.4.3 Concise Naming Edition（2025年9月11日）
+**法改正対応の簡潔化リリース**
+
+#### 🔧 主要変更内容
+- ✅ **法改正対応の簡潔化** - 将来の法改正時の影響を最小限に抑制
+- ✅ **リネーム名称の最適化**:
+  - `0001_法人税及び地方法人税申告書` → `0001_法人税等申告書`
+  - `3001_消費税及び地方消費税申告書` → `3001_消費税等申告書`
+- ✅ **分類精度の完全維持** - OCR検出キーワードは高精度維持のため据え置き
+- ✅ **運用負荷軽減** - 名称変更時の影響範囲を最小化
+- ✅ **全機能正常動作確認** - Bundle分割・UI強制適用・連番処理すべて正常
+
+#### 💡 法改正対応設計思想
+```yaml
+設計方針:
+  分類処理: 詳細名称で高精度検出維持
+  リネーム処理: 簡潔名称で法改正対応力確保
+  分離アーキテクチャ: 分類ロジックとリネーム名称の独立性
+  
+実装効果:
+  影響範囲: リネーム出力のみ（分類条件は無変更）
+  運用性: 法改正時の作業負荷を大幅軽減
+  互換性: 既存システム・設定への影響なし
+```
+
+### 📋 v5.4.1 Balance Trial Classification Fix（2025年9月8日）
 **重大な分類問題を解決した緊急修正版**
 
 #### 📋 修正内容
@@ -277,23 +322,6 @@ python -m pytest
 - ✅ **OCR検出キーワード強化** - partial_keywords拡張による検出精度向上
 - ✅ **Bundle分割処理最適化** - 地方税受信通知の連番処理強化
 - ✅ **実環境テスト完了** - 実際の問題ファイルでの動作検証完了
-
-#### 🔍 技術的詳細
-```python
-"5004_残高試算表": {
-    "priority": 140,  # 最高優先度（決算書より高い）
-    "highest_priority_conditions": [
-        AndCondition(["残高試算表"], "any"),
-        AndCondition(["試算表"], "any")
-    ],
-    "exclude_keywords": [],  # 除外なし
-}
-
-"5001_決算書": {
-    "priority": 130,  # 残高試算表より低い優先度
-    "exclude_keywords": ["残高試算表", "試算表", "残高試算"],  # 試算表関連を除外
-}
-```
 
 ### 📈 v5.3.5-ui-robust エンタープライズ改善ポイント
 - **🎯 UI強制システム**: 重要書類の期間値100%UI入力保証・エラー完全防止

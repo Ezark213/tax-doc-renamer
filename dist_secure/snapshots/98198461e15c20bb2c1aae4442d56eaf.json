@@ -1,0 +1,21 @@
+{
+  "source_path": "C:/Users/mayum/Desktop/分割前一覧/イメージ添付書類(法人消費税申告)_20250115六興実業株式会社_20250721083729.pdf",
+  "source_doc_md5": "98198461e15c20bb2c1aae4442d56eaf",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [],
+      "muni_name": null,
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 365,
+        "has_date": true
+      }
+    }
+  ],
+  "created_at": "2025-09-08T17:51:18.443580",
+  "version": "5.3"
+}
