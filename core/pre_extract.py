@@ -4,7 +4,7 @@ Pre-Extract スナップショット機能 v5.3
 分割前にPDF全体をスキャンしてリネーム情報を抽出・保存
 """
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import re
 import logging
 from datetime import datetime

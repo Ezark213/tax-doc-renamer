@@ -1062,6 +1062,9 @@ class DocumentClassifierV5:
                                          municipality_sets: Optional[Dict[int, Dict[str, str]]] = None,
                                          job_context=None) -> ClassificationResult:
         """v5.0 自治体情報を考慮した分類（ステートレス対応）"""
+        # 🎊 v5.4.3 修正: current_municipality_setsを必ず設定
+        self.current_municipality_sets = municipality_sets or {}
+        
         # v5.0 分類実行
         base_result = self.classify_document_v5(text, filename, job_context)
         
@@ -1872,6 +1875,22 @@ class DocumentClassifierV5:
             )
             
         return None
+
+    def _generate_receipt_number(self, jurisdiction_type: str, set_number: int) -> str:
+        """
+        受信通知の連番を生成
+        都道府県: 1003 → 1013 → 1023 → ...
+        市町村: 2003 → 2013 → 2023 → ...
+        """
+        if jurisdiction_type == "prefecture":
+            # 都道府県: 1003 + (セット番号-1) * 10
+            return str(1003 + (set_number - 1) * 10)
+        elif jurisdiction_type == "municipality":
+            # 市町村: 2003 + (セット番号-1) * 10
+            return str(2003 + (set_number - 1) * 10)
+        else:
+            # フォールバック
+            return "9999"
     
     
     def _detect_municipality_set_from_text(self, text: str, filename: str, target_type: str) -> Optional[int]:

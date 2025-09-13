@@ -287,29 +287,61 @@ class AutoSplitControlFrame(ttk.Frame):
     
     def _create_controls(self):
         """制御UI作成"""
-        # タイトル
-        title_label = ttk.Label(self, text="税務書類自動処理", 
-                               font=('Arial', 11, 'bold'), foreground='blue')
-        title_label.pack(pady=(0, 10))
+        # 設定セクション
+        settings_frame = ttk.LabelFrame(self, text="Bundle PDF Auto-Split設定")
+        settings_frame.pack(fill='x', pady=(0, 10))
         
-        # フォルダ選択セクション
-        folder_frame = ttk.LabelFrame(self, text="処理フォルダ")
-        folder_frame.pack(fill='x', pady=(0, 10))
+        # 自動分割トグル
+        self.auto_split_bundles = tk.BooleanVar(value=True)
+        auto_split_cb = ttk.Checkbutton(
+            settings_frame, 
+            text="アップロード時に束ねPDFを自動分割 (推奨)", 
+            variable=self.auto_split_bundles
+        )
+        auto_split_cb.pack(anchor='w', padx=10, pady=5)
         
-        # フォルダ選択ボタン
-        self.folder_button = ttk.Button(
-            folder_frame,
-            text="📁 フォルダを選択", 
-            command=self._select_folder,
+        # デバッグモード（必要時のみ表示）
+        self.debug_mode = tk.BooleanVar(value=False)
+        debug_cb = ttk.Checkbutton(
+            settings_frame,
+            text="詳細ログ出力 (Debug)",
+            variable=self.debug_mode
+        )
+        debug_cb.pack(anchor='w', padx=10, pady=2)
+        
+        # 情報テキスト
+        info_text = ("対象: 地方税系(1003/1013/1023 + 1004/2004)、国税系(0003/0004 + 3003/3004)の束ね")
+        info_label = ttk.Label(settings_frame, text=info_text, 
+                              font=('Arial', 8), foreground='gray')
+        info_label.pack(anchor='w', padx=10, pady=2)
+        
+        # アクションボタンセクション
+        action_frame = ttk.LabelFrame(self, text="処理実行")
+        action_frame.pack(fill='x', pady=(0, 10))
+        
+        # メインボタン: 一括処理（分割&出力）のみ
+        self.main_button = ttk.Button(
+            action_frame,
+            text="⚡ 一括処理（分割&出力）",
+            command=self._on_main_process,
             style='Accent.TButton'
         )
-        self.folder_button.pack(fill='x', padx=10, pady=5)
+        self.main_button.pack(fill='x', padx=10, pady=10)
         
         # プログレス表示エリア
         self.progress_var = tk.StringVar(value="待機中...")
         self.progress_label = ttk.Label(self, textvariable=self.progress_var,
                                        font=('Arial', 9), foreground='green')
         self.progress_label.pack(pady=5)
+    
+    def set_callbacks(self, batch_callback=None, split_only_callback=None, split_and_output_callback=None):
+        """コールバック関数を設定"""
+        if batch_callback:
+            self.folder_process_callback = batch_callback
+        if split_only_callback:
+            self.split_only_callback = split_only_callback
+        if split_and_output_callback:
+            self.split_and_output_callback = split_and_output_callback
     
     def _select_folder(self):
         """フォルダ選択ダイアログを開く"""
@@ -318,20 +350,17 @@ class AutoSplitControlFrame(ttk.Frame):
         folder_path = filedialog.askdirectory(title="処理するフォルダを選択してください")
         if folder_path:
             self.selected_folder = folder_path
-            self.folder_path_var.set(f"選択: {folder_path}")
             
             # フォルダが選択されたら自動処理を開始
             if self.folder_process_callback:
                 self.folder_process_callback(folder_path)
     
-        # フォルダ選択ボタン
-        self.folder_button = ttk.Button(
-            folder_frame,
-            text="📁 フォルダを選択", 
-            command=self._select_folder,
-            style='Accent.TButton'
-        )
-        self.folder_button.pack(fill='x', padx=10, pady=5)
+    def _on_main_process(self):
+        """一括処理（分割&出力）"""
+        from tkinter import filedialog
+        folder_path = filedialog.askdirectory(title="処理するフォルダを選択してください")
+        if folder_path and self.folder_process_callback:
+            self.folder_process_callback(folder_path)
     
     def update_progress(self, message: str, color: str = 'green'):
         """プログレス表示更新"""
@@ -339,27 +368,17 @@ class AutoSplitControlFrame(ttk.Frame):
         self.progress_label.config(foreground=color)
     
     def get_settings(self) -> Dict[str, Any]:
-        """現在の設定を取得（機能常時有効のため固定値）"""
+        """現在の設定を取得"""
         return {
-            'auto_split_bundles': True,
-            'debug_mode': False
+            'auto_split_bundles': self.auto_split_bundles.get(),
+            'debug_mode': self.debug_mode.get()
         }
-
-    def set_callbacks(self, batch_callback=None, folder_process_callback=None):
-        """コールバック関数を設定"""
-        self.folder_process_callback = folder_process_callback or batch_callback
     
     def set_button_states(self, enabled: bool):
-        """ボタンの有効/無効を設定 - v5.4.2 簡素化版"""
+        """ボタンの有効/無効を設定"""
         state = 'normal' if enabled else 'disabled'
-        # フォルダ選択ボタン
-        self.folder_button = ttk.Button(
-            folder_frame,
-            text="📁 フォルダを選択", 
-            command=self._select_folder,
-            style='Accent.TButton'
-        )
-        self.folder_button.pack(fill='x', padx=10, pady=5)
+        if hasattr(self, 'main_button'):
+            self.main_button.config(state=state)
 
 
 

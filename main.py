@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 import sys
 import pytesseract
+import shutil
 
 # プロジェクトのルートディレクトリをパスに追加
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -586,7 +587,7 @@ class TaxDocumentRenamerV5:
         pdf_files = []
         for root, dirs, files in os.walk(source_folder):
             for file in files:
-                if file.lower().endswith('.pdf'):
+                if file.lower().endswith('.pdf') and not file.startswith('__split_'):
                     pdf_files.append(os.path.join(root, file))
         
         if not pdf_files:
@@ -699,7 +700,9 @@ class TaxDocumentRenamerV5:
                             for split_file_path in split_files:
                                 try:
                                     # 分割後ファイルにもリネーム処理を適用
-                                    success = self._process_single_file_v5_with_snapshot(split_file_path, output_folder, ui_context)
+                                    user_yymm = self._resolve_yymm_with_policy(split_file_path, None)
+                                    snapshot = self.pre_extract_engine.build_snapshot(split_file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                                    success = self._process_single_file_v5_with_snapshot(split_file_path, output_folder, snapshot)
                                     if success:
                                         self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"分割後ファイル処理完了: {sf}"))
                                     
@@ -717,6 +720,15 @@ class TaxDocumentRenamerV5:
                                     
                                 except Exception as e:
                                     self.root.after(0, lambda err=str(e), sf=os.path.basename(split_file_path): self._log(f"分割後ファイル処理エラー {sf}: {err}"))
+                                    # エラー時は未分類フォルダに移動
+                                    try:
+                                        unclassified_folder = os.path.join(output_folder, "未分類")
+                                        os.makedirs(unclassified_folder, exist_ok=True)
+                                        if os.path.exists(split_file_path):
+                                            shutil.move(split_file_path, os.path.join(unclassified_folder, os.path.basename(split_file_path)))
+                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[error-recovery] エラーファイルを未分類に移動: {sf}"))
+                                    except Exception as recovery_error:
+                                        self.root.after(0, lambda err=str(recovery_error): self._log(f"[error-recovery] ファイル移動失敗: {err}"))
                     else:
                         # 通常の単一ファイル処理
                         success = self._process_single_file_v5_with_snapshot(file_path, output_folder, ui_context)
@@ -854,7 +866,7 @@ class TaxDocumentRenamerV5:
         
         # OCR・テキスト抽出
         try:
-            import fitz
+            import pymupdf as fitz
             doc = fitz.open(file_path)
             text = ""
             for page in doc:
@@ -951,7 +963,7 @@ class TaxDocumentRenamerV5:
         
         # 分類実行（従来通り）
         try:
-            import fitz
+            import pymupdf as fitz
             doc = fitz.open(file_path)
             text = ""
             for page in doc:
@@ -1345,7 +1357,7 @@ class TaxDocumentRenamerV5:
                 return False
             
             # ファイルのテキストを抽出
-            import fitz
+            import pymupdf as fitz
             doc = fitz.open(file_path)
             text = ""
             for page in doc:
@@ -1382,7 +1394,7 @@ class TaxDocumentRenamerV5:
         self._log(f"[reset] __split_ 処理開始 - 分割状態リセット")
         
         try:
-            import fitz
+            import pymupdf as fitz
             doc = fitz.open(file_path)
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             

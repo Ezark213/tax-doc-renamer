@@ -1,0 +1,24 @@
+{
+  "source_path": "C:/Users/pukur/Desktop/drive-download-20250819T144816Z-1-001\\2508_3\\__split_005_1757774904992816.pdf",
+  "source_doc_md5": "659340922c481cc84236fbb73221e72e",
+  "pages": [
+    {
+      "code_hint": null,
+      "doc_hints": [
+        "受信通知",
+        "申告書"
+      ],
+      "muni_name": "都道府県",
+      "tax_kind": "国税",
+      "period_yyyymm": "2508",
+      "serial_bucket": null,
+      "extra": {
+        "page_index": 0,
+        "text_length": 714,
+        "has_date": true
+      }
+    }
+  ],
+  "created_at": "2025-09-13T23:48:25.570642",
+  "version": "5.3"
+}
