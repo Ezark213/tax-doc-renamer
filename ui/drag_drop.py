@@ -296,70 +296,14 @@ class AutoSplitControlFrame(ttk.Frame):
         folder_frame = ttk.LabelFrame(self, text="処理フォルダ")
         folder_frame.pack(fill='x', pady=(0, 10))
         
-<<<<<<< HEAD
-        # 自動分割トグル
-        auto_split_cb = ttk.Checkbutton(
-            settings_frame, 
-            text="アップロード時に束ねPDFを自動分割 (推奨)", 
-            variable=self.auto_split_bundles
-        )
-        auto_split_cb.pack(anchor='w', padx=10, pady=5)
-        
-        # デバッグモード（必要時のみ表示）
-        debug_cb = ttk.Checkbutton(
-            settings_frame,
-            text="詳細ログ出力 (Debug)",
-            variable=self.debug_mode
-        )
-        debug_cb.pack(anchor='w', padx=10, pady=2)
-        
-        # 情報テキスト
-        info_text = ("対象: 地方税系(1003/1013/1023 + 1004/2004)、国税系(0003/0004 + 3003/3004)の束ね")
-        info_label = ttk.Label(settings_frame, text=info_text, 
-                              font=('Arial', 8), foreground='gray')
-        info_label.pack(anchor='w', padx=10, pady=2)
-        
-        # アクションボタンセクション - v5.4.2 簡素化版
-        action_frame = ttk.LabelFrame(self, text="ワンボタン処理")
-        action_frame.pack(fill='x', pady=(0, 10))
-        
-        # メイン処理ボタン: フォルダ選択→リネーム一括処理
-        self.batch_button = ttk.Button(
-            action_frame,
-            text="🚀 フォルダ選択→一括リネーム実行",
-            command=self._on_batch_process,
-            style='Accent.TButton'
-        )
-        self.batch_button.pack(fill='x', padx=10, pady=10)
-        
-        # 簡素化: その他のボタンは削除済み
-=======
         # フォルダ選択ボタン
         self.folder_button = ttk.Button(
             folder_frame,
-            text="📁 フォルダを選択",
+            text="📁 フォルダを選択", 
             command=self._select_folder,
             style='Accent.TButton'
         )
         self.folder_button.pack(fill='x', padx=10, pady=5)
-        
-        # 選択されたフォルダパスの表示
-        self.folder_path_var = tk.StringVar(value="フォルダが選択されていません")
-        folder_path_label = ttk.Label(
-            folder_frame, 
-            textvariable=self.folder_path_var,
-            font=('Arial', 8), 
-            foreground='gray'
-        )
-        folder_path_label.pack(anchor='w', padx=10, pady=2)
-        
-        # 処理説明
-        info_text = "フォルダ内のPDF・CSVファイルを自動分割・リネームし、YYMMフォルダに保存します"
-        info_label = ttk.Label(folder_frame, text=info_text, 
-                              font=('Arial', 8), foreground='gray',
-                              wraplength=350)
-        info_label.pack(anchor='w', padx=10, pady=2)
->>>>>>> f34e0637937544d25d4c233cbbe444a7219a2349
         
         # プログレス表示エリア
         self.progress_var = tk.StringVar(value="待機中...")
@@ -380,17 +324,14 @@ class AutoSplitControlFrame(ttk.Frame):
             if self.folder_process_callback:
                 self.folder_process_callback(folder_path)
     
-<<<<<<< HEAD
-    # 簡素化: 分割のみ・強制分割ボタンは削除
-    
-    def set_callbacks(self, batch_callback=None):
-        """コールバック関数を設定 - v5.4.2 簡素化版"""
-        self.batch_process_callback = batch_callback
-=======
-    def set_callbacks(self, folder_callback=None):
-        """コールバック関数を設定"""
-        self.folder_process_callback = folder_callback
->>>>>>> f34e0637937544d25d4c233cbbe444a7219a2349
+        # フォルダ選択ボタン
+        self.folder_button = ttk.Button(
+            folder_frame,
+            text="📁 フォルダを選択", 
+            command=self._select_folder,
+            style='Accent.TButton'
+        )
+        self.folder_button.pack(fill='x', padx=10, pady=5)
     
     def update_progress(self, message: str, color: str = 'green'):
         """プログレス表示更新"""
@@ -403,15 +344,22 @@ class AutoSplitControlFrame(ttk.Frame):
             'auto_split_bundles': True,
             'debug_mode': False
         }
+
+    def set_callbacks(self, batch_callback=None, folder_process_callback=None):
+        """コールバック関数を設定"""
+        self.folder_process_callback = folder_process_callback or batch_callback
     
     def set_button_states(self, enabled: bool):
         """ボタンの有効/無効を設定 - v5.4.2 簡素化版"""
         state = 'normal' if enabled else 'disabled'
-<<<<<<< HEAD
-        self.batch_button.config(state=state)
-=======
-        self.folder_button.config(state=state)
->>>>>>> f34e0637937544d25d4c233cbbe444a7219a2349
+        # フォルダ選択ボタン
+        self.folder_button = ttk.Button(
+            folder_frame,
+            text="📁 フォルダを選択", 
+            command=self._select_folder,
+            style='Accent.TButton'
+        )
+        self.folder_button.pack(fill='x', padx=10, pady=5)
 
 
 
