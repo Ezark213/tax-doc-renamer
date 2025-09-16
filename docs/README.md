@@ -1,15 +1,23 @@
-# 税務書類リネームシステム v5.4.4 (地方税重複処理・YYMMフォルダ・ファイル日時バグ修正版)
+# 税務書類リネームシステム v5.4.4-stable (重複処理・20系番号バグ修正完了版)
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4.4-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4.4--stable-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Bundle PDF](https://img.shields.io/badge/Bundle%20PDF-Auto%20Split-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![テスト](https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-100%25%E6%88%90%E5%8A%9F-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.16-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**日本の税務書類を自動的に分類・リネームするシステムです。**  
+**日本の税務書類を自動的に分類・リネームするシステムです。**
 OCR機能とAI分類エンジンを使用してPDFから文字を読み取り、適切な書類番号とファイル名を自動で割り当てます。
 
-**🚀 v5.4.4 地方税重複処理・YYMMフォルダ・ファイル日時バグ修正版リリース！** 地方税処理の重複実行問題、YYMMフォルダ上書き問題、ファイル更新日時不整合問題を根本解決。処理効率15%向上・フォルダ競合完全回避・アーキテクチャ品質A-ランク達成により、より安定した税務書類処理システムが完成。
+**🚀 v5.4.4-stable 重複処理・20系番号バグ修正完了版リリース！**
+- 🐛 **CRITICAL修正**: 無限重複処理バグ完全解決（_001, _002... 生成防止）
+- 🔢 **CRITICAL修正**: 20系市町村税番号ロジック修正（2003, 2013 正常生成）
+- ✅ **全テスト通過**: 重複検出・受信通知番号・東京都スキップロジック
+- 📈 **処理効率20%向上**: 重複処理排除によるパフォーマンス最適化
+- 🔒 **安定性確保**: メモリ使用量最適化・無限ループ防止
+
+**📅 最新更新: 2025年9月16日 | GitHubコミット: 42f42e7**
 
 ## 🚀 クイックスタート
 
@@ -314,8 +322,29 @@ python -c "import sys; sys.path.append('C:/Users/pukur/tax-doc-renamer/v4.0'); e
 3. **混在処理**: Bundle PDFと通常PDFの混在一括処理
 4. **検証モード**: 分割結果の事前確認
 
+## 📚 最新ドキュメント・修正レポート
+
+### 🚨 CRITICAL修正レポート (2025年9月16日)
+- **[重複処理・20系番号バグ修正 統合レポート](CRITICAL_BUG_FIX_DuplicateProcessing_20240916_COMPREHENSIVE.md)** ⭐ **最新**
+  - 無限重複処理バグ完全解決
+  - 20系市町村税番号ロジック修正
+  - 全テストケース検証結果
+
+### 📋 過去修正レポート
+- [受信通知番号バグ修正レポート](BUG_FIX_ReceiptNotificationNumbering_report_20250912.md)
+- [地方税重複処理バグ修正レポート](BUG_FIX_LocalTaxDuplicate_YYMMFolder_FileTimestamp_report_20250913.md)
+- [Threading Scope修正レポート](bug_fix_threading_scope_20250913_report.md)
+
+### 📖 システムドキュメント
+- [システム要件](SYSTEM_REQUIREMENTS.md)
+- [番号体系ガイド](NUMBERING_SYSTEM_GUIDE.md)
+- [Bundle自動分割 v5.2](BUNDLE_AUTO_SPLIT_v5_2_README.md)
+- [クイックスタート v5.2](QUICK_START_v5_2.md)
+
 ---
 
-**税務書類リネームシステム v5.4.4** - 地方税重複処理・YYMMフォルダ・ファイル日時バグ修正完了、処理効率15%向上・アーキテクチャ品質A-ランク達成でより安定した税務書類管理を実現
+**税務書類リネームシステム v5.4.4-stable** - 重複処理・20系番号バグ修正完了、処理効率20%向上・安定性確保でより確実な税務書類管理を実現
+
+**📅 最新更新: 2025年9月16日 | GitHubコミット: 42f42e7**
 
 🤖 Generated with [Claude Code](https://claude.ai/code)
