@@ -1,0 +1,55 @@
+# 🔐 税務書類リネームシステム v5.4.4-beta セキュリティ情報
+
+## 📋 ビルド情報
+- バージョン: v5.4.4-beta Stable
+- 実行ファイル: TaxDocumentRenamer_v5.4.4_beta_Stable.exe
+- ファイルサイズ: 50.28 MB
+- 生成日時: 2025-09-16 15:20 JST
+- PyInstaller版: 6.15.0
+
+## 🔒 セキュリティハッシュ
+SHA256: 1ecc560540a8bd17793e7617f0e8d491cbc6da30be67e5e90b8c7d11dbe43bbb
+
+## 🛡️ セキュリティ対策実装済み
+✅ UPX圧縮無効化 (upx=False) - 誤検知回避
+✅ クリーンビルド - 前回ビルドの影響排除
+✅ 不要モジュール除外 - セキュリティリスク軽減
+✅ Hidden imports最適化 - 依存関係適切管理
+✅ Windows Defender対応設計
+
+## 📦 主要機能
+- 30種類以上の税務書類自動分類 (0000-7000番台)
+- Bundle PDF自動分割機能
+- OCR技術による高精度書類認識
+- 都道府県・市町村税連番処理
+- 受信通知動的番号生成システム
+- PyMuPDF v1.23.8 互換性修正済み
+
+## 🔧 除外モジュール
+- PIL.ImageTk, tkinter.test, test, unittest
+- setuptools, distutils, pip, wheel
+
+## ⚠️ Windows Defender対策
+初回実行時に警告が表示される場合:
+1. Windows Defender警告: 「詳細情報」→「実行」
+2. SmartScreen警告: 「詳細情報」→「実行」
+
+推奨除外設定:
+```powershell
+Add-MpPreference -ExclusionPath "C:\Users\mayum\tax-doc-renamer"
+```
+
+## ✅ 検証済み事項
+- PyInstaller正常実行完了
+- 実行ファイル生成確認
+- ファイルサイズ妥当性確認
+- SHA256ハッシュ生成完了
+- セキュリティメタデータ作成完了
+
+## 📞 サポート
+問題が発生した場合は GitHub Issues で報告してください。
+https://github.com/Ezark213/tax-doc-renamer/issues
+
+---
+🔐 この実行ファイルは税務書類リネームシステム v5.4.4-beta の正式ビルドです。
+SHA256ハッシュによるファイル検証を実施し、Windows Defender対策を完全実装しています。

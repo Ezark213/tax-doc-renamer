@@ -1330,7 +1330,8 @@ class DocumentClassifierV5:
         
         city_order_map = {}
         for rank, set_id in enumerate(city_sets):
-            city_order_map[set_id] = 2001 + rank * 10
+            # Apply Tokyo skip logic: use base 2003 for consistency with receipt notifications
+            city_order_map[set_id] = 2003 + rank * 10
             
         return pref_order_map, city_order_map
     
@@ -1407,7 +1408,7 @@ class DocumentClassifierV5:
                             if info.get('city', '').strip()]
                 city_sets.sort(key=lambda x: x[0])  # セット番号順
                 
-                order = ((municipality_code - 2001) // 10) + 1
+                order = ((municipality_code - 2003) // 10) + 1
                 if order <= len(city_sets):
                     return city_sets[order - 1][0]
         return None
@@ -1759,11 +1760,13 @@ class DocumentClassifierV5:
             prefecture_code = 1001 + (detected_set - 1) * 10
             self._log_debug(f"都道府県連番計算: セット{detected_set} → 1001 + ({detected_set}-1)×10 = {prefecture_code}")
             
-            # 市町村申告書の連番: 2001 + (セット番号-1) × 10
-            # ただし、東京都（セット1）は市町村書類が存在しないため除外
+            # 市町村申告書の連番: Tokyo skip logic applied
+            # Base 2003 with Tokyo skip adjustment (same as receipt notifications)
             if detected_set > 1:  # 東京都以外の場合のみ
-                municipality_code = 2001 + (detected_set - 1) * 10
-                self._log_debug(f"市町村連番計算: セット{detected_set} → 2001 + ({detected_set}-1)×10 = {municipality_code}")
+                # Tokyo skip: adjust set index down by 1 since Tokyo (set 1) has no municipalities
+                adjusted_set = detected_set - 1
+                municipality_code = 2003 + (adjusted_set - 1) * 10
+                self._log_debug(f"市町村連番計算(Tokyo skip): セット{detected_set} → adjusted={adjusted_set} → 2003 + ({adjusted_set}-1)×10 = {municipality_code}")
             else:
                 self._log_debug(f"東京都（セット1）は市町村書類なし")
         

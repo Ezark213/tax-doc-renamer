@@ -141,14 +141,23 @@ class ReceiptSequencer:
             logger.error(error_msg)
             raise ValueError(error_msg)
         
-        # 東京都がセット1に存在する場合、市町村の順序を繰り上げ（東京都スキップ）
+        # 東京都がセット1に存在し、かつ市町村なしの場合、市町村の順序を繰り上げ（東京都スキップ）
         # 修正指示書: 東京都は市町村なし（2000番台スキップで市町村順序繰り上げ）
         tokyo_idx = self.ctx.get_set_index_for_pref("東京都")
         adjusted_idx = set_idx
-        
-        if tokyo_idx == 1 and set_idx > 1:
+
+        # 東京都スキップ判定: セット1が東京都で市町村なしの場合のみ繰り上げ
+        tokyo_skip_needed = False
+        if tokyo_idx == 1:
+            # セット1の市町村情報を確認
+            tokyo_city = self.ctx.get_city_for_set(1)
+            if not tokyo_city or tokyo_city.strip() == "":
+                # 東京都（市町村なし）の場合、他の市町村は繰り上げ
+                tokyo_skip_needed = (set_idx > 1)
+
+        if tokyo_skip_needed:
             adjusted_idx = set_idx - 1
-            logger.info(f"[SEQ][CITY] Tokyo-skip applied: original_set={set_idx} -> adjusted_set={adjusted_idx}")
+            logger.info(f"[SEQ][CITY] Tokyo-skip applied: original_set={set_idx} -> adjusted_set={adjusted_idx} (Tokyo at Set1 with no city)")
         
         # 修正指示書の連番計算式: 基本番号 + (調整後入力順序 - 1) × 10
         final_code = BASE_CITY + (adjusted_idx - 1) * 10

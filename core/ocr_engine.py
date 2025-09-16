@@ -4,7 +4,7 @@ OCR・自治体認識エンジン v4.0
 高精度自治体名認識とマッチング機能
 """
 
-import pymupdf as fitz  # PyMuPDF
+import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 import re

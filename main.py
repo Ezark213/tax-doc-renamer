@@ -709,29 +709,27 @@ class TaxDocumentRenamerV5:
                                     # 一時ファイル削除処理
                                     if os.path.exists(split_file_path) and os.path.basename(split_file_path).startswith("__split_"):
                                         try:
-                                            # Move to 未分類 instead of delete
-                                            unclassified_folder = os.path.join(output_folder, "未分類")
-                                            os.makedirs(unclassified_folder, exist_ok=True)
-                                            shutil.move(split_file_path, os.path.join(unclassified_folder, os.path.basename(split_file_path)))
-                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[cleanup] 一時ファイル未分類移動: {sf}"))
+                                            # 一時ファイルを削除（未分類移動せず）
+                                            os.remove(split_file_path)
+                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[cleanup] 一時ファイル削除: {sf}"))
                                         except Exception as cleanup_error:
-                                            self.root.after(0, lambda sf=os.path.basename(split_file_path), err=str(cleanup_error): 
-                                                           self._log(f"[cleanup] 一時ファイル移動失敗 {sf}: {err}"))
+                                            self.root.after(0, lambda sf=os.path.basename(split_file_path), err=str(cleanup_error):
+                                                           self._log(f"[cleanup] 一時ファイル削除失敗 {sf}: {err}"))
                                     
                                 except Exception as e:
                                     self.root.after(0, lambda err=str(e), sf=os.path.basename(split_file_path): self._log(f"分割後ファイル処理エラー {sf}: {err}"))
-                                    # エラー時は未分類フォルダに移動
+                                    # エラー時は一時ファイルを削除
                                     try:
-                                        unclassified_folder = os.path.join(output_folder, "未分類")
-                                        os.makedirs(unclassified_folder, exist_ok=True)
                                         if os.path.exists(split_file_path):
-                                            shutil.move(split_file_path, os.path.join(unclassified_folder, os.path.basename(split_file_path)))
-                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[error-recovery] エラーファイルを未分類に移動: {sf}"))
+                                            os.remove(split_file_path)
+                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[error-recovery] エラーファイルを削除: {sf}"))
                                     except Exception as recovery_error:
-                                        self.root.after(0, lambda err=str(recovery_error): self._log(f"[error-recovery] ファイル移動失敗: {err}"))
+                                        self.root.after(0, lambda err=str(recovery_error): self._log(f"[error-recovery] ファイル削除失敗: {err}"))
                     else:
-                        # 通常の単一ファイル処理
-                        success = self._process_single_file_v5_with_snapshot(file_path, output_folder, ui_context)
+                        # 通常の単一ファイル処理 - スナップショットを作成してから処理
+                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                        success = self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
                         if success:
                             processed_files += 1
                         
@@ -866,7 +864,7 @@ class TaxDocumentRenamerV5:
         
         # OCR・テキスト抽出
         try:
-            import pymupdf as fitz
+            import fitz
             doc = fitz.open(file_path)
             text = ""
             for page in doc:
@@ -963,7 +961,7 @@ class TaxDocumentRenamerV5:
         
         # 分類実行（従来通り）
         try:
-            import pymupdf as fitz
+            import fitz
             doc = fitz.open(file_path)
             text = ""
             for page in doc:
@@ -1357,7 +1355,7 @@ class TaxDocumentRenamerV5:
                 return False
             
             # ファイルのテキストを抽出
-            import pymupdf as fitz
+            import fitz
             doc = fitz.open(file_path)
             text = ""
             for page in doc:
@@ -1394,7 +1392,7 @@ class TaxDocumentRenamerV5:
         self._log(f"[reset] __split_ 処理開始 - 分割状態リセット")
         
         try:
-            import pymupdf as fitz
+            import fitz
             doc = fitz.open(file_path)
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             
@@ -1479,9 +1477,12 @@ class TaxDocumentRenamerV5:
         """ファイルが既にリネーム済みかチェック（無限リネーム防止）"""
         import re
         # 4桁の数字で始まるファイル名（例：0001_、1001_、2001_など）はリネーム済み
-        renamed_pattern = r'^[0-9]{4}_.*\.pdf$'
+        # _001, _002等の番号付きバリアントも対象に含める
+        renamed_pattern = r'^[0-9]{4}_.*(?:_[0-9]{3})?\.pdf$'
         # __split_ファイルは処理が必要な一時ファイルなので除外しない
-        
+        if filename.startswith('__split_'):
+            return False
+
         return bool(re.match(renamed_pattern, filename, re.IGNORECASE))
 
     def _update_button_states(self):

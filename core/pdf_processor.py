@@ -4,7 +4,7 @@ PDF分割・処理エンジン v5.2
 国税・地方税受信通知の自動分割機能 + 束ねPDF限定オート分割
 """
 
-import pymupdf as fitz  # PyMuPDF
+import fitz  # PyMuPDF
 import os
 import re
 import yaml

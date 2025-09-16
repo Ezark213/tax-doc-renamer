@@ -242,7 +242,23 @@ class JobContext:
             
         set_1_info = self.current_municipality_sets.get(1, {})
         return set_1_info.get("prefecture") == "東京都"
-    
+
+    def get_city_for_set(self, set_id: int) -> Optional[str]:
+        """
+        セット番号から市区町村名を取得
+
+        Args:
+            set_id: セット番号（1開始）
+
+        Returns:
+            Optional[str]: 市区町村名、見つからない場合はNone
+        """
+        if not self.current_municipality_sets or set_id not in self.current_municipality_sets:
+            return None
+
+        set_info = self.current_municipality_sets.get(set_id, {})
+        return set_info.get("city")
+
     def set_sample_municipality_sets(self):
         """
         修正指示書に基づくサンプル自治体セットを設定
