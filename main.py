@@ -216,100 +216,100 @@ class TaxDocumentRenamerV5:
         self._create_log_tab()
 
     def _create_file_tab(self):
-        """ファイル選択タブの作成"""
-        # 左右分割
-        paned = ttk.PanedWindow(self.file_frame, orient='horizontal')
+        """ファイル選択タブの作成（UI改善版：右側統合レイアウト）"""
+        # メインフレーム作成
+        main_frame = ttk.Frame(self.file_frame)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # 左右分割：左側は将来の機能拡張用、右側に全機能統合
+        paned = ttk.PanedWindow(main_frame, orient='horizontal')
         paned.pack(fill='both', expand=True)
         
-        # 左側: ファイル選択
-        left_frame = ttk.Frame(paned)
-        paned.add(left_frame, weight=2)
+        # 左側: 将来の機能拡張用プレースホルダー
+        left_frame = ttk.Frame(paned, width=200)
+        paned.add(left_frame, weight=1)
         
-        # ドラッグ&ドロップゾーン
-        ttk.Label(left_frame, text="ファイル選択", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
-        
-        self.drop_zone = DropZoneFrame(left_frame, self._on_files_dropped)
-        self.drop_zone.pack(fill='both', expand=True, pady=(0, 10))
-        
-        # ファイル操作ボタン
-        button_frame = ttk.Frame(left_frame)
-        button_frame.pack(fill='x', pady=(0, 10))
-        
-        ttk.Button(button_frame, text="📁 ファイル選択", command=self._select_files).pack(side='left', padx=(0, 5))
-        ttk.Button(button_frame, text="📂 フォルダ選択", command=self._select_folder).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="🗑️ クリア", command=self._clear_files).pack(side='left', padx=5)
-        
-        # ファイルリスト
-        ttk.Label(left_frame, text="選択されたファイル").pack(anchor='w')
-        
-        list_frame = ttk.Frame(left_frame)
-        list_frame.pack(fill='both', expand=True)
-        
-        self.files_listbox = tk.Listbox(list_frame)
-        scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=self.files_listbox.yview)
-        self.files_listbox.configure(yscrollcommand=scrollbar.set)
-        
-        self.files_listbox.pack(side='left', fill='both', expand=True)
-        scrollbar.pack(side='right', fill='y')
-        
-        # 右側: 設定 + Auto-Split控制
-        right_frame = ttk.Frame(paned)
-        paned.add(right_frame, weight=1)
-        
-        ttk.Label(right_frame, text="設定・Auto-Split", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
-        
-        # v5.2 Auto-Split控制フレーム
-        self.auto_split_control = AutoSplitControlFrame(right_frame)
-        self.auto_split_control.pack(fill='x', pady=(0, 10))
-        
-        # コールバック設定 - v5.4.2 簡素化版（フォルダ処理）
-        self.auto_split_control.set_callbacks(
-            batch_callback=self._start_folder_batch_processing
+        # プレースホルダーコンテンツ
+        placeholder_label = ttk.Label(
+            left_frame, 
+            text="将来の機能拡張エリア\n\n（リネーム機能等）",
+            font=('Yu Gothic UI', 10),
+            foreground='#888888',
+            justify='center'
         )
+        placeholder_label.pack(expand=True)
+        
+        # 右側: 全機能統合エリア
+        right_frame = ttk.Frame(paned)
+        paned.add(right_frame, weight=3)
+        
+        # 右側のレイアウト設定
+        right_frame.columnconfigure(0, weight=1)
+        
+        # === ファイル処理エリア ===
+        file_process_frame = ttk.LabelFrame(right_frame, text="📁 ファイル処理")
+        file_process_frame.pack(fill='x', pady=(0, 10))
+        
+        # ドラッグ&ドロップエリア（簡素化版）
+        self.drop_zone = DropZoneFrame(file_process_frame, self._on_files_dropped)
+        self.drop_zone.pack(fill='x', pady=10, padx=10)
+        
+        # メイン処理ボタン
+        main_process_button = ttk.Button(
+            file_process_frame,
+            text="⚡ 分割＆出力処理",
+            command=self._start_folder_batch_processing_direct,
+            style='Accent.TButton'
+        )
+        main_process_button.pack(pady=10)
+        
+        # === 設定エリア ===
+        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定")
+        settings_frame.pack(fill='x', pady=(0, 10))
         
         # 年月設定
-        year_month_frame = ttk.LabelFrame(right_frame, text="年月設定")
-        year_month_frame.pack(fill='x', pady=(0, 10))
+        year_month_frame = ttk.Frame(settings_frame)
+        year_month_frame.pack(fill='x', pady=5, padx=10)
         
-        ttk.Label(year_month_frame, text="手動入力年月 (YYMM):").pack(anchor='w')
-        self.year_month_var = tk.StringVar(value="2508")  # デフォルト値設定
+        ttk.Label(year_month_frame, text="年月 (YYMM):").pack(side='left')
+        self.year_month_var = tk.StringVar(value="2508")
         yymm_entry = ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10)
-        yymm_entry.pack(anchor='w', pady=5)
+        yymm_entry.pack(side='left', padx=(10, 0))
         
         # YYMM設定状態表示
         self.yymm_status_var = tk.StringVar()
-        self.yymm_status_label = ttk.Label(year_month_frame, textvariable=self.yymm_status_var, 
-                                          font=('Arial', 8), foreground='blue')
-        self.yymm_status_label.pack(anchor='w', pady=(0, 5))
+        self.yymm_status_label = ttk.Label(
+            year_month_frame, 
+            textvariable=self.yymm_status_var,
+            font=('Yu Gothic UI', 8), 
+            foreground='blue'
+        )
+        self.yymm_status_label.pack(side='left', padx=(10, 0))
         
         # YYMMバリデーション設定（リアルタイム更新）
         self.year_month_var.trace_add('write', self._validate_yymm_input)
         self._validate_yymm_input()  # 初期バリデーション
         
         # 自治体設定
-        municipality_frame = ttk.LabelFrame(right_frame, text="自治体設定")
+        municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定")
         municipality_frame.pack(fill='x', pady=(0, 10))
-        
         self._create_municipality_settings(municipality_frame)
         
-        # 処理オプション（機能常時有効のため設定UI削除）
-        # self.auto_split_var, self.ocr_enhanced_var, self.v5_mode_var は常にTrueとして動作
-        
-        # エクスポート設定
-        export_frame = ttk.LabelFrame(right_frame, text="エクスポート設定")
+        # === エクスポート設定 ===
+        export_frame = ttk.LabelFrame(right_frame, text="📤 エクスポート")
         export_frame.pack(fill='x', pady=(0, 10))
         
         # キーワード辞書エクスポートボタン
         ttk.Button(
             export_frame,
-            text="📤 キーワード辞書をエクスポート",
+            text="📄 キーワード辞書をエクスポート",
             command=self._export_keyword_dictionary
-        ).pack(anchor='w', pady=5)
+        ).pack(pady=5, padx=10, anchor='w')
         
         export_info = ttk.Label(
             export_frame,
             text="※分類ルール辞書をJSONファイルでデスクトップに保存",
-            font=('Arial', 8),
+            font=('Yu Gothic UI', 8),
             foreground='gray'
         )
         export_info.pack(anchor='w', padx=20)
@@ -662,6 +662,24 @@ class TaxDocumentRenamerV5:
             daemon=True
         )
         thread.start()
+
+    
+    def _start_folder_batch_processing_direct(self):
+        """UI改善版：Bundle Auto-Split常時有効の直接処理"""
+        # フォルダ選択ダイアログ
+        from tkinter import filedialog
+        
+        source_folder = filedialog.askdirectory(
+            title="処理対象フォルダを選択（PDF・CSVファイルが含まれるフォルダ）"
+        )
+        if not source_folder:
+            return
+        
+        # Bundle Auto-Split設定を常時有効として処理開始
+        self._log("UI改善版：Bundle Auto-Split常時有効で処理開始")
+        
+        # 既存の処理メソッドを呼び出し（Bundle Auto-Split常時有効）
+        self._start_folder_batch_processing(source_folder)
 
     def _folder_batch_processing_background(self, target_files, output_folder):
         """フォルダ一括処理のバックグラウンド処理（v5.4.5 REQ-001/002対応）"""
