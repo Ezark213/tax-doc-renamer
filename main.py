@@ -576,22 +576,33 @@ class TaxDocumentRenamerV5:
         thread.start()
 
     def _start_folder_batch_processing(self, source_folder=None):
-        """v5.4.2 フォルダ一括処理開始（オリジナルの処理フロー復元）"""
+        """v5.4.5 フォルダ一括処理開始（REQ-001/002対応）"""
         # フォルダが指定されていない場合はダイアログで選択
         if not source_folder:
-            source_folder = filedialog.askdirectory(title="処理対象フォルダを選択（PDFファイルが含まれるフォルダ）")
+            source_folder = filedialog.askdirectory(title="処理対象フォルダを選択（PDF・CSVファイルが含まれるフォルダ）")
             if not source_folder:
                 return
         
-        # PDFファイルを検索
-        pdf_files = []
-        for root, dirs, files in os.walk(source_folder):
-            for file in files:
-                if file.lower().endswith('.pdf') and not file.startswith('__split_'):
-                    pdf_files.append(os.path.join(root, file))
+        # 【REQ-001】階層制限: 選択フォルダ直下のファイルのみを処理対象とする
+        # 【REQ-002】CSV対応: .csv拡張子も処理対象に追加
+        target_files = []
+        try:
+            for file in os.listdir(source_folder):
+                file_path = os.path.join(source_folder, file)
+                # ファイルのみを対象（ディレクトリは除外）
+                if os.path.isfile(file_path):
+                    # PDFファイル（既存）
+                    if file.lower().endswith('.pdf') and not file.startswith('__split_'):
+                        target_files.append(file_path)
+                    # CSVファイル（新規追加）
+                    elif file.lower().endswith('.csv'):
+                        target_files.append(file_path)
+        except Exception as e:
+            messagebox.showerror("エラー", f"フォルダの読み込みに失敗しました:\n{e}")
+            return
         
-        if not pdf_files:
-            messagebox.showwarning("警告", f"選択されたフォルダにPDFファイルが見つかりませんでした:\n{source_folder}")
+        if not target_files:
+            messagebox.showwarning("警告", f"選択されたフォルダにPDF・CSVファイルが見つかりませんでした:\n{source_folder}")
             return
         
         # 処理中の場合はスキップ
@@ -625,124 +636,226 @@ class TaxDocumentRenamerV5:
             messagebox.showerror("エラー", f"YYMMフォルダの作成に失敗しました:\n{e}")
             return
         
-        # 重複ファイル名キャッシュをクリア
-        if hasattr(self, '_used_filenames'):
-            self._used_filenames.clear()
-            self._log("[DEBUG] ファイル名キャッシュクリア")
+        # 【REQ-001】処理済みファイル追跡機能の初期化
+        if not hasattr(self, '_processed_files_this_session'):
+            self._processed_files_this_session = set()
+        else:
+            self._processed_files_this_session.clear()
         
         # バックグラウンド処理開始
         self.rename_processing = True
         self._update_button_states()
         
-        # ファイル名重複追跡の初期化
-        if not hasattr(self, '_filename_lock'):
-            self._filename_lock = threading.Lock()
-            self._used_filenames = set()
-        else:
-            # 既存のセッション情報をクリアして新しい処理を開始
-            with self._filename_lock:
-                self._used_filenames.clear()
+        pdf_count = len([f for f in target_files if f.lower().endswith('.pdf')])
+        csv_count = len([f for f in target_files if f.lower().endswith('.csv')])
         
-        self._log(f"フォルダ一括処理開始: {len(pdf_files)}件のPDFファイルを処理")
+        self._log(f"フォルダ一括処理開始: {len(target_files)}件のファイルを処理")
+        self._log(f"  - PDFファイル: {pdf_count}件")
+        self._log(f"  - CSVファイル: {csv_count}件")
         self._log(f"処理対象フォルダ: {source_folder}")
         self._log(f"出力先: {output_folder}")
+        self._log(f"[REQ-001] 階層制限: 直下ファイルのみ処理")
         
         thread = threading.Thread(
             target=self._folder_batch_processing_background,
-            args=(pdf_files, output_folder),
+            args=(target_files, output_folder),
             daemon=True
         )
         thread.start()
 
-    def _folder_batch_processing_background(self, pdf_files, output_folder):
-        """フォルダ一括処理のバックグラウンド処理"""
+    def _folder_batch_processing_background(self, target_files, output_folder):
+        """フォルダ一括処理のバックグラウンド処理（v5.4.5 REQ-001/002対応）"""
         try:
-            total_files = len(pdf_files)
+            total_files = len(target_files)
             processed_files = 0
             
-            for i, file_path in enumerate(pdf_files, 1):
+            for i, file_path in enumerate(target_files, 1):
                 filename = os.path.basename(file_path)
                 
-                # リネーム済みファイルをスキップ（無限リネーム防止）
-                if self._is_already_renamed(filename):
-                    self.root.after(0, lambda f=filename: self._log(f"スキップ（既リネーム済み）: {f}"))
+                # 【REQ-001】処理済みファイル追跡による重複処理完全排除
+                if file_path in self._processed_files_this_session:
+                    self.root.after(0, lambda f=filename: self._log(f"[REQ-001] 既処理済みスキップ: {f}"))
                     continue
                 
-                self.root.after(0, lambda f=filename: self._log(f"処理中 ({i}/{total_files}): {f}"))
+                # 処理済みファイルとして記録
+                self._processed_files_this_session.add(file_path)
+                
+                self.root.after(0, lambda f=filename, i=i, total=total_files: self._log(f"処理中 ({i}/{total}): {f}"))
                 
                 try:
-                    # v5.4.2統一処理: 常に pre-extract → 決定論的リネーム経路
-                    gui_yymm = self.year_month_var.get()
-                    ui_context = create_ui_context_from_gui(
-                        yymm_var_value=gui_yymm,
-                        municipality_sets=getattr(self, 'municipality_sets', {}),
-                        batch_mode=True,
-                        debug_mode=False
-                    )
-                    
-                    # ファイル処理（Bundle分割含む）
-                    # まず分割を試行（Bundleファイルの場合）
-                    split_result = self.pdf_processor.maybe_split_pdf(
-                        input_pdf_path=file_path,
-                        out_dir=output_folder,
-                        force=False,
-                        processing_callback=None
-                    )
-                    
-                    if split_result['success']:
-                        # Bundle分割が成功した場合
-                        processed_files += 1
-                        self.root.after(0, lambda f=filename: self._log(f"Bundle分割完了: {f}"))
-                        
-                        # Bundle分割後の各ファイルをリネーム処理
-                        if split_result.get('split_files'):
-                            split_files = split_result.get('split_files', [])
-                            for split_file_path in split_files:
-                                try:
-                                    # 分割後ファイルにもリネーム処理を適用
-                                    user_yymm = self._resolve_yymm_with_policy(split_file_path, None)
-                                    snapshot = self.pre_extract_engine.build_snapshot(split_file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-                                    success = self._process_single_file_v5_with_snapshot(split_file_path, output_folder, snapshot)
-                                    if success:
-                                        self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"分割後ファイル処理完了: {sf}"))
-                                    
-                                    # 一時ファイル削除処理
-                                    if os.path.exists(split_file_path) and os.path.basename(split_file_path).startswith("__split_"):
-                                        try:
-                                            # 一時ファイルを削除（未分類移動せず）
-                                            os.remove(split_file_path)
-                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[cleanup] 一時ファイル削除: {sf}"))
-                                        except Exception as cleanup_error:
-                                            self.root.after(0, lambda sf=os.path.basename(split_file_path), err=str(cleanup_error):
-                                                           self._log(f"[cleanup] 一時ファイル削除失敗 {sf}: {err}"))
-                                    
-                                except Exception as e:
-                                    self.root.after(0, lambda err=str(e), sf=os.path.basename(split_file_path): self._log(f"分割後ファイル処理エラー {sf}: {err}"))
-                                    # エラー時は一時ファイルを削除
-                                    try:
-                                        if os.path.exists(split_file_path):
-                                            os.remove(split_file_path)
-                                            self.root.after(0, lambda sf=os.path.basename(split_file_path): self._log(f"[error-recovery] エラーファイルを削除: {sf}"))
-                                    except Exception as recovery_error:
-                                        self.root.after(0, lambda err=str(recovery_error): self._log(f"[error-recovery] ファイル削除失敗: {err}"))
+                    # ファイル拡張子による処理分岐
+                    if file_path.lower().endswith('.pdf'):
+                        # PDF処理（既存ロジック）
+                        success = self._process_pdf_file(file_path, output_folder)
+                    elif file_path.lower().endswith('.csv'):
+                        # 【REQ-002】CSV処理（新規実装）
+                        success = self._process_csv_file(file_path, output_folder)
                     else:
-                        # 通常の単一ファイル処理 - スナップショットを作成してから処理
-                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
-                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-                        success = self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
-                        if success:
-                            processed_files += 1
+                        self.root.after(0, lambda f=filename: self._log(f"未対応ファイル形式: {f}"))
+                        continue
+                    
+                    if success:
+                        processed_files += 1
                         
                 except Exception as e:
                     self.root.after(0, lambda err=str(e), f=filename: self._log(f"ファイル処理エラー {f}: {err}"))
                     continue
             
-            self.root.after(0, lambda: self._log(f"フォルダ一括処理完了"))
+            self.root.after(0, lambda: self._log(f"フォルダ一括処理完了: {processed_files}/{total_files}件処理"))
             
         except Exception as e:
-            self._log(f"v5.4.2リネーム処理エラー: {str(e)}")
+            self._log(f"v5.4.5リネーム処理エラー: {str(e)}")
         finally:
             self.root.after(0, self._rename_processing_finished)
+
+    def _process_pdf_file(self, file_path: str, output_folder: str) -> bool:
+        """PDF ファイル処理（既存ロジック）"""
+        try:
+            # v5.4.2統一処理: 常に pre-extract → 決定論的リネーム経路
+            gui_yymm = self.year_month_var.get()
+            ui_context = create_ui_context_from_gui(
+                yymm_var_value=gui_yymm,
+                municipality_sets=getattr(self, 'municipality_sets', {}),
+                batch_mode=True,
+                debug_mode=False
+            )
+            
+            # ファイル処理（Bundle分割含む）
+            # まず分割を試行（Bundleファイルの場合）
+            split_result = self.pdf_processor.maybe_split_pdf(
+                input_pdf_path=file_path,
+                out_dir=output_folder,
+                force=False,
+                processing_callback=None
+            )
+            
+            if split_result['success']:
+                # Bundle分割が成功した場合
+                filename = os.path.basename(file_path)
+                self.root.after(0, lambda f=filename: self._log(f"Bundle分割完了: {f}"))
+                
+                # Bundle分割後の各ファイルをリネーム処理
+                if split_result.get('split_files'):
+                    split_files = split_result.get('split_files', [])
+                    for split_file_path in split_files:
+                        try:
+                            # 分割後ファイルにもリネーム処理を適用
+                            user_yymm = self._resolve_yymm_with_policy(split_file_path, None)
+                            snapshot = self.pre_extract_engine.build_snapshot(split_file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                            success = self._process_single_file_v5_with_snapshot(split_file_path, output_folder, snapshot)
+                            if success:
+                                split_filename = os.path.basename(split_file_path)
+                                self.root.after(0, lambda sf=split_filename: self._log(f"分割後ファイル処理完了: {sf}"))
+                            
+                            # 一時ファイル削除処理
+                            if os.path.exists(split_file_path) and os.path.basename(split_file_path).startswith("__split_"):
+                                try:
+                                    # 一時ファイルを削除（未分類移動せず）
+                                    os.remove(split_file_path)
+                                    split_filename = os.path.basename(split_file_path)
+                                    self.root.after(0, lambda sf=split_filename: self._log(f"[cleanup] 一時ファイル削除: {sf}"))
+                                except Exception as cleanup_error:
+                                    split_filename = os.path.basename(split_file_path)
+                                    error_msg = str(cleanup_error)
+                                    self.root.after(0, lambda sf=split_filename, err=error_msg:
+                                                   self._log(f"[cleanup] 一時ファイル削除失敗 {sf}: {err}"))
+                            
+                        except Exception as e:
+                            split_filename = os.path.basename(split_file_path)
+                            error_msg = str(e)
+                            self.root.after(0, lambda err=error_msg, sf=split_filename: self._log(f"分割後ファイル処理エラー {sf}: {err}"))
+                            # エラー時は一時ファイルを削除
+                            try:
+                                if os.path.exists(split_file_path):
+                                    os.remove(split_file_path)
+                                    split_filename = os.path.basename(split_file_path)
+                                    self.root.after(0, lambda sf=split_filename: self._log(f"[error-recovery] エラーファイルを削除: {sf}"))
+                            except Exception as recovery_error:
+                                error_msg = str(recovery_error)
+                                self.root.after(0, lambda err=error_msg: self._log(f"[error-recovery] ファイル削除失敗: {err}"))
+                
+                return True
+            else:
+                # 通常の単一ファイル処理 - スナップショットを作成してから処理
+                user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                return self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+                
+        except Exception as e:
+            filename = os.path.basename(file_path)
+            error_msg = str(e)
+            self.root.after(0, lambda err=error_msg, f=filename: self._log(f"PDF処理エラー {f}: {err}"))
+            return False
+
+    def _process_csv_file(self, file_path: str, output_folder: str) -> bool:
+        """【REQ-002】CSV ファイル処理（仕訳帳対応）"""
+        try:
+            filename = os.path.basename(file_path)
+            
+            # CSVファイル内容を読み込んで仕訳帳かどうか判定
+            is_journal = self._is_csv_journal(file_path)
+            
+            if is_journal:
+                # 5006_仕訳帳としてリネーム
+                yymm = self.year_month_var.get()
+                new_filename = f"5006_仕訳帳_{yymm}.csv"
+                output_path = os.path.join(output_folder, new_filename)
+                
+                # 重複回避処理
+                output_path = self._generate_unique_filename(output_path)
+                
+                # ファイルコピー
+                import shutil
+                shutil.copy2(file_path, output_path)
+                
+                self.root.after(0, lambda f=filename, nf=os.path.basename(output_path): 
+                               self._log(f"[REQ-002] CSV仕訳帳処理完了: {f} → {nf}"))
+                return True
+            else:
+                self.root.after(0, lambda f=filename: self._log(f"[REQ-002] 仕訳帳以外のCSVファイル: {f}"))
+                return False
+                
+        except Exception as e:
+            filename = os.path.basename(file_path)
+            error_msg = str(e)
+            self.root.after(0, lambda err=error_msg, f=filename: self._log(f"CSV処理エラー {f}: {err}"))
+            return False
+
+    def _is_csv_journal(self, file_path: str) -> bool:
+        """CSVファイルが仕訳帳かどうかを判定"""
+        try:
+            import csv
+            import codecs
+            
+            # ファイル名による判定
+            filename = os.path.basename(file_path).lower()
+            if '仕訳' in filename or 'journal' in filename:
+                return True
+            
+            # CSV内容による判定（ヘッダー行を確認）
+            encodings = ['utf-8', 'shift_jis', 'cp932', 'utf-8-sig']
+            
+            for encoding in encodings:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        reader = csv.reader(f)
+                        header = next(reader, None)
+                        if header:
+                            header_text = ''.join(header).lower()
+                            # 仕訳帳特有のキーワードを検索
+                            journal_keywords = ['借方', '貸方', 'debit', 'credit', '勘定科目', '仕訳']
+                            if any(keyword in header_text for keyword in journal_keywords):
+                                return True
+                    break  # 正常に読めたらループを抜ける
+                except UnicodeDecodeError:
+                    continue  # 次のエンコーディングを試す
+                except Exception:
+                    continue
+            
+            return False
+            
+        except Exception:
+            return False
 
     def _process_single_file_v5(self, file_path: str, output_folder: str):
         """v5.4.2 単一ファイルの処理"""
@@ -1427,32 +1540,24 @@ class TaxDocumentRenamerV5:
         return split_files
 
     def _generate_unique_filename(self, filepath: str) -> str:
-        """重複しないファイル名を生成（スレッドセーフ）"""
-        # スレッドセーフなロック機構を使用
-        if not hasattr(self, '_filename_lock'):
-            self._filename_lock = threading.Lock()
-            self._used_filenames = set()
+        """【修正】重複しないファイル名を生成（履歴保存機能削除）"""
+        # 【修正】ファイル履歴機能を削除し、シンプルな重複チェックのみ実行
+        if not os.path.exists(filepath):
+            return filepath
         
-        with self._filename_lock:
-            # 既に使用されているファイル名をチェック
-            if filepath not in self._used_filenames and not os.path.exists(filepath):
-                self._used_filenames.add(filepath)
-                return filepath
-            
-            dir_name = os.path.dirname(filepath)
-            base_name = os.path.splitext(os.path.basename(filepath))[0]
-            ext = os.path.splitext(filepath)[1]
-            
-            counter = 1
-            while True:
-                new_filename = f"{base_name}_{counter:03d}{ext}"
-                new_filepath = os.path.join(dir_name, new_filename)
-                if new_filepath not in self._used_filenames and not os.path.exists(new_filepath):
-                    self._used_filenames.add(new_filepath)
-                    # 重複処理のログ出力
-                    print(f"[DUPLICATE] {os.path.basename(filepath)} -> {os.path.basename(new_filepath)}")
-                    return new_filepath
-                counter += 1
+        dir_name = os.path.dirname(filepath)
+        base_name = os.path.splitext(os.path.basename(filepath))[0]
+        ext = os.path.splitext(filepath)[1]
+        
+        counter = 1
+        while True:
+            new_filename = f"{base_name}_{counter:03d}{ext}"
+            new_filepath = os.path.join(dir_name, new_filename)
+            if not os.path.exists(new_filepath):
+                # 重複処理のログ出力
+                print(f"[DUPLICATE] {os.path.basename(filepath)} -> {os.path.basename(new_filepath)}")
+                return new_filepath
+            counter += 1
 
     def _split_processing_finished(self):
         """分割処理完了時の処理"""
@@ -1466,9 +1571,7 @@ class TaxDocumentRenamerV5:
         self.rename_processing = False
         self._update_button_states()
         
-        # 使用済みファイル名セットをクリア
-        if hasattr(self, '_used_filenames'):
-            self._used_filenames.clear()
+        # 【修正】使用済みファイル名セットの管理を削除
         
         self.notebook.select(1)  # 結果タブに切り替え
         messagebox.showinfo("完了", "v5.4.2リネーム処理が完了しました")

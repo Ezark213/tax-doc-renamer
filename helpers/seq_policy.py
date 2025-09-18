@@ -214,19 +214,174 @@ def is_pref_receipt(document_type: str) -> bool:
 def is_city_receipt(document_type: str) -> bool:
     """
     市町村受信通知かどうかを判定
-    
+
     Args:
         document_type: ドキュメントタイプ（例: "2003_受信通知"）
-        
+
     Returns:
         bool: 市町村受信通知（2003系）の場合True
     """
     if not is_receipt_notice(document_type):
         return False
-        
+
     code_part = document_type.split("_")[0]
     try:
         code_num = int(code_part)
         return 2000 <= code_num < 3000
     except ValueError:
         return False
+
+def analyze_prefecture_sets(set_config):
+    """
+    汎用セット解析機能 - セット設定から都道府県・市町村情報を抽出
+
+    Args:
+        set_config: {1: {'prefecture': 'XX県', 'city': 'XX市'}, ...}
+
+    Returns:
+        tuple: (prefecture_list, municipality_list, has_tokyo, tokyo_position)
+            - prefecture_list: 都道府県リスト（順序保持）
+            - municipality_list: 市町村リスト（順序保持、空文字除外、Tokyo skip適用済み）
+            - has_tokyo: 東京都の存在フラグ
+            - tokyo_position: 東京都の位置（1-based、存在しない場合はNone）
+    """
+    if not set_config:
+        return [], [], False, None
+
+    prefecture_list = []
+    raw_municipality_list = []  # Tokyo skip前の生の市町村リスト
+    has_tokyo = False
+    tokyo_position = None
+
+    # セット番号順で処理
+    for set_num in sorted(set_config.keys()):
+        set_info = set_config[set_num]
+        pref = set_info.get('prefecture', '').strip()
+        city = set_info.get('city', '').strip()
+
+        prefecture_list.append(pref)
+
+        # 東京都の検出
+        if pref == "東京都":
+            has_tokyo = True
+            tokyo_position = set_num
+
+        # 市町村が存在する場合のみ追加（空文字・Noneは除外）
+        if city:
+            raw_municipality_list.append({
+                'prefecture': pref,
+                'city': city,
+                'set_number': set_num,
+                'original_position': len(raw_municipality_list)  # 市町村内での元の位置
+            })
+
+    # Tokyo skip logic: 東京都が存在し、市町村なしの場合、市町村リストから東京都分を繰り上げ
+    municipality_list = []
+    if has_tokyo and tokyo_position:
+        # 東京都のセットに市町村があるかチェック
+        tokyo_set = set_config.get(tokyo_position, {})
+        tokyo_has_city = bool(tokyo_set.get('city', '').strip())
+
+        if not tokyo_has_city:
+            # 東京都は市町村なし → 市町村リストで東京都以降を繰り上げ
+            logger.debug(f"[GENERIC_ANALYSIS] Tokyo skip applied: Tokyo at set {tokyo_position} has no municipality")
+            for muni_info in raw_municipality_list:
+                if muni_info['set_number'] > tokyo_position:
+                    # 東京都より後のセット → 市町村順序で1つ繰り上げ
+                    muni_info['adjusted_position'] = muni_info['original_position']  # すでに東京都が除外されているのでそのまま
+                else:
+                    # 東京都より前のセット → そのまま
+                    muni_info['adjusted_position'] = muni_info['original_position']
+                municipality_list.append(muni_info)
+        else:
+            # 東京都に市町村あり → 繰り上げなし
+            logger.debug(f"[GENERIC_ANALYSIS] Tokyo has municipality: {tokyo_set.get('city')}, no skip applied")
+            municipality_list = raw_municipality_list
+            for i, muni_info in enumerate(municipality_list):
+                muni_info['adjusted_position'] = i
+    else:
+        # 東京都なし → 繰り上げなし
+        logger.debug(f"[GENERIC_ANALYSIS] No Tokyo found, no skip applied")
+        municipality_list = raw_municipality_list
+        for i, muni_info in enumerate(municipality_list):
+            muni_info['adjusted_position'] = i
+
+    logger.info(f"[GENERIC_ANALYSIS] Analysis complete: {len(prefecture_list)} prefectures, {len(municipality_list)} municipalities, Tokyo={has_tokyo} at position {tokyo_position}")
+
+    return prefecture_list, municipality_list, has_tokyo, tokyo_position
+
+def generate_receipt_number_generic(document_type, target_info, set_config):
+    """
+    汎用受信通知連番生成機能
+
+    Args:
+        document_type: "prefecture_receipt" or "municipality_receipt"
+        target_info: OCR解析結果から得られた対象情報 (prefecture, city)
+        set_config: セット設定辞書
+
+    Returns:
+        str: 生成された連番（例："1013", "2003"）
+
+    Raises:
+        ValueError: 対象自治体がセット設定に見つからない場合
+    """
+    prefecture_list, municipality_list, has_tokyo, tokyo_position = analyze_prefecture_sets(set_config)
+
+    if document_type == "prefecture_receipt":
+        # 都道府県受信通知の処理
+        base_code = 1003
+        target_prefecture = target_info.get('prefecture', '').strip()
+
+        if not target_prefecture:
+            raise ValueError("[GENERIC_RECEIPT] Prefecture name is required for prefecture receipt")
+
+        try:
+            pref_index = prefecture_list.index(target_prefecture)
+            receipt_number = base_code + pref_index * 10
+            logger.info(f"[GENERIC_RECEIPT] Prefecture receipt: {target_prefecture} at index {pref_index} → {receipt_number}")
+            return f"{receipt_number:04d}"
+        except ValueError:
+            raise ValueError(f"[GENERIC_RECEIPT] Prefecture '{target_prefecture}' not found in set configuration")
+
+    elif document_type == "municipality_receipt":
+        # 市町村受信通知の処理（Tokyo skip適用済み）
+        base_code = 2003
+        target_prefecture = target_info.get('prefecture', '').strip()
+        target_city = target_info.get('city', '').strip()
+
+        if not target_city:
+            raise ValueError("[GENERIC_RECEIPT] City name is required for municipality receipt")
+
+        # 市町村リストでの位置を特定（Tokyo skip適用済み）
+        municipal_index = None
+        for muni_info in municipality_list:
+            if (muni_info['prefecture'] == target_prefecture and
+                muni_info['city'] == target_city):
+                municipal_index = muni_info['adjusted_position']
+                logger.info(f"[GENERIC_RECEIPT] Municipality found: {target_prefecture} {target_city} at adjusted position {municipal_index}")
+                break
+
+        if municipal_index is None:
+            available_cities = [f"{m['prefecture']} {m['city']}" for m in municipality_list]
+            raise ValueError(f"[GENERIC_RECEIPT] Municipality '{target_prefecture} {target_city}' not found. Available: {available_cities}")
+
+        receipt_number = base_code + municipal_index * 10
+        logger.info(f"[GENERIC_RECEIPT] Municipality receipt: {target_prefecture} {target_city} → position {municipal_index} → {receipt_number}")
+        return f"{receipt_number:04d}"
+
+    else:
+        raise ValueError(f"[GENERIC_RECEIPT] Unknown document_type: {document_type}")
+
+def extract_prefecture_city_from_ocr(ocr_text):
+    """
+    OCRテキストから都道府県・市町村を抽出（既存ロジックとの互換性のため）
+
+    Args:
+        ocr_text: OCR解析されたテキスト
+
+    Returns:
+        dict: {'prefecture': str, 'city': str}
+    """
+    # 既存のOCR解析ロジックをここに統合
+    # 現在は仮実装として返す
+    return {'prefecture': '', 'city': ''}

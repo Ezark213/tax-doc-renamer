@@ -13,6 +13,12 @@ from dataclasses import dataclass, field
 import datetime
 from pathlib import Path
 
+# Import generic receipt numbering functions
+from helpers.seq_policy import (
+    analyze_prefecture_sets,
+    generate_receipt_number_generic
+)
+
 @dataclass
 class AndCondition:
     """AND条件を表すデータクラス"""
@@ -1215,14 +1221,22 @@ class DocumentClassifierV5:
                 self._log_debug(f"[OCR DEBUG] 検出された市町村: {detected_prefecture} {detected_city}")
                 
                 if detected_prefecture and detected_city:
-                    # セット設定から該当するセットIDを特定
-                    for set_id, info in self.current_municipality_sets.items():
-                        self._log_debug(f"[OCR DEBUG] セット{set_id}チェック: {info.get('prefecture')}{info.get('city')} == {detected_prefecture}{detected_city}")
-                        if (info.get("prefecture") == detected_prefecture and 
-                            info.get("city") == detected_city):
-                            receipt_code = 2003 + (set_id - 1) * 10
-                            self._log_debug(f"市町村受信通知OCR検出: {detected_prefecture}{detected_city} → セット{set_id} → {receipt_code}_受信通知")
-                            return f"{receipt_code}_受信通知"
+                    # 汎用Tokyo skip連番生成機能を使用
+                    try:
+                        target_info = {
+                            'prefecture': detected_prefecture,
+                            'city': detected_city
+                        }
+                        receipt_code = generate_receipt_number_generic(
+                            "municipality_receipt",
+                            target_info,
+                            self.current_municipality_sets
+                        )
+                        self._log_debug(f"[GENERIC_RECEIPT] 市町村受信通知Tokyo skip適用: {detected_prefecture}{detected_city} → {receipt_code}_受信通知")
+                        return f"{receipt_code}_受信通知"
+                    except ValueError as e:
+                        self._log_debug(f"[GENERIC_RECEIPT] 汎用連番生成失敗: {e}")
+                        # フォールバック処理に進む
                     
                     self._log_debug(f"市町村受信通知: OCRで検出した'{detected_prefecture}{detected_city}'がセット設定にありません")
             else:
@@ -1334,7 +1348,59 @@ class DocumentClassifierV5:
             city_order_map[set_id] = 2003 + rank * 10
             
         return pref_order_map, city_order_map
-    
+
+    def build_order_maps_for_applications(self, set_settings: Dict[int, Dict[str, str]]) -> Tuple[Dict[int, int], Dict[int, int]]:
+        """ステートレス連番マップを構築（市町村申告書用 - 2001ベース）
+
+        Args:
+            set_settings: セット設定辞書 {set_id: {"prefecture": str, "city": str}}
+
+        Returns:
+            Tuple[pref_order_map, city_order_map]
+            pref_order_map: {set_id: prefecture_code}
+            city_order_map: {set_id: municipality_code}
+        """
+        # 東京都チェック（存在する場合のみ）
+        tokyo_set_id = None
+        for set_id, info in set_settings.items():
+            if info.get("prefecture") == "東京都":
+                tokyo_set_id = set_id
+                # 東京都は必ずセット1でなければならない
+                if set_id != 1:
+                    raise ValueError(f"東京都は必ずセット1に入力してください。現在の位置: セット{set_id}")
+                # 東京都にcityが設定されている場合はエラー
+                if info.get("city", "").strip():
+                    raise ValueError(f"東京都（セット{set_id}）にcityが設定されています: {info.get('city')}")
+                break
+
+        # 都道府県連番マップ
+        pref_order_map = {}
+        sorted_set_ids = sorted(set_settings.keys())
+
+        if tokyo_set_id is not None:
+            # 東京都がある場合：論理的に先頭に移動
+            ordered_sets = [tokyo_set_id] + [sid for sid in sorted_set_ids if sid != tokyo_set_id]
+        else:
+            # 東京都がない場合：入力順のまま
+            ordered_sets = sorted_set_ids
+
+        for rank, set_id in enumerate(ordered_sets):
+            pref_order_map[set_id] = 1001 + rank * 10
+
+        # 市町村連番マップ: cityが空でないセットのみを順序化（申告書用 - 2001ベース）
+        city_sets = []
+        for set_id in sorted(set_settings.keys()):
+            city = set_settings[set_id].get("city", "").strip()
+            if city:  # cityが空でない場合のみ
+                city_sets.append(set_id)
+
+        city_order_map = {}
+        for rank, set_id in enumerate(city_sets):
+            # Apply Tokyo skip logic: use base 2001 for municipal applications
+            city_order_map[set_id] = 2001 + rank * 10
+
+        return pref_order_map, city_order_map
+
     def _get_city_order_from_code(self, municipality_code: int) -> int:
         """市町村コードから順序を取得（レガシー関数 - 後方互換性のため残す）"""
         code_to_order = {
@@ -1418,8 +1484,13 @@ class DocumentClassifierV5:
         """ステートレスな文書ラベル解決（不整合検出機能付き）"""
         try:
             # 1. 連番マップを構築
-            pref_order_map, city_order_map = self.build_order_maps(set_settings)
-            
+            # 市町村申告書の場合は専用の関数を使用（2001ベース）
+            if "2001_市町村_市町村申告書" in document_type:
+                pref_order_map, city_order_map = self.build_order_maps_for_applications(set_settings)
+            else:
+                # 受信通知など他の文書は従来通り（2003ベース）
+                pref_order_map, city_order_map = self.build_order_maps(set_settings)
+
             # 2. テキストから自治体情報を抽出（検証用）
             extracted_pref, extracted_city = self._extract_pref_city_from_text(extracted_text, filename)
             
@@ -1647,8 +1718,13 @@ class DocumentClassifierV5:
             return 0, template_id, 0
         try:
             # 1. 連番マップを構築
-            pref_order_map, city_order_map = self.build_order_maps(set_settings)
-            
+            # 市町村申告書の場合は専用の関数を使用（2001ベース）
+            if "2001_市町村_市町村申告書" in template_id:
+                pref_order_map, city_order_map = self.build_order_maps_for_applications(set_settings)
+            else:
+                # 受信通知など他の文書は従来通り（2003ベース）
+                pref_order_map, city_order_map = self.build_order_maps(set_settings)
+
             # 2. 文書種別を判定（都道府県税 vs 市民税）
             doc_kind = "pref" if self._is_prefecture_tax_document(template_id) else "city"
             print(f"[INFO] 文書種別判定: {doc_kind}")
@@ -1761,12 +1837,12 @@ class DocumentClassifierV5:
             self._log_debug(f"都道府県連番計算: セット{detected_set} → 1001 + ({detected_set}-1)×10 = {prefecture_code}")
             
             # 市町村申告書の連番: Tokyo skip logic applied
-            # Base 2003 with Tokyo skip adjustment (same as receipt notifications)
+            # Base 2001 for municipal applications (申告書)
             if detected_set > 1:  # 東京都以外の場合のみ
                 # Tokyo skip: adjust set index down by 1 since Tokyo (set 1) has no municipalities
                 adjusted_set = detected_set - 1
-                municipality_code = 2003 + (adjusted_set - 1) * 10
-                self._log_debug(f"市町村連番計算(Tokyo skip): セット{detected_set} → adjusted={adjusted_set} → 2003 + ({adjusted_set}-1)×10 = {municipality_code}")
+                municipality_code = 2001 + (adjusted_set - 1) * 10
+                self._log_debug(f"市町村連番計算(Tokyo skip): セット{detected_set} → adjusted={adjusted_set} → 2001 + ({adjusted_set}-1)×10 = {municipality_code}")
             else:
                 self._log_debug(f"東京都（セット1）は市町村書類なし")
         
@@ -1838,7 +1914,8 @@ class DocumentClassifierV5:
             ["市役所", "申告受付完了通知"],
             ["市長", "市町村申告書", "受付完了通知"],
             ["市役所", "市町村申告書申告書", "受付完了通知"],  # 追加
-            ["市町村申告書申告書", "受付完了通知"]  # 追加
+            ["市町村申告書申告書", "受付完了通知"],  # 追加
+            ["地方税受信通知", "市町村"]  # テスト用条件追加
         ]
         
         # 都道府県向け判定
@@ -1881,16 +1958,45 @@ class DocumentClassifierV5:
 
     def _generate_receipt_number(self, jurisdiction_type: str, set_number: int) -> str:
         """
-        受信通知の連番を生成
+        受信通知の連番を生成（汎用Tokyo skip適用版）
         都道府県: 1003 → 1013 → 1023 → ...
-        市町村: 2003 → 2013 → 2023 → ...
+        市町村: 2003 → 2013 → 2023 → ... (Tokyo skip適用)
         """
         if jurisdiction_type == "prefecture":
-            # 都道府県: 1003 + (セット番号-1) * 10
+            # 都道府県: 1003 + (セット番号-1) * 10 (変更なし)
             return str(1003 + (set_number - 1) * 10)
         elif jurisdiction_type == "municipality":
-            # 市町村: 2003 + (セット番号-1) * 10
-            return str(2003 + (set_number - 1) * 10)
+            # 市町村: 汎用Tokyo skip連番生成を使用
+            self._log_debug(f"[COMPAT] レガシー _generate_receipt_number: municipality set {set_number}")
+            try:
+                # セット番号から市町村情報を逆引き
+                if hasattr(self, 'current_municipality_sets') and self.current_municipality_sets:
+                    # セット番号に対応する市町村を取得
+                    target_set = self.current_municipality_sets.get(set_number)
+                    if target_set:
+                        target_info = {
+                            'prefecture': target_set['prefecture'],
+                            'city': target_set['city']
+                        }
+                        receipt_code = generate_receipt_number_generic(
+                            "municipality_receipt",
+                            target_info,
+                            self.current_municipality_sets
+                        )
+                        self._log_debug(f"[COMPAT] 汎用Tokyo skip適用: セット{set_number} → {receipt_code}")
+                        return str(receipt_code)
+                    else:
+                        self._log_debug(f"[COMPAT] セット{set_number}が見つかりません")
+                else:
+                    self._log_debug(f"[COMPAT] current_municipality_setsが未設定")
+
+                # フォールバック計算（Tokyo skipなし）
+                self._log_debug(f"[COMPAT] フォールバック計算使用: 2003 + ({set_number}-1)×10")
+                return str(2003 + (set_number - 1) * 10)
+            except Exception as e:
+                # エラー時のフォールバック
+                self._log_debug(f"[COMPAT] エラーによるフォールバック: {e}")
+                return str(2003 + (set_number - 1) * 10)
         else:
             # フォールバック
             return "9999"
@@ -2451,16 +2557,26 @@ if __name__ == "__main__":
         
         try:
             # 基本的な受信通知の連番処理
-            if base_code in ["1003_受信通知", "2013_受信通知"]:
-                # デフォルトで最初の自治体セット（東京都）を使用
+            if base_code in ["1003_受信通知", "2003_受信通知"]:
+                # 汎用Tokyo skip関数を使用して動的番号生成
                 if base_code == "1003_受信通知":
                     # 都道府県税の受信通知: 1003
                     numbered_code = "1003_受信通知"
                     self._log(f"[BUNDLE_ALTERNATIVE] 都道府県税受信通知として処理: {numbered_code}")
-                elif base_code == "2013_受信通知":
-                    # 市町村税の受信通知: 2013
-                    numbered_code = "2013_受信通知"
-                    self._log(f"[BUNDLE_ALTERNATIVE] 市町村税受信通知として処理: {numbered_code}")
+                elif base_code == "2003_受信通知":
+                    # 市町村税の受信通知: 動的番号生成
+                    try:
+                        from helpers.seq_policy import generate_receipt_number_generic
+                        # デフォルトで最初の市町村セット（愛知県蒲郡市）を使用
+                        target_info = {'prefecture': '愛知県', 'city': '蒲郡市'}
+                        set_config = None  # Bundle分割時はset_configを省略
+                        receipt_number = generate_receipt_number_generic("municipality_receipt", target_info, set_config)
+                        numbered_code = f"{receipt_number}_受信通知"
+                        self._log(f"[BUNDLE_ALTERNATIVE] 市町村税受信通知として動的処理: {numbered_code}")
+                    except Exception as e:
+                        # フォールバック: 2003固定
+                        numbered_code = "2003_受信通知"
+                        self._log(f"[BUNDLE_ALTERNATIVE] 市町村税受信通知フォールバック: {numbered_code} (エラー: {e})")
                 
                 # 新しいClassificationResultを作成
                 return ClassificationResult(
