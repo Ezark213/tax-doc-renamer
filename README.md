@@ -1,13 +1,13 @@
-# 🧾 税務書類リネームシステム v5.4.6-stable - **市町村番号体系修正完了版！**
+# 🧾 税務書類リネームシステム v5.5.0-stable - **左側機能完全修正版！**
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.4.6--stable-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v5.5.0--stable-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![市町村番号修正](https://img.shields.io/badge/%E5%B8%82%E7%94%BA%E6%9D%91%E7%95%AA%E5%8F%B7-FIXED-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![CSV対応](https://img.shields.io/badge/CSV%E4%BB%95%E8%A8%B3%E5%B8%B3-ADDED-green.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![テスト](https://img.shields.io/badge/%E3%83%86%E3%82%B9%E3%83%88-100%25%E6%88%90%E5%8A%9F-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
-[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.25-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
