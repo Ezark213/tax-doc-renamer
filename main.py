@@ -13,6 +13,7 @@ from typing import List, Dict, Optional
 import sys
 import pytesseract
 import shutil
+import datetime
 
 # プロジェクトのルートディレクトリをパスに追加
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -173,6 +174,42 @@ class TaxDocumentRenamerV5:
             self.yymm_status_var.set(f"❌ エラー: {str(e)}")
             self.yymm_status_label.config(foreground='red')
 
+    def _validate_left_yymm_input(self, *args):
+        """左側YYMM入力の検証とステータス表示"""
+        try:
+            yymm = self.left_year_month_var.get()
+            if not yymm:
+                self.left_yymm_status_var.set("未入力")
+                return False
+            
+            # 4桁数字チェック
+            if len(yymm) == 4 and yymm.isdigit():
+                year = int(yymm[:2])
+                month = int(yymm[2:4])
+                
+                if 1 <= month <= 12:
+                    # 有効な年月
+                    current_year = datetime.datetime.now().year % 100
+                    if year <= current_year + 5:  # 現在年+5年まで許可
+                        self.left_yymm_status_var.set("✓ 有効")
+                        return True
+                    else:
+                        self.left_yymm_status_var.set("年が未来すぎます")
+                        return False
+                else:
+                    self.left_yymm_status_var.set("月が無効(01-12)")
+                    return False
+            else:
+                if len(yymm) < 4:
+                    self.left_yymm_status_var.set(f"入力中... ({len(yymm)}/4)")
+                else:
+                    self.left_yymm_status_var.set("4桁の数字で入力")
+                return False
+                
+        except Exception as e:
+            self.left_yymm_status_var.set("エラー")
+            return False
+
     def _create_ui(self):
         """UIの構築"""
         # メインフレーム
@@ -233,12 +270,36 @@ class TaxDocumentRenamerV5:
         folder_rename_frame = ttk.LabelFrame(left_frame, text="📁 フォルダリネーム")
         folder_rename_frame.pack(fill='both', expand=True, pady=(0, 10))
         
-        # フォルダ選択ボタン
+        # 年月設定（左側専用）
+        left_year_month_frame = ttk.Frame(folder_rename_frame)
+        left_year_month_frame.pack(fill='x', pady=5, padx=10)
+        
+        ttk.Label(left_year_month_frame, text="年月 (YYMM):").pack(side='left')
+        self.left_year_month_var = tk.StringVar(value="2508")
+        left_yymm_entry = ttk.Entry(left_year_month_frame, textvariable=self.left_year_month_var, width=10)
+        left_yymm_entry.pack(side='left', padx=(10, 0))
+        
+        # 左側YYMM設定状態表示
+        self.left_yymm_status_var = tk.StringVar()
+        self.left_yymm_status_label = ttk.Label(
+            left_year_month_frame, 
+            textvariable=self.left_yymm_status_var,
+            font=('Yu Gothic UI', 8), 
+            foreground='blue'
+        )
+        self.left_yymm_status_label.pack(side='left', padx=(5, 0))
+        
+        # 左側YYMMバリデーション設定
+        self.left_year_month_var.trace_add('write', self._validate_left_yymm_input)
+        self._validate_left_yymm_input()  # 初期バリデーション
+        
+        # フォルダ選択＋処理実行ボタン（統合版）
         self.folder_rename_var = tk.StringVar()
         folder_select_button = ttk.Button(
             folder_rename_frame,
-            text="📂 フォルダ選択",
-            command=self._select_rename_folder
+            text="🔄 フォルダリネーム実行",
+            command=self._select_rename_folder,
+            style='Accent.TButton'
         )
         folder_select_button.pack(pady=(10, 5), padx=10, fill='x')
         
@@ -252,38 +313,8 @@ class TaxDocumentRenamerV5:
         )
         self.folder_path_label.pack(pady=(0, 10), padx=10, fill='x')
         
-        # 処理モード選択
-        mode_frame = ttk.Frame(folder_rename_frame)
-        mode_frame.pack(fill='x', padx=10, pady=(0, 10))
-        
-        ttk.Label(mode_frame, text="処理モード:", font=('Yu Gothic UI', 9)).pack(anchor='w')
-        
-        self.rename_mode_var = tk.StringVar(value="rename_only")
-        ttk.Radiobutton(
-            mode_frame, 
-            text="リネームのみ", 
-            variable=self.rename_mode_var, 
-            value="rename_only"
-        ).pack(anchor='w', pady=(2, 0))
-        
-        ttk.Radiobutton(
-            mode_frame, 
-            text="分割後リネーム", 
-            variable=self.rename_mode_var, 
-            value="split_rename"
-        ).pack(anchor='w', pady=(2, 0))
-        
-        # フォルダリネーム実行ボタン
-        self.folder_rename_button = ttk.Button(
-            folder_rename_frame,
-            text="🔄 フォルダリネーム実行",
-            command=self._start_folder_rename_processing,
-            state='disabled'
-        )
-        self.folder_rename_button.pack(pady=10, padx=10, fill='x')
-        
         # 処理進捗表示
-        self.folder_progress_var = tk.StringVar(value="フォルダを選択してください")
+        self.folder_progress_var = tk.StringVar(value="YYMMを入力してボタンをクリック")
         progress_label = ttk.Label(
             folder_rename_frame,
             textvariable=self.folder_progress_var,
@@ -304,14 +335,30 @@ class TaxDocumentRenamerV5:
         file_process_frame = ttk.LabelFrame(right_frame, text="📄 ファイル処理")
         file_process_frame.pack(fill='x', pady=(0, 10))
         
-        # ドラッグ&ドロップエリア（簡素化版）
-        self.drop_zone = DropZoneFrame(file_process_frame, self._on_files_dropped)
-        self.drop_zone.pack(fill='x', pady=10, padx=10)
+        # ファイル選択ボタン（D&D削除の代替）
+        file_select_button = ttk.Button(
+            file_process_frame,
+            text="📂 ファイル選択",
+            command=self._select_files_for_processing
+        )
+        file_select_button.pack(pady=(10, 5))
         
-        # メイン処理ボタン
+        # 選択されたファイル表示エリア
+        files_display_frame = ttk.Frame(file_process_frame)
+        files_display_frame.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        
+        # ファイルリストボックス
+        self.files_listbox = tk.Listbox(files_display_frame, height=4)
+        files_scrollbar = ttk.Scrollbar(files_display_frame, orient="vertical", command=self.files_listbox.yview)
+        self.files_listbox.configure(yscrollcommand=files_scrollbar.set)
+        
+        self.files_listbox.pack(side="left", fill="both", expand=True)
+        files_scrollbar.pack(side="right", fill="y")
+        
+        # メイン処理ボタン（名称統一）
         main_process_button = ttk.Button(
             file_process_frame,
-            text="⚡ 分割＆出力処理",
+            text="🔄 フォルダリネーム実行",
             command=self._start_folder_batch_processing_direct,
             style='Accent.TButton'
         )
@@ -369,51 +416,72 @@ class TaxDocumentRenamerV5:
         export_info.pack(anchor='w', padx=20)
 
     def _select_rename_folder(self):
-        """フォルダリネーム用のフォルダ選択"""
+        """フォルダ選択＋自動処理実行（ワンボタン統合）"""
+        # YYMM入力チェック
+        if not self._validate_left_yymm_input():
+            messagebox.showerror("エラー", "有効なYYMM（年月）を入力してください")
+            return
+            
         folder_path = filedialog.askdirectory(
             title="リネーム対象フォルダを選択してください"
         )
         if folder_path:
             self.folder_rename_var.set(folder_path)
             self.folder_progress_var.set(f"選択済み: {len(os.listdir(folder_path))} 個のアイテム")
-            self.folder_rename_button.config(state='normal')
             self._log(f"フォルダリネーム対象選択: {folder_path}")
+            
+            # 選択後即座に処理開始
+            yymm = self.left_year_month_var.get()
+            self._log(f"フォルダリネーム処理開始: {folder_path} (YYMM: {yymm})")
+            
+            # バックグラウンド処理開始
+            self.folder_progress_var.set("処理中...")
+            
+            # 別スレッドで処理実行（簡素化版）
+            thread = threading.Thread(
+                target=self._simplified_folder_rename_background,
+                args=(folder_path, yymm)
+            )
+            thread.daemon = True
+            thread.start()
         else:
             self.folder_rename_var.set("")
             self.folder_progress_var.set("フォルダを選択してください")
-            self.folder_rename_button.config(state='disabled')
 
-    def _start_folder_rename_processing(self):
-        """フォルダリネーム処理開始"""
+    def _start_simplified_folder_rename(self):
+        """簡素化されたフォルダリネーム処理（問題①②対応）"""
         folder_path = self.folder_rename_var.get()
         if not folder_path or not os.path.exists(folder_path):
             messagebox.showerror("エラー", "有効なフォルダが選択されていません")
             return
         
-        # 処理モード取得
-        mode = self.rename_mode_var.get()
-        self._log(f"フォルダリネーム処理開始: {folder_path} (モード: {mode})")
+        # 左側のYYMM設定を使用
+        yymm = self.left_year_month_var.get()
+        if not self._validate_left_yymm_input():
+            messagebox.showerror("エラー", "有効なYYMM（年月）を入力してください")
+            return
+        
+        self._log(f"フォルダリネーム処理開始: {folder_path} (YYMM: {yymm})")
         
         # バックグラウンド処理開始
         self.folder_rename_button.config(state='disabled')
         self.folder_progress_var.set("処理中...")
         
-        # 別スレッドで処理実行
+        # 別スレッドで処理実行（簡素化版）
         thread = threading.Thread(
-            target=self._folder_rename_background_processing,
-            args=(folder_path, mode)
+            target=self._simplified_folder_rename_background,
+            args=(folder_path, yymm)
         )
         thread.daemon = True
         thread.start()
 
-    def _folder_rename_background_processing(self, folder_path, mode):
-        """フォルダリネーム バックグラウンド処理"""
+    def _simplified_folder_rename_background(self, folder_path, yymm):
+        """簡素化されたフォルダリネーム バックグラウンド処理（問題①②対応）"""
         try:
             processed_count = 0
             total_files = []
             
             # 出力フォルダを設定（元フォルダ内に作成）
-            yymm = self.year_month_var.get() if hasattr(self, 'year_month_var') else "2501"
             base_output_folder = os.path.join(folder_path, yymm)
             counter = 1
             output_folder = base_output_folder
@@ -433,27 +501,25 @@ class TaxDocumentRenamerV5:
             
             self._log(f"処理対象ファイル数: {len(total_files)}")
             
-            # UIコンテキストを作成
+            # UIコンテキストを作成（修正版）
             ui_context = create_ui_context_from_gui(
-                self.root,
-                yymm_policy_toggle=getattr(self, 'yymm_policy_toggle', tk.BooleanVar(value=True)),
-                year_month_var=getattr(self, 'year_month_var', tk.StringVar(value=yymm)),
-                ocr_mode_var=getattr(self, 'ocr_mode_var', tk.StringVar(value="tesseract")),
-                debug_mode_var=getattr(self, 'debug_mode_var', tk.BooleanVar(value=False))
+                yymm_var_value=yymm,
+                municipality_sets=getattr(self, 'municipality_sets', {}),
+                batch_mode=True,
+                allow_auto_forced_codes=False,
+                debug_mode=getattr(self, 'debug_mode_var', tk.BooleanVar(value=False)).get()
             )
             
             for file_path in total_files:
                 try:
-                    if mode == "split_rename":
-                        # 分割後リネームモード
-                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
-                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-                        self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
-                    else:
-                        # リネームのみモード
-                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
-                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
-                        self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+                    # シンプルな処理：分割＆リネーム（モード選択なし）
+                    user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                    snapshot = self.pre_extract_engine.build_snapshot(
+                        file_path, 
+                        user_provided_yymm=user_yymm, 
+                        ui_context=ui_context.to_dict()
+                    )
+                    self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
                     
                     processed_count += 1
                     # UI更新（メインスレッドで実行）
@@ -471,7 +537,7 @@ class TaxDocumentRenamerV5:
             self._log(f"フォルダリネーム処理エラー: {str(e)}")
             self.root.after(0, lambda: [
                 self.folder_progress_var.set("処理エラーが発生しました"),
-                self.folder_rename_button.config(state='normal')
+                self.folder_rename_button.config(state='normal') if hasattr(self, 'folder_rename_button') else None
             ])
 
     def _folder_rename_processing_finished(self, processed_count, total_count):
@@ -650,6 +716,34 @@ class TaxDocumentRenamerV5:
             self.files_listbox.insert(tk.END, os.path.basename(file_path))
         
         self._log(f"ファイルが選択されました: {len(valid_files)}件")
+
+    def _select_files_for_processing(self):
+        """ファイル処理用のファイル選択（D&D削除の代替機能）"""
+        from tkinter import filedialog
+        
+        filetypes = [
+            ('PDFファイル', '*.pdf'),
+            ('すべてのファイル', '*.*')
+        ]
+        
+        files = filedialog.askopenfilenames(
+            title="処理するファイルを選択",
+            filetypes=filetypes
+        )
+        
+        if files:
+            # __split_ファイルを除外
+            valid_files = [f for f in files if not os.path.basename(f).startswith("__split_")]
+            
+            # ファイルリストを更新
+            self.files_list = valid_files
+            
+            # リストボックスの更新
+            self.files_listbox.delete(0, tk.END)
+            for file_path in valid_files:
+                self.files_listbox.insert(tk.END, os.path.basename(file_path))
+            
+            self._log(f"ファイルが選択されました: {len(valid_files)}件")
 
     def _select_files(self):
         """ファイル選択ダイアログ"""
