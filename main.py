@@ -216,28 +216,82 @@ class TaxDocumentRenamerV5:
         self._create_log_tab()
 
     def _create_file_tab(self):
-        """ファイル選択タブの作成（UI改善版：右側統合レイアウト）"""
+        """ファイル選択タブの作成（UI改善版：右側統合レイアウト + フォルダリネーム機能）"""
         # メインフレーム作成
         main_frame = ttk.Frame(self.file_frame)
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # 左右分割：左側は将来の機能拡張用、右側に全機能統合
+        # 左右分割：左側はフォルダリネーム機能、右側に全機能統合
         paned = ttk.PanedWindow(main_frame, orient='horizontal')
         paned.pack(fill='both', expand=True)
         
-        # 左側: 将来の機能拡張用プレースホルダー
+        # 左側: フォルダリネーム機能エリア
         left_frame = ttk.Frame(paned, width=200)
         paned.add(left_frame, weight=1)
         
-        # プレースホルダーコンテンツ
-        placeholder_label = ttk.Label(
-            left_frame, 
-            text="将来の機能拡張エリア\n\n（リネーム機能等）",
-            font=('Yu Gothic UI', 10),
-            foreground='#888888',
-            justify='center'
+        # === フォルダリネーム機能UI ===
+        folder_rename_frame = ttk.LabelFrame(left_frame, text="📁 フォルダリネーム")
+        folder_rename_frame.pack(fill='both', expand=True, pady=(0, 10))
+        
+        # フォルダ選択ボタン
+        self.folder_rename_var = tk.StringVar()
+        folder_select_button = ttk.Button(
+            folder_rename_frame,
+            text="📂 フォルダ選択",
+            command=self._select_rename_folder
         )
-        placeholder_label.pack(expand=True)
+        folder_select_button.pack(pady=(10, 5), padx=10, fill='x')
+        
+        # 選択されたフォルダパス表示
+        self.folder_path_label = ttk.Label(
+            folder_rename_frame,
+            textvariable=self.folder_rename_var,
+            font=('Yu Gothic UI', 8),
+            foreground='#666666',
+            wraplength=180
+        )
+        self.folder_path_label.pack(pady=(0, 10), padx=10, fill='x')
+        
+        # 処理モード選択
+        mode_frame = ttk.Frame(folder_rename_frame)
+        mode_frame.pack(fill='x', padx=10, pady=(0, 10))
+        
+        ttk.Label(mode_frame, text="処理モード:", font=('Yu Gothic UI', 9)).pack(anchor='w')
+        
+        self.rename_mode_var = tk.StringVar(value="rename_only")
+        ttk.Radiobutton(
+            mode_frame, 
+            text="リネームのみ", 
+            variable=self.rename_mode_var, 
+            value="rename_only"
+        ).pack(anchor='w', pady=(2, 0))
+        
+        ttk.Radiobutton(
+            mode_frame, 
+            text="分割後リネーム", 
+            variable=self.rename_mode_var, 
+            value="split_rename"
+        ).pack(anchor='w', pady=(2, 0))
+        
+        # フォルダリネーム実行ボタン
+        self.folder_rename_button = ttk.Button(
+            folder_rename_frame,
+            text="🔄 フォルダリネーム実行",
+            command=self._start_folder_rename_processing,
+            state='disabled'
+        )
+        self.folder_rename_button.pack(pady=10, padx=10, fill='x')
+        
+        # 処理進捗表示
+        self.folder_progress_var = tk.StringVar(value="フォルダを選択してください")
+        progress_label = ttk.Label(
+            folder_rename_frame,
+            textvariable=self.folder_progress_var,
+            font=('Yu Gothic UI', 8),
+            foreground='#666666',
+            wraplength=180
+        )
+        progress_label.pack(pady=(0, 10), padx=10)
         
         # 右側: 全機能統合エリア
         right_frame = ttk.Frame(paned)
@@ -247,7 +301,7 @@ class TaxDocumentRenamerV5:
         right_frame.columnconfigure(0, weight=1)
         
         # === ファイル処理エリア ===
-        file_process_frame = ttk.LabelFrame(right_frame, text="📁 ファイル処理")
+        file_process_frame = ttk.LabelFrame(right_frame, text="📄 ファイル処理")
         file_process_frame.pack(fill='x', pady=(0, 10))
         
         # ドラッグ&ドロップエリア（簡素化版）
@@ -313,6 +367,124 @@ class TaxDocumentRenamerV5:
             foreground='gray'
         )
         export_info.pack(anchor='w', padx=20)
+
+    def _select_rename_folder(self):
+        """フォルダリネーム用のフォルダ選択"""
+        folder_path = filedialog.askdirectory(
+            title="リネーム対象フォルダを選択してください"
+        )
+        if folder_path:
+            self.folder_rename_var.set(folder_path)
+            self.folder_progress_var.set(f"選択済み: {len(os.listdir(folder_path))} 個のアイテム")
+            self.folder_rename_button.config(state='normal')
+            self._log(f"フォルダリネーム対象選択: {folder_path}")
+        else:
+            self.folder_rename_var.set("")
+            self.folder_progress_var.set("フォルダを選択してください")
+            self.folder_rename_button.config(state='disabled')
+
+    def _start_folder_rename_processing(self):
+        """フォルダリネーム処理開始"""
+        folder_path = self.folder_rename_var.get()
+        if not folder_path or not os.path.exists(folder_path):
+            messagebox.showerror("エラー", "有効なフォルダが選択されていません")
+            return
+        
+        # 処理モード取得
+        mode = self.rename_mode_var.get()
+        self._log(f"フォルダリネーム処理開始: {folder_path} (モード: {mode})")
+        
+        # バックグラウンド処理開始
+        self.folder_rename_button.config(state='disabled')
+        self.folder_progress_var.set("処理中...")
+        
+        # 別スレッドで処理実行
+        thread = threading.Thread(
+            target=self._folder_rename_background_processing,
+            args=(folder_path, mode)
+        )
+        thread.daemon = True
+        thread.start()
+
+    def _folder_rename_background_processing(self, folder_path, mode):
+        """フォルダリネーム バックグラウンド処理"""
+        try:
+            processed_count = 0
+            total_files = []
+            
+            # 出力フォルダを設定（元フォルダ内に作成）
+            yymm = self.year_month_var.get() if hasattr(self, 'year_month_var') else "2501"
+            base_output_folder = os.path.join(folder_path, yymm)
+            counter = 1
+            output_folder = base_output_folder
+            
+            # 重複フォルダ名を避ける
+            while os.path.exists(output_folder):
+                output_folder = f"{base_output_folder}_{counter}"
+                counter += 1
+            
+            os.makedirs(output_folder, exist_ok=True)
+            
+            # 処理対象ファイルを収集
+            for item in os.listdir(folder_path):
+                item_path = os.path.join(folder_path, item)
+                if os.path.isfile(item_path) and item_path.lower().endswith('.pdf'):
+                    total_files.append(item_path)
+            
+            self._log(f"処理対象ファイル数: {len(total_files)}")
+            
+            # UIコンテキストを作成
+            ui_context = create_ui_context_from_gui(
+                self.root,
+                yymm_policy_toggle=getattr(self, 'yymm_policy_toggle', tk.BooleanVar(value=True)),
+                year_month_var=getattr(self, 'year_month_var', tk.StringVar(value=yymm)),
+                ocr_mode_var=getattr(self, 'ocr_mode_var', tk.StringVar(value="tesseract")),
+                debug_mode_var=getattr(self, 'debug_mode_var', tk.BooleanVar(value=False))
+            )
+            
+            for file_path in total_files:
+                try:
+                    if mode == "split_rename":
+                        # 分割後リネームモード
+                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                        self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+                    else:
+                        # リネームのみモード
+                        user_yymm = self._resolve_yymm_with_policy(file_path, None)
+                        snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
+                        self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+                    
+                    processed_count += 1
+                    # UI更新（メインスレッドで実行）
+                    self.root.after(0, lambda: self.folder_progress_var.set(
+                        f"処理中... {processed_count}/{len(total_files)}"
+                    ))
+                    
+                except Exception as e:
+                    self._log(f"ファイル処理エラー: {file_path} - {str(e)}")
+            
+            # 処理完了
+            self.root.after(0, self._folder_rename_processing_finished, processed_count, len(total_files))
+            
+        except Exception as e:
+            self._log(f"フォルダリネーム処理エラー: {str(e)}")
+            self.root.after(0, lambda: [
+                self.folder_progress_var.set("処理エラーが発生しました"),
+                self.folder_rename_button.config(state='normal')
+            ])
+
+    def _folder_rename_processing_finished(self, processed_count, total_count):
+        """フォルダリネーム処理完了"""
+        self.folder_progress_var.set(f"完了: {processed_count}/{total_count} 件処理")
+        self.folder_rename_button.config(state='normal')
+        self._log(f"フォルダリネーム処理完了: {processed_count}/{total_count} 件")
+        
+        if processed_count > 0:
+            messagebox.showinfo(
+                "処理完了", 
+                f"フォルダリネーム処理が完了しました。\n処理件数: {processed_count}/{total_count}"
+            )
         
         # 処理ボタン（簡素化版 - フォルダ指定による自動処理）
         # ※従来の分割実行・リネーム実行ボタンは削除し、フォルダ指定による一括自動処理に統一
