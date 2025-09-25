@@ -216,23 +216,6 @@ class TaxDocumentRenamerV5:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # タイトル
-        title_label = ttk.Label(
-            main_frame, 
-            text="税務書類リネームシステム v5.4.2", 
-            font=('Arial', 16, 'bold')
-        )
-        title_label.pack(pady=(0, 5))
-        
-        # v5.2 新機能の説明
-        info_label = ttk.Label(
-            main_frame,
-            text="🆕 v5.2 New: Bundle PDF Auto-Split | ✨ v5.1バグ修正完了版",
-            font=('Arial', 10),
-            foreground='blue'
-        )
-        info_label.pack(pady=(0, 10))
-        
         # ノートブック（タブ）
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.pack(fill='both', expand=True)
@@ -334,26 +317,6 @@ class TaxDocumentRenamerV5:
         # === ファイル処理エリア ===
         file_process_frame = ttk.LabelFrame(right_frame, text="📄 ファイル処理")
         file_process_frame.pack(fill='x', pady=(0, 10))
-        
-        # ファイル選択ボタン（D&D削除の代替）
-        file_select_button = ttk.Button(
-            file_process_frame,
-            text="📂 ファイル選択",
-            command=self._select_files_for_processing
-        )
-        file_select_button.pack(pady=(10, 5))
-        
-        # 選択されたファイル表示エリア
-        files_display_frame = ttk.Frame(file_process_frame)
-        files_display_frame.pack(fill='both', expand=True, padx=10, pady=(0, 10))
-        
-        # ファイルリストボックス
-        self.files_listbox = tk.Listbox(files_display_frame, height=4)
-        files_scrollbar = ttk.Scrollbar(files_display_frame, orient="vertical", command=self.files_listbox.yview)
-        self.files_listbox.configure(yscrollcommand=files_scrollbar.set)
-        
-        self.files_listbox.pack(side="left", fill="both", expand=True)
-        files_scrollbar.pack(side="right", fill="y")
         
         # メイン処理ボタン（名称統一）
         main_process_button = ttk.Button(
@@ -476,7 +439,7 @@ class TaxDocumentRenamerV5:
         thread.start()
 
     def _simplified_folder_rename_background(self, folder_path, yymm):
-        """簡素化されたフォルダリネーム バックグラウンド処理（問題①②対応）"""
+        """左側専用：簡素化されたフォルダリネーム バックグラウンド処理（右側分類エンジン使用禁止）"""
         try:
             processed_count = 0
             total_files = []
@@ -492,6 +455,7 @@ class TaxDocumentRenamerV5:
                 counter += 1
             
             os.makedirs(output_folder, exist_ok=True)
+            self._log(f"[LEFT_SIMPLE] 出力フォルダ作成: {output_folder}")
             
             # 処理対象ファイルを収集
             for item in os.listdir(folder_path):
@@ -499,46 +463,98 @@ class TaxDocumentRenamerV5:
                 if os.path.isfile(item_path) and item_path.lower().endswith('.pdf'):
                     total_files.append(item_path)
             
-            self._log(f"処理対象ファイル数: {len(total_files)}")
+            self._log(f"[LEFT_SIMPLE] 処理対象ファイル数: {len(total_files)}")
             
-            # UIコンテキストを作成（修正版）
-            ui_context = create_ui_context_from_gui(
-                yymm_var_value=yymm,
-                municipality_sets=getattr(self, 'municipality_sets', {}),
-                batch_mode=True,
-                allow_auto_forced_codes=False,
-                debug_mode=getattr(self, 'debug_mode_var', tk.BooleanVar(value=False)).get()
-            )
-            
+            # 左側専用：単純なYYMM置換処理のみ実行
             for file_path in total_files:
                 try:
-                    # シンプルな処理：分割＆リネーム（モード選択なし）
-                    user_yymm = self._resolve_yymm_with_policy(file_path, None)
-                    snapshot = self.pre_extract_engine.build_snapshot(
-                        file_path, 
-                        user_provided_yymm=user_yymm, 
-                        ui_context=ui_context.to_dict()
-                    )
-                    self._process_single_file_v5_with_snapshot(file_path, output_folder, snapshot)
+                    # 重要：右側分類エンジンを使用せず、左側専用メソッドを使用
+                    result_path = self._process_left_simple_rename(file_path, output_folder, yymm)
                     
-                    processed_count += 1
+                    if result_path:
+                        processed_count += 1
+                        # UI結果追加（左側専用の簡素表示）
+                        original_filename = os.path.basename(file_path)
+                        new_filename = os.path.basename(result_path)
+                        self.root.after(0, lambda orig=original_filename, new=new_filename: self._add_result_success(
+                            file_path, new, "LEFT_SIMPLE", "YYMM置換", "1.00", ["01_→YYMM_"]
+                        ))
+                    
                     # UI更新（メインスレッドで実行）
                     self.root.after(0, lambda: self.folder_progress_var.set(
                         f"処理中... {processed_count}/{len(total_files)}"
                     ))
                     
                 except Exception as e:
-                    self._log(f"ファイル処理エラー: {file_path} - {str(e)}")
+                    self._log(f"[LEFT_SIMPLE] ファイル処理エラー: {file_path} - {str(e)}")
             
             # 処理完了
+            self._log(f"[LEFT_SIMPLE] ✅ 処理完了: {processed_count}/{len(total_files)}ファイル")
             self.root.after(0, self._folder_rename_processing_finished, processed_count, len(total_files))
             
         except Exception as e:
-            self._log(f"フォルダリネーム処理エラー: {str(e)}")
+            self._log(f"[LEFT_SIMPLE] フォルダリネーム処理エラー: {str(e)}")
             self.root.after(0, lambda: [
                 self.folder_progress_var.set("処理エラーが発生しました"),
                 self.folder_rename_button.config(state='normal') if hasattr(self, 'folder_rename_button') else None
             ])
+
+    def _process_left_simple_rename(self, file_path: str, output_folder: str, yymm: str) -> str:
+        """
+        左側専用: 単純なYYMMプレフィックス置換処理
+        01_ → 指定YYMM_ の単純置換のみ実行（右側分類エンジン使用禁止）
+        
+        Args:
+            file_path: 処理対象PDFファイルパス
+            output_folder: 出力フォルダパス
+            yymm: 置換するYYMM値（例："2508"）
+        
+        Returns:
+            str: 処理後ファイルパス
+        """
+        try:
+            filename = os.path.basename(file_path)
+            name_part, ext = os.path.splitext(filename)
+            
+            # 左側専用：01_プレフィックスをYYMMに単純置換
+            if name_part.startswith('01_'):
+                # 01_ を指定YYMMに置換（例：01_消費税.pdf → 2508_消費税.pdf）
+                new_name_part = yymm + '_' + name_part[3:]  # "01_"（3文字）を削除してYYMM_を付加
+                new_filename = new_name_part + ext
+                
+                self._log(f"[LEFT_SIMPLE] {name_part} → {new_name_part}")
+            else:
+                # 01_で始まらない場合はそのまま
+                new_filename = filename
+                self._log(f"[LEFT_SIMPLE] スキップ（01_接頭辞なし）: {filename}")
+            
+            # ファイルコピー実行
+            output_path = os.path.join(output_folder, new_filename)
+            output_path = self._generate_unique_filename(output_path)
+            
+            # 出力フォルダの存在確認・作成
+            output_dir = os.path.dirname(output_path)
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                self._log(f"[LEFT_SIMPLE] 出力フォルダ作成: {output_dir}")
+            
+            # ファイルコピー
+            import shutil
+            shutil.copy2(file_path, output_path)
+            
+            # コピー結果確認
+            if os.path.exists(output_path):
+                file_size = os.path.getsize(output_path)
+                self._log(f"[LEFT_SIMPLE] ✅ コピー成功: {os.path.basename(output_path)} ({file_size} bytes)")
+            else:
+                self._log(f"[LEFT_SIMPLE] ❌ コピー失敗: {output_path}")
+                return None
+            
+            return output_path
+            
+        except Exception as e:
+            self._log(f"[LEFT_SIMPLE] エラー: {file_path} - {str(e)}")
+            return None
 
     def _folder_rename_processing_finished(self, processed_count, total_count):
         """フォルダリネーム処理完了"""
@@ -717,33 +733,6 @@ class TaxDocumentRenamerV5:
         
         self._log(f"ファイルが選択されました: {len(valid_files)}件")
 
-    def _select_files_for_processing(self):
-        """ファイル処理用のファイル選択（D&D削除の代替機能）"""
-        from tkinter import filedialog
-        
-        filetypes = [
-            ('PDFファイル', '*.pdf'),
-            ('すべてのファイル', '*.*')
-        ]
-        
-        files = filedialog.askopenfilenames(
-            title="処理するファイルを選択",
-            filetypes=filetypes
-        )
-        
-        if files:
-            # __split_ファイルを除外
-            valid_files = [f for f in files if not os.path.basename(f).startswith("__split_")]
-            
-            # ファイルリストを更新
-            self.files_list = valid_files
-            
-            # リストボックスの更新
-            self.files_listbox.delete(0, tk.END)
-            for file_path in valid_files:
-                self.files_listbox.insert(tk.END, os.path.basename(file_path))
-            
-            self._log(f"ファイルが選択されました: {len(valid_files)}件")
 
     def _select_files(self):
         """ファイル選択ダイアログ"""
