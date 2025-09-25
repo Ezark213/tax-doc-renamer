@@ -106,7 +106,7 @@ class TaxDocumentRenamerV5:
     def __init__(self):
         """初期化"""
         self.root = tk.Tk()
-        self.root.title("税務書類リネームシステム v5.4.2 (Bundle PDF Auto-Split)")
+        self.root.title("税務書類リネームシステム")
         self.root.geometry("1200x800")
         
         # v5.2 コアエンジンの初期化（ロガー付き）
@@ -279,13 +279,13 @@ class TaxDocumentRenamerV5:
         
         # フォルダ選択＋処理実行ボタン（統合版）
         self.folder_rename_var = tk.StringVar()
-        folder_select_button = ttk.Button(
+        self.folder_rename_button = ttk.Button(
             folder_rename_frame,
             text="🔄 フォルダリネーム実行",
             command=self._select_rename_folder,
             style='Accent.TButton'
         )
-        folder_select_button.pack(pady=(10, 5), padx=10, fill='x')
+        self.folder_rename_button.pack(pady=(10, 5), padx=10, fill='x')
         
         # 選択されたフォルダパス表示
         self.folder_path_label = ttk.Label(
@@ -440,7 +440,7 @@ class TaxDocumentRenamerV5:
         thread.start()
 
     def _simplified_folder_rename_background(self, folder_path, yymm):
-        """左側専用：簡素化されたフォルダリネーム バックグラウンド処理（右側分類エンジン使用禁止）"""
+        """左側専用：右側エンジン完全排除版 シンプルフォルダリネーム"""
         try:
             processed_count = 0
             total_files = []
@@ -456,7 +456,7 @@ class TaxDocumentRenamerV5:
                 counter += 1
             
             os.makedirs(output_folder, exist_ok=True)
-            self._log(f"[LEFT_SIMPLE] 出力フォルダ作成: {output_folder}")
+            self._log(f"[LEFT_ONLY] 出力フォルダ作成: {output_folder}")
             
             # 処理対象ファイルを収集
             for item in os.listdir(folder_path):
@@ -464,22 +464,63 @@ class TaxDocumentRenamerV5:
                 if os.path.isfile(item_path) and item_path.lower().endswith('.pdf'):
                     total_files.append(item_path)
             
-            self._log(f"[LEFT_SIMPLE] 処理対象ファイル数: {len(total_files)}")
+            self._log(f"[LEFT_ONLY] 処理対象ファイル数: {len(total_files)}")
             
-            # 左側専用：単純なYYMM置換処理のみ実行
+            # 左側専用：完全独立処理（右側エンジン一切使用禁止）
             for file_path in total_files:
                 try:
-                    # 重要：右側分類エンジンを使用せず、左側専用メソッドを使用
-                    result_path = self._process_left_simple_rename(file_path, output_folder, yymm)
+                    # 完全独立：右側を一切使わない左側専用処理
+                    filename = os.path.basename(file_path)
+                    name_part, ext = os.path.splitext(filename)
                     
-                    if result_path:
+                    # 数字プレフィックス（4桁_）をYYMM_に置換
+                    import re
+                    # 数字4桁_パターンをチェック（0000_, 1001_, 2003_, 3001_など）
+                    match = re.match(r'^(\d{4}_)', name_part)
+                    if match:
+                        prefix_to_remove = match.group(1)  # "0000_", "1001_"など
+                        remaining_part = name_part[len(prefix_to_remove):]  # 残りの部分
+                        
+                        # 末尾の_YYMMを削除（例：納付税額一覧表_2508 → 納付税額一覧表）
+                        if remaining_part.endswith(f'_{yymm}'):
+                            remaining_part = remaining_part[:-5]  # "_2508"の5文字を削除
+                        
+                        new_name_part = f"{yymm}_{remaining_part}"
+                        new_filename = new_name_part + ext
+                        
+                        self._log(f"[LEFT_ONLY] リネーム: {prefix_to_remove}{remaining_part} → {new_name_part}")
+                    else:
+                        new_filename = filename
+                        self._log(f"[LEFT_ONLY] そのまま: {filename}")
+                    
+                    # ファイルコピー実行
+                    output_path = os.path.join(output_folder, new_filename)
+                    
+                    # 重複回避
+                    counter = 1
+                    base_output_path = output_path
+                    while os.path.exists(output_path):
+                        name_part, ext = os.path.splitext(base_output_path)
+                        output_path = f"{name_part}_{counter:03d}{ext}"
+                        counter += 1
+                    
+                    # ファイルコピー
+                    import shutil
+                    shutil.copy2(file_path, output_path)
+                    
+                    if os.path.exists(output_path):
+                        file_size = os.path.getsize(output_path)
+                        self._log(f"[LEFT_ONLY] ✅ コピー成功: {os.path.basename(output_path)} ({file_size} bytes)")
                         processed_count += 1
-                        # UI結果追加（左側専用の簡素表示）
+                        
+                        # UI結果一覧に追加
                         original_filename = os.path.basename(file_path)
-                        new_filename = os.path.basename(result_path)
+                        new_filename = os.path.basename(output_path)
                         self.root.after(0, lambda orig=original_filename, new=new_filename: self._add_result_success(
-                            file_path, new, "LEFT_SIMPLE", "YYMM置換", "1.00", ["01_→YYMM_"]
+                            file_path, new, "LEFT_RENAME", "数字→YYMM置換", "1.00", ["数字プレフィックス削除"]
                         ))
+                    else:
+                        self._log(f"[LEFT_ONLY] ❌ コピー失敗: {output_path}")
                     
                     # UI更新（メインスレッドで実行）
                     self.root.after(0, lambda: self.folder_progress_var.set(
@@ -487,14 +528,14 @@ class TaxDocumentRenamerV5:
                     ))
                     
                 except Exception as e:
-                    self._log(f"[LEFT_SIMPLE] ファイル処理エラー: {file_path} - {str(e)}")
+                    self._log(f"[LEFT_ONLY] ファイル処理エラー: {file_path} - {str(e)}")
             
             # 処理完了
-            self._log(f"[LEFT_SIMPLE] ✅ 処理完了: {processed_count}/{len(total_files)}ファイル")
+            self._log(f"[LEFT_ONLY] ✅ 処理完了: {processed_count}/{len(total_files)}ファイル")
             self.root.after(0, self._folder_rename_processing_finished, processed_count, len(total_files))
             
         except Exception as e:
-            self._log(f"[LEFT_SIMPLE] フォルダリネーム処理エラー: {str(e)}")
+            self._log(f"[LEFT_ONLY] フォルダリネーム処理エラー: {str(e)}")
             self.root.after(0, lambda: [
                 self.folder_progress_var.set("処理エラーが発生しました"),
                 self.folder_rename_button.config(state='normal') if hasattr(self, 'folder_rename_button') else None
@@ -517,9 +558,9 @@ class TaxDocumentRenamerV5:
             filename = os.path.basename(file_path)
             name_part, ext = os.path.splitext(filename)
             
-            # 左側専用：01_プレフィックスをYYMMに単純置換
+            # 左側専用：01_をYYMM_に単純置換
             if name_part.startswith('01_'):
-                # 01_ を指定YYMMに置換（例：01_消費税.pdf → 2508_消費税.pdf）
+                # 01_ → YYMM_に置換（例：01_書類名_顧客名.pdf → 2508_書類名_顧客名.pdf）
                 new_name_part = yymm + '_' + name_part[3:]  # "01_"（3文字）を削除してYYMM_を付加
                 new_filename = new_name_part + ext
                 
@@ -629,7 +670,7 @@ class TaxDocumentRenamerV5:
 
     def _create_log_tab(self):
         """ログタブの作成"""
-        ttk.Label(self.log_frame, text="処理ログ・デバッグ情報 (v5.4.2)", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
+        ttk.Label(self.log_frame, text="処理ログ・デバッグ情報", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
         
         # ログ表示エリア
         log_text_frame = ttk.Frame(self.log_frame)

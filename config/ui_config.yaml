@@ -1,0 +1,132 @@
+# UI Configuration for Tax Document Renamer
+# Phase 5: Implementation Execution - Feature Flag Management
+
+# UI Mode Selection
+# Values: "legacy", "modern", "auto"
+ui_mode: "auto"
+
+# Feature Flags for Modern UI Migration
+feature_flags:
+  # Core Modern UI Features
+  modern_drag_drop: true      # Enhanced drag-and-drop with animations
+  material_design: true       # Material Design 3 styling
+  accessibility: true         # WCAG AA compliance features
+  animations: true            # UI animations and transitions
+  
+  # Theme and Appearance
+  dark_mode: false            # Dark theme support
+  high_contrast: false        # High contrast mode for accessibility
+  large_fonts: false          # Large font mode
+  
+  # Enhanced Features
+  enhanced_ocr_ui: true       # Enhanced OCR status display
+  progress_animations: true   # Animated progress indicators
+  file_preview: false         # File preview functionality
+  bulk_operations: true       # Enhanced bulk operation UI
+  
+  # Developer Features
+  debug_ui: false             # Debug UI elements
+  performance_monitor: false  # Performance monitoring overlay
+  ui_inspector: false         # UI element inspector
+
+# UI Behavior Settings
+ui_behavior:
+  # Animation Settings
+  animation_duration: 200     # Animation duration in milliseconds
+  animation_easing: "ease_out" # Animation easing curve
+  
+  # Accessibility Settings
+  keyboard_navigation: true   # Enhanced keyboard navigation
+  screen_reader_support: true # Screen reader compatibility
+  focus_indicators: true      # Visible focus indicators
+  
+  # Performance Settings
+  lazy_loading: true          # Lazy load UI components
+  virtual_scrolling: false    # Virtual scrolling for large lists
+  hardware_acceleration: true # Hardware acceleration when available
+
+# Theme Configuration
+theme:
+  # Light Theme (default)
+  light:
+    primary_color: "#1976D2"      # Primary blue
+    secondary_color: "#388E3C"     # Secondary green
+    surface_color: "#FAFAFA"       # Surface grey
+    background_color: "#FFFFFF"    # Background white
+    error_color: "#F44336"         # Error red
+    warning_color: "#FF9800"       # Warning orange
+    success_color: "#4CAF50"       # Success green
+    
+  # Dark Theme
+  dark:
+    primary_color: "#90CAF9"       # Light blue
+    secondary_color: "#A5D6A7"     # Light green
+    surface_color: "#303030"       # Dark surface
+    background_color: "#121212"    # Dark background
+    error_color: "#EF5350"         # Light red
+    warning_color: "#FFB74D"       # Light orange
+    success_color: "#66BB6A"       # Light green
+
+# Advanced Configuration
+advanced:
+  # Migration Settings
+  migration_mode: "hybrid"        # Migration mode: "hybrid", "full", "legacy"
+  fallback_enabled: true          # Enable automatic fallback to legacy
+  compatibility_checks: true     # Run compatibility checks on startup
+  
+  # Performance Settings
+  ui_thread_priority: "normal"    # UI thread priority
+  render_optimizations: true     # Enable render optimizations
+  memory_optimization: true      # Enable memory optimizations
+  
+  # Logging
+  ui_logging: true               # Enable UI event logging
+  performance_logging: false     # Enable performance logging
+  debug_logging: false          # Enable debug logging
+
+# Platform-Specific Settings
+platform:
+  windows:
+    dwm_composition: true        # Windows DWM composition
+    high_dpi_scaling: true       # High DPI scaling support
+    native_dialogs: true         # Use native Windows dialogs
+    
+  macos:
+    native_menubar: true         # Use native macOS menu bar
+    metal_rendering: true        # Use Metal rendering
+    
+  linux:
+    wayland_support: true        # Wayland compositor support
+    gtk_integration: true        # GTK desktop integration
+
+# Tax System Specific Settings
+tax_system:
+  # OCR UI Enhancements
+  ocr_progress_details: true     # Show detailed OCR progress
+  classification_preview: true   # Preview classification results
+  error_highlighting: true      # Highlight OCR errors
+  
+  # Document Processing UI
+  batch_progress_ui: true        # Enhanced batch progress display
+  file_status_indicators: true  # File processing status indicators
+  duplicate_detection_ui: true  # UI for duplicate detection
+  
+  # Municipality Settings UI
+  municipality_autocomplete: true # Autocomplete for municipality names
+  prefecture_validation: true    # Validate prefecture names
+  settings_validation: true     # Real-time settings validation
+
+# Emergency Fallback Settings
+fallback:
+  # Automatic fallback triggers
+  memory_threshold: 512          # MB - fallback if memory < threshold
+  startup_timeout: 10            # seconds - fallback if startup > timeout
+  crash_count_threshold: 3       # fallback after N crashes
+  
+  # Manual override
+  force_legacy: false            # Force legacy mode regardless of capabilities
+  disable_modern_ui: false       # Completely disable modern UI
+  
+  # Diagnostic mode
+  diagnostic_mode: false         # Enable diagnostic information
+  safe_mode: false              # Run in safe mode with minimal features
