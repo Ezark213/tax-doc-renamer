@@ -524,6 +524,95 @@ class CompanyNameMatcher:
             print(f"ERROR: 受信通知テキスト抽出失敗: {pdf_path} page={page_num}, error={e}")
             return None
 
+    def extract_amount_from_main_pdf(self, pdf_path: str) -> Optional[int]:
+        """
+        本表PDFから金額を抽出（v7.2.1-AMOUNT-MATCHING）
+
+        Args:
+            pdf_path: 本表PDFのパス
+
+        Returns:
+            抽出された金額（整数）、失敗時はNone
+        """
+        try:
+            doc = fitz.open(pdf_path)
+
+            if doc.page_count == 0:
+                doc.close()
+                return None
+
+            page = doc[0]
+            text = page.get_text()
+            doc.close()
+
+            # 金額抽出パターン
+            patterns = [
+                r'納付税額[^\d]*?([\d,]+)',           # パターン1: 納付税額
+                r'合計[額金][^\d]*?([\d,]+)',          # パターン2: 合計額/合計金
+                r'納付すべき[^\d]*?([\d,]+)',         # パターン3: 納付すべき税額
+                r'本税[^\d]*?([\d,]+)',                # パターン4: 本税
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, text, re.MULTILINE)
+                if match:
+                    amount_str = match.group(1).replace(',', '').replace(' ', '')
+                    try:
+                        return int(amount_str)
+                    except ValueError:
+                        continue
+
+            return None
+
+        except Exception as e:
+            print(f"ERROR: 本表金額抽出失敗: {pdf_path}, error={e}")
+            return None
+
+    def extract_amount_from_receipt(self, pdf_path: str, page_num: int) -> Optional[int]:
+        """
+        受信通知PDFから金額を抽出（v7.2.1-AMOUNT-MATCHING）
+
+        Args:
+            pdf_path: 受信通知PDFのパス
+            page_num: ページ番号（0始まり）
+
+        Returns:
+            抽出された金額（整数）、失敗時はNone
+        """
+        try:
+            doc = fitz.open(pdf_path)
+
+            if page_num >= doc.page_count:
+                doc.close()
+                return None
+
+            page = doc[page_num]
+            text = page.get_text()
+            doc.close()
+
+            # 金額抽出パターン
+            patterns = [
+                r'納付すべき税額[^\d]*?([\d,]+)',     # パターン1: 納付すべき税額
+                r'本税[^\d]*?([\d,]+)',                # パターン2: 本税
+                r'合計[額金][^\d]*?([\d,]+)',          # パターン3: 合計額
+                r'納付税額[^\d]*?([\d,]+)',           # パターン4: 納付税額
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, text, re.MULTILINE)
+                if match:
+                    amount_str = match.group(1).replace(',', '').replace(' ', '')
+                    try:
+                        return int(amount_str)
+                    except ValueError:
+                        continue
+
+            return None
+
+        except Exception as e:
+            print(f"ERROR: 受信通知金額抽出失敗: {pdf_path} page={page_num}, error={e}")
+            return None
+
     def normalize_company_name(self, company_name: str) -> str:
         """
         会社名を正規化
@@ -550,6 +639,56 @@ class CompanyNameMatcher:
         normalized = normalized.lower()
 
         return normalized
+
+    def match_all_folders(self, receipt_company_name: str, folder_names: List[str],
+                          threshold: float = 0.7) -> List[Tuple[str, float]]:
+        """
+        受信通知の会社名にマッチするすべてのフォルダを検索（v7.2.3）
+
+        同じ会社の複数フォルダに対応するため、閾値以上のすべてのフォルダを返す
+
+        Args:
+            receipt_company_name: 受信通知から抽出した会社名
+            folder_names: フォルダ名のリスト
+            threshold: マッチング閾値（0.0-1.0）
+
+        Returns:
+            [(フォルダ名, 類似度スコア), ...] のリスト（スコア降順）
+        """
+        if not receipt_company_name or not folder_names:
+            return []
+
+        # 受信通知の会社名を正規化
+        receipt_normalized = self.normalize_company_name(receipt_company_name)
+
+        if not receipt_normalized:
+            return []
+
+        matches = []
+
+        for folder_name in folder_names:
+            # フォルダ名から会社名を抽出
+            folder_company = self.extract_company_name_from_folder(folder_name)
+
+            if not folder_company:
+                continue
+
+            # フォルダ会社名を正規化
+            folder_normalized = self.normalize_company_name(folder_company)
+
+            if not folder_normalized:
+                continue
+
+            # 類似度計算
+            score = self.calculate_similarity(receipt_normalized, folder_normalized)
+
+            if score >= threshold:
+                matches.append((folder_name, score))
+
+        # スコア降順でソート
+        matches.sort(key=lambda x: x[1], reverse=True)
+
+        return matches
 
     def match_folder(self, receipt_company_name: str, folder_names: List[str],
                      threshold: float = 0.7) -> Optional[Tuple[str, float]]:

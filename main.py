@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v7.2.0-TEXT-EXTRACTION メインアプリケーション
-受信通知テキスト直接抽出・100%精度達成版
+税務書類リネームシステム v7.2.2-SEQUENTIAL-MATCHING メインアプリケーション
+連番方式+金額マッチングによる完全自動配置・確実版
 YYMM Policy System・固定資産書類対応・高精度判定システム
 """
 
@@ -2281,58 +2281,131 @@ class TaxDocumentRenamerV5:
                     doc = fitz.open(receipt_pdf_path)
                     total_pages = len(doc)
 
-                    # 会社名マッチングによる受信通知配置（v7.1.0）
+                    # 連番方式による受信通知配置（v7.2.2-SEQUENTIAL-MATCHING）
                     matcher = CompanyNameMatcher()
                     folder_names = [f['folder_name'] for f in created_folders]
                     matched_count = 0
                     unmatched_pages = []
 
+                    # 一時フォルダ作成
+                    import tempfile
+                    temp_dir = tempfile.mkdtemp(prefix="receipt_temp_")
+                    self._log(f"[左側] 一時フォルダ作成: {temp_dir}")
+
+                    # ステップ1: 全ページを連番付きで一時分割
+                    temp_receipt_files = []  # [(temp_path, page_num, company_name), ...]
+
                     for page_num in range(total_pages):
-                        # ページごとに会社名を抽出
+                        # ページを抽出
+                        page_doc = fitz.open()
+                        page_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+
+                        # 連番付きファイル名で一時保存
+                        temp_filename = f"{receipt_prefix}_受信通知_{page_num + 1:02d}.pdf"
+                        temp_path = os.path.join(temp_dir, temp_filename)
+
+                        page_doc.save(temp_path)
+                        page_doc.close()
+
+                        # 会社名抽出
                         receipt_company = matcher.extract_company_name_from_receipt(receipt_pdf_path, page_num)
 
-                        if not receipt_company:
-                            unmatched_pages.append((page_num, "会社名抽出失敗"))
+                        if receipt_company:
+                            temp_receipt_files.append((temp_path, page_num, receipt_company))
+                            self._log(f"[左側] 一時ファイル作成: {temp_filename} ({receipt_company})")
+                        else:
                             self._log(f"[左側] 警告: ページ{page_num + 1} - 会社名抽出失敗")
-                            continue
+                            unmatched_pages.append((page_num, "会社名抽出失敗"))
 
-                        self._log(f"[左側] ページ{page_num + 1} - 会社名抽出: {receipt_company}")
+                    doc.close()
 
-                        # フォルダとマッチング
-                        match_result = matcher.match_folder(receipt_company, folder_names, threshold=0.7)
+                    # ステップ2: 各ページを金額マッチングで最適フォルダに配置（v7.2.3）
+                    for temp_path, page_num, receipt_company in temp_receipt_files:
+                        # すべてのマッチするフォルダを取得
+                        matched_folders = matcher.match_all_folders(receipt_company, folder_names, threshold=0.7)
 
-                        if not match_result:
+                        if not matched_folders:
                             unmatched_pages.append((page_num, f"マッチング失敗: {receipt_company}"))
                             self._log(f"[左側] 警告: ページ{page_num + 1} - マッチング失敗（{receipt_company}）")
                             continue
 
-                        matched_folder_name, score = match_result
-                        self._log(f"[左側] ページ{page_num + 1} - マッチング成功: {matched_folder_name} (スコア: {score:.2f})")
+                        if len(matched_folders) == 1:
+                            # 単一フォルダ: 連番保持で即配置
+                            folder_name, score = matched_folders[0]
+                            self._log(f"[左側] ページ{page_num + 1} - 単一フォルダ: {folder_name} (スコア: {score:.2f})")
 
-                        # マッチしたフォルダを検索
-                        matched_folder_info = None
-                        for f in created_folders:
-                            if f['folder_name'] == matched_folder_name:
-                                matched_folder_info = f
-                                break
+                            # フォルダ情報取得
+                            folder_info = None
+                            for f in created_folders:
+                                if f['folder_name'] == folder_name:
+                                    folder_info = f
+                                    break
 
-                        if not matched_folder_info:
-                            unmatched_pages.append((page_num, f"フォルダ情報取得失敗: {matched_folder_name}"))
-                            continue
+                            if folder_info:
+                                receipt_filename = os.path.basename(temp_path)
+                                receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
+                                shutil.move(temp_path, receipt_dest_path)
+                                matched_count += 1
+                                self._log(f"[左側] 受信通知配置: {receipt_filename} → {folder_name}")
+                            else:
+                                unmatched_pages.append((page_num, f"フォルダ情報なし: {folder_name}"))
 
-                        # ページを抽出
-                        new_doc = fitz.open()
-                        new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                        else:
+                            # 複数フォルダ: 金額マッチングで最適フォルダ選択
+                            self._log(f"[左側] ページ{page_num + 1} - 複数フォルダ検出: {len(matched_folders)}件（金額マッチング実行）")
 
-                        # 保存先: フォルダ内に 02_受信通知.pdf または 9999_受信通知.pdf
-                        receipt_filename = f"{receipt_prefix}_受信通知.pdf"
-                        receipt_dest_path = os.path.join(matched_folder_info['folder_path'], receipt_filename)
+                            # 受信通知から金額抽出
+                            receipt_amount = matcher.extract_amount_from_receipt(temp_path, 0)
 
-                        new_doc.save(receipt_dest_path)
-                        new_doc.close()
+                            if not receipt_amount:
+                                self._log(f"[左側] 警告: 受信通知金額抽出失敗 - ページ{page_num + 1}")
+                                unmatched_pages.append((page_num, "金額抽出失敗"))
+                                if os.path.exists(temp_path):
+                                    os.remove(temp_path)
+                                continue
 
-                        matched_count += 1
-                        self._log(f"[左側] 受信通知配置: {receipt_filename} → {matched_folder_info['folder_name']}")
+                            self._log(f"[左側] 受信通知金額: {receipt_amount:,}円")
+
+                            # 各フォルダの本表金額と比較
+                            best_folder = None
+                            best_diff = float('inf')
+
+                            for folder_name, score in matched_folders:
+                                # フォルダ情報取得
+                                folder_info = None
+                                for f in created_folders:
+                                    if f['folder_name'] == folder_name:
+                                        folder_info = f
+                                        break
+
+                                if not folder_info:
+                                    continue
+
+                                # 本表金額抽出
+                                main_pdf_path = os.path.join(folder_info['folder_path'], folder_info['main_file'])
+                                main_amount = matcher.extract_amount_from_main_pdf(main_pdf_path)
+
+                                if main_amount:
+                                    diff = abs(receipt_amount - main_amount)
+                                    self._log(f"[左側]   {folder_name}: 本表={main_amount:,}円, 差額={diff:,}円")
+
+                                    if diff < best_diff:
+                                        best_diff = diff
+                                        best_folder = (folder_name, folder_info)
+
+                            # 最適フォルダに配置
+                            if best_folder:
+                                folder_name, folder_info = best_folder
+                                receipt_filename = os.path.basename(temp_path)
+                                receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
+                                shutil.move(temp_path, receipt_dest_path)
+                                matched_count += 1
+                                self._log(f"[左側] 金額マッチング成功: {receipt_filename} → {folder_name} (差額: {best_diff:,}円)")
+                            else:
+                                self._log(f"[左側] 警告: 金額マッチング失敗 - ページ{page_num + 1}")
+                                unmatched_pages.append((page_num, "金額マッチング失敗"))
+                                if os.path.exists(temp_path):
+                                    os.remove(temp_path)
 
                     # マッチング結果サマリー
                     self._log(f"[左側] 受信通知マッチング完了: 成功={matched_count}/{total_pages}, 失敗={len(unmatched_pages)}")
@@ -2341,16 +2414,36 @@ class TaxDocumentRenamerV5:
                         for page_num, reason in unmatched_pages:
                             errors.append(f"ページ{page_num + 1}: {reason}")
 
-                    doc.close()
+                    # 一時フォルダクリーンアップ
+                    try:
+                        remaining_files = os.listdir(temp_dir)
+                        if remaining_files:
+                            self._log(f"[左側] 警告: 一時フォルダに {len(remaining_files)} 件の未処理ファイル")
+                            for f in remaining_files:
+                                os.remove(os.path.join(temp_dir, f))
+                        os.rmdir(temp_dir)
+                        self._log(f"[左側] 一時フォルダ削除完了")
+                    except Exception as e:
+                        self._log(f"[左側] 警告: 一時フォルダ削除エラー: {e}")
 
                     # 元の受信通知PDFを削除
                     os.remove(receipt_pdf_path)
                     self._log(f"[左側] 元の受信通知PDF削除完了")
 
                 except Exception as e:
+                    import traceback
+                    error_detail = traceback.format_exc()
                     errors.append(f"受信通知分割エラー: {str(e)}")
+                    self._log(f"[左側] ERROR: 受信通知分割エラー詳細:\n{error_detail}")
+                    # 一時フォルダクリーンアップ
+                    try:
+                        if 'temp_dir' in locals() and os.path.exists(temp_dir):
+                            shutil.rmtree(temp_dir)
+                            self._log(f"[左側] エラー時一時フォルダ削除: {temp_dir}")
+                    except Exception as cleanup_err:
+                        self._log(f"[左側] 一時フォルダ削除失敗: {cleanup_err}")
 
-            # UI更新（メインスレッドで実行）
+            # UI更新（メインスレッドで実行）- 必ず実行
             self.root.after(0, self._left_finish, len(created_folders), len(main_files), errors)
 
         except Exception as e:
@@ -2359,6 +2452,8 @@ class TaxDocumentRenamerV5:
 
     def _left_finish(self, processed_count, total_count, errors):
         """左側リネーム処理完了（完全独立）"""
+        self._log(f"[左側] _left_finish呼び出し: processed={processed_count}, total={total_count}, errors={len(errors)}")
+
         # ボタン再有効化
         self.left_execute_btn.config(state='normal')
 
@@ -2380,7 +2475,7 @@ class TaxDocumentRenamerV5:
 
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v7.1.0-SMART-MATCHING 起動 (会社名マッチング機能実装版)")
+        self._log("税務書類リネームシステム v7.2.2-SEQUENTIAL-MATCHING 起動 (連番方式+金額マッチング実装版)")
         self.root.mainloop()
 
 if __name__ == "__main__":
