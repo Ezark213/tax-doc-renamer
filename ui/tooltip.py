@@ -73,7 +73,8 @@ class ToolTip:
             relief="solid",
             borderwidth=1,
             font=('Yu Gothic UI', 9),
-            padding=5,
+            padx=5,  # Phase 2: padding → padx/pady修正
+            pady=5,
             justify='left'
         )
         label.pack()
