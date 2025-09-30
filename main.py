@@ -485,17 +485,31 @@ class TaxDocumentRenamerV5:
         self.result_tree.pack(side='left', fill='both', expand=True)
         tree_scrollbar.pack(side='right', fill='y')
 
+        # バッファに溜まっている結果を表示
+        print(f"[DEBUG] _show_result_window called")
+        print(f"[DEBUG] Has _result_buffer: {hasattr(self, '_result_buffer')}")
+        if hasattr(self, '_result_buffer'):
+            print(f"[DEBUG] Buffer size: {len(self._result_buffer)}")
+
+        if hasattr(self, '_result_buffer') and self._result_buffer:
+            print(f"[DEBUG] Adding {len(self._result_buffer)} results to tree")
+            for result_data in self._result_buffer:
+                self.result_tree.insert('', 'end', values=result_data['values'])
+                print(f"[DEBUG] Added: {result_data['values'][0]}")
+        else:
+            print(f"[DEBUG] No results in buffer to display")
+
         # 結果操作ボタン
         result_button_frame = ttk.Frame(self.result_window)
         result_button_frame.pack(fill='x', pady=15, padx=10)
 
-        ttk.Button(result_button_frame, text="📁 出力フォルダを開く",
+        ttk.Button(result_button_frame, text="出力フォルダを開く",
                   command=self._open_output_folder,
                   style='Secondary.TButton', width=18).pack(side='left', padx=(0, 8))
-        ttk.Button(result_button_frame, text="📄 結果をエクスポート",
+        ttk.Button(result_button_frame, text="結果をエクスポート",
                   command=self._export_results,
                   style='Success.TButton', width=18).pack(side='left', padx=8)
-        ttk.Button(result_button_frame, text="🔄 結果をクリア",
+        ttk.Button(result_button_frame, text="結果をクリア",
                   command=self._clear_results,
                   style='Danger.TButton', width=15).pack(side='left', padx=8)
 
@@ -1812,10 +1826,6 @@ class TaxDocumentRenamerV5:
 
     def _add_result_success(self, original_file: str, new_filename: str, doc_type: str, method: str, confidence: str, matched_keywords: List[str] = None):
         """成功結果を追加（v5.4.2拡張版・YYMM Policy対応）"""
-        # 結果ウィンドウが存在しない場合は何もしない
-        if not self.result_tree or not hasattr(self.result_tree, 'insert'):
-            return
-
         # マッチしたキーワードの表示文字列を生成
         keywords_display = ""
         if matched_keywords:
@@ -1827,31 +1837,58 @@ class TaxDocumentRenamerV5:
         else:
             keywords_display = "なし"
 
-        self.result_tree.insert('', 'end', values=(
-            os.path.basename(original_file),
-            new_filename,
-            doc_type,
-            method,
-            confidence,
-            keywords_display,
-            "✅ 成功"
-        ))
+        # 結果データを作成
+        result_data = {
+            'type': 'success',
+            'values': (
+                os.path.basename(original_file),
+                new_filename,
+                doc_type,
+                method,
+                confidence,
+                keywords_display,
+                "成功"  # 絵文字を除去
+            )
+        }
+
+        # バッファに追加
+        if not hasattr(self, '_result_buffer'):
+            self._result_buffer = []
+        self._result_buffer.append(result_data)
+
+        # デバッグログ
+        print(f"[DEBUG] Result added to buffer. Buffer size: {len(self._result_buffer)}")
+        print(f"[DEBUG] Result: {result_data['values'][0]} -> {result_data['values'][1]}")
+
+        # 結果ウィンドウが存在する場合はTreeviewに追加
+        if self.result_tree and hasattr(self.result_tree, 'insert'):
+            self.result_tree.insert('', 'end', values=result_data['values'])
+            print(f"[DEBUG] Result added to tree widget")
 
     def _add_result_error(self, original_file: str, error: str):
         """エラー結果を追加"""
-        # 結果ウィンドウが存在しない場合は何もしない
-        if not self.result_tree or not hasattr(self.result_tree, 'insert'):
-            return
+        # 結果データを作成
+        result_data = {
+            'type': 'error',
+            'values': (
+                os.path.basename(original_file),
+                "-",
+                "-",
+                "-",
+                "0.00",
+                "-",
+                f"エラー: {error}"  # 絵文字を除去
+            )
+        }
 
-        self.result_tree.insert('', 'end', values=(
-            os.path.basename(original_file),
-            "-",
-            "-",
-            "-",
-            "0.00",
-            "-",
-            f"❌ エラー: {error}"
-        ))
+        # バッファに追加
+        if not hasattr(self, '_result_buffer'):
+            self._result_buffer = []
+        self._result_buffer.append(result_data)
+
+        # 結果ウィンドウが存在する場合はTreeviewに追加
+        if self.result_tree and hasattr(self.result_tree, 'insert'):
+            self.result_tree.insert('', 'end', values=result_data['values'])
 
     def _open_output_folder(self):
         """出力フォルダを開く"""
