@@ -11,8 +11,9 @@ Pillow>=10.0
 # データ処理
 pandas==2.0.3
 
-# UI (PySide6は tkinter使用のため不要)
+# UI
 # GUI: tkinter (Python標準ライブラリ)
+ttkthemes==3.2.2  # Phase 1: モダンUIテーマ
 
 # 設定ファイル処理
 PyYAML==6.0.1
