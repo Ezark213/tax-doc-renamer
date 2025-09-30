@@ -8,6 +8,7 @@ YYMM Policy System・固定資産書類対応・高精度判定システム
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
+import re
 import threading
 from pathlib import Path
 from typing import List, Dict, Optional
