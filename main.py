@@ -360,24 +360,6 @@ class TaxDocumentRenamerV5:
         municipality_frame.pack(fill='x', pady=(0, 10))
         self._create_municipality_settings(municipality_frame)
         
-        # === エクスポート設定 ===
-        export_frame = ttk.LabelFrame(right_frame, text="📤 エクスポート")
-        export_frame.pack(fill='x', pady=(0, 10))
-        
-        # キーワード辞書エクスポートボタン
-        ttk.Button(
-            export_frame,
-            text="📄 キーワード辞書をエクスポート",
-            command=self._export_keyword_dictionary
-        ).pack(pady=5, padx=10, anchor='w')
-        
-        export_info = ttk.Label(
-            export_frame,
-            text="※分類ルール辞書をJSONファイルでデスクトップに保存",
-            font=('Yu Gothic UI', 8),
-            foreground='gray'
-        )
-        export_info.pack(anchor='w', padx=20)
 
     def _select_rename_folder(self):
         """フォルダ選択＋自動処理実行（ワンボタン統合）"""
@@ -1976,30 +1958,6 @@ class TaxDocumentRenamerV5:
         # 実装省略
         pass
 
-    def _export_keyword_dictionary(self):
-        """キーワード辞書をエクスポート"""
-        try:
-            # 分類器のエクスポート機能を呼び出し
-            export_path = self.classifier_v5.export_keyword_dictionary()
-            
-            # 成功メッセージ
-            messagebox.showinfo(
-                "エクスポート完了",
-                f"キーワード辞書をエクスポートしました：\n{export_path}"
-            )
-            
-            # ログに記録
-            self._log(f"キーワード辞書エクスポート完了: {export_path}")
-            
-        except Exception as e:
-            # エラーメッセージ
-            messagebox.showerror(
-                "エクスポートエラー",
-                f"キーワード辞書のエクスポートに失敗しました：\n{str(e)}"
-            )
-            
-            # ログに記録
-            self._log(f"キーワード辞書エクスポートエラー: {str(e)}")
 
     def _should_exclude_blank_page(self, ocr_text: str, filename: str) -> bool:
         """空白ページかどうかを判定"""
