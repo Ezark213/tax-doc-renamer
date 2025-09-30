@@ -161,12 +161,12 @@ class TaxDocumentRenamerV5:
             # 正規化を試行
             normalized = _normalize_yymm(current_value)
             if normalized and _validate_yymm(normalized):
-                self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized} (UI強制対応)")
+                # 同一値の場合は簡素表示、変換有りの場合は詳細表示
+                if current_value == normalized:
+                    self.yymm_status_var.set(f"✓ 正常: {normalized}")
+                else:
+                    self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized}")
                 self.yymm_status_label.config(foreground='green')
-                
-                # UI強制コードへの対応状況も表示
-                forced_codes = ["6001", "6002", "6003", "0000"]
-                self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized} | UI強制対応({', '.join(forced_codes)})")
             else:
                 self.yymm_status_var.set(f"⚠️ 無効: {current_value} (例: 2508, 25/08, ２５０８)")
                 self.yymm_status_label.config(foreground='red')
