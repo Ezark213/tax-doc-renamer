@@ -632,6 +632,11 @@ class TaxDocumentRenamerV5:
                                            values=self.prefectures, width=10, state='readonly')
             prefecture_combo.pack(side='left', padx=2)
 
+            # Combobox選択後の黒背景問題を修正
+            def fix_combobox_selection(event):
+                event.widget.selection_clear()
+            prefecture_combo.bind('<<ComboboxSelected>>', fix_combobox_selection)
+
             # 市区町村欄
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
