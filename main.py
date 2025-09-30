@@ -36,6 +36,8 @@ from core.pre_extract import create_pre_extract_engine
 from core.rename_engine import create_rename_engine
 from core.models import DocItemID, PreExtractSnapshot
 from helpers.job_context import JobContext
+# Phase 1: Modern UI theme
+from ui.theme_config import apply_modern_theme
 
 
 def _init_tesseract():
@@ -157,7 +159,10 @@ class TaxDocumentRenamerV5:
         
         # RunConfig for UI YYMM centralization
         self.run_config = None  # 一括処理時に作成
-        
+
+        # Phase 1: モダンUIテーマ適用
+        apply_modern_theme(self.root)
+
         # UI構築
         self._create_ui()
         
@@ -175,7 +180,7 @@ class TaxDocumentRenamerV5:
             current_value = self.year_month_var.get()
             if not current_value:
                 self.yymm_status_var.set("📋 YYMM入力待ち")
-                self.yymm_status_label.config(foreground='gray')
+                self.yymm_status_label.config(style='Muted.TLabel')  # Phase 1: スタイル統一
                 return
             
             # 正規化を試行
@@ -186,7 +191,7 @@ class TaxDocumentRenamerV5:
                     self.yymm_status_var.set(f"✓ 正常: {normalized}")
                 else:
                     self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized}")
-                self.yymm_status_label.config(foreground='green')
+                self.yymm_status_label.config(style='Success.TLabel')  # Phase 1: スタイル統一
 
                 # 正規化された値を自動保存
                 try:
@@ -195,11 +200,11 @@ class TaxDocumentRenamerV5:
                     self.logger.warning(f"YYMM値保存エラー: {save_error}")
             else:
                 self.yymm_status_var.set(f"⚠️ 無効: {current_value} (例: 2508, 25/08, ２５０８)")
-                self.yymm_status_label.config(foreground='red')
+                self.yymm_status_label.config(style='Error.TLabel')  # Phase 1: スタイル統一
                 
         except Exception as e:
             self.yymm_status_var.set(f"❌ エラー: {str(e)}")
-            self.yymm_status_label.config(foreground='red')
+            self.yymm_status_label.config(style='Error.TLabel')  # Phase 1: スタイル統一
 
     def _validate_left_yymm_input(self, *args):
         """左側YYMM入力の検証とステータス表示"""
@@ -329,10 +334,9 @@ class TaxDocumentRenamerV5:
         # 左側YYMM設定状態表示
         self.left_yymm_status_var = tk.StringVar()
         self.left_yymm_status_label = ttk.Label(
-            left_year_month_frame, 
+            left_year_month_frame,
             textvariable=self.left_yymm_status_var,
-            font=('Yu Gothic UI', 8), 
-            foreground='blue'
+            style='Info.TLabel'  # Phase 1: スタイル統一
         )
         self.left_yymm_status_label.pack(side='left', padx=(5, 0))
         
@@ -354,8 +358,7 @@ class TaxDocumentRenamerV5:
         self.folder_path_label = ttk.Label(
             folder_rename_frame,
             textvariable=self.folder_rename_var,
-            font=('Yu Gothic UI', 8),
-            foreground='#666666',
+            style='Muted.TLabel',  # Phase 1: スタイル統一
             wraplength=180
         )
         self.folder_path_label.pack(pady=(0, 10), padx=10, fill='x')
@@ -365,8 +368,7 @@ class TaxDocumentRenamerV5:
         progress_label = ttk.Label(
             folder_rename_frame,
             textvariable=self.folder_progress_var,
-            font=('Yu Gothic UI', 8),
-            foreground='#666666',
+            style='Muted.TLabel',  # Phase 1: スタイル統一
             wraplength=180
         )
         progress_label.pack(pady=(0, 10), padx=10)
@@ -407,10 +409,9 @@ class TaxDocumentRenamerV5:
         # YYMM設定状態表示
         self.yymm_status_var = tk.StringVar()
         self.yymm_status_label = ttk.Label(
-            year_month_frame, 
+            year_month_frame,
             textvariable=self.yymm_status_var,
-            font=('Yu Gothic UI', 8), 
-            foreground='blue'
+            style='Info.TLabel'  # Phase 1: スタイル統一
         )
         self.yymm_status_label.pack(side='left', padx=(10, 0))
         
