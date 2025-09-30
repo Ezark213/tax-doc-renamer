@@ -408,9 +408,30 @@ class TaxDocumentRenamerV5:
         # バリデーション設定
         self.left_yymm_var.trace_add('write', self._left_validate_yymm)
 
+        # 本表接頭辞選択
+        main_prefix_frame = ttk.Frame(frame)
+        main_prefix_frame.pack(fill='x', pady=(10, 5))
+
+        ttk.Label(main_prefix_frame, text="本表接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
+        self.left_main_prefix_var = tk.StringVar(value="01")
+
+        ttk.Radiobutton(
+            main_prefix_frame,
+            text="01",
+            variable=self.left_main_prefix_var,
+            value="01"
+        ).pack(side='left', padx=(10, 5))
+
+        ttk.Radiobutton(
+            main_prefix_frame,
+            text="0001",
+            variable=self.left_main_prefix_var,
+            value="0001"
+        ).pack(side='left', padx=(5, 0))
+
         # 受信通知接頭辞選択
         receipt_frame = ttk.Frame(frame)
-        receipt_frame.pack(fill='x', pady=(10, 5))
+        receipt_frame.pack(fill='x', pady=(5, 5))
 
         ttk.Label(receipt_frame, text="受信通知接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
         self.left_receipt_prefix_var = tk.StringVar(value="02")
@@ -2170,18 +2191,19 @@ class TaxDocumentRenamerV5:
         self.left_progress_var.set("処理中...")
         self.left_execute_btn.config(state='disabled')
 
-        # 受信通知接頭辞を取得
+        # 接頭辞を取得
+        main_prefix = self.left_main_prefix_var.get()
         receipt_prefix = self.left_receipt_prefix_var.get()
 
         # バックグラウンド処理開始
         thread = threading.Thread(
             target=self._left_rename_background,
-            args=(folder_path, yymm_value, receipt_prefix),
+            args=(folder_path, yymm_value, main_prefix, receipt_prefix),
             daemon=True
         )
         thread.start()
 
-    def _left_rename_background(self, folder_path, yymm, receipt_prefix):
+    def _left_rename_background(self, folder_path, yymm, main_prefix, receipt_prefix):
         """左側リネーム処理（フォルダ作成+受信通知分割・完全独立）"""
         try:
             import fitz  # PyMuPDF
@@ -2189,9 +2211,12 @@ class TaxDocumentRenamerV5:
             errors = []
             created_folders = []
 
-            # ステップ1: 本表ファイル（01_で始まるファイル）を収集
+            # ステップ1: 本表ファイル（任意の番号_で始まるPDF）を収集
             main_files = []
             receipt_pdf_path = None
+
+            # 本表ファイルパターン: 2桁または4桁の数字_で始まる
+            main_file_pattern = re.compile(r'^(\d{2,4})_(.+)\.pdf$')
 
             for filename in os.listdir(folder_path):
                 file_path = os.path.join(folder_path, filename)
@@ -2199,41 +2224,48 @@ class TaxDocumentRenamerV5:
                 if not os.path.isfile(file_path):
                     continue
 
-                # 本表ファイル: 01_で始まる
-                if filename.startswith("01_") and filename.endswith(".pdf"):
-                    main_files.append((filename, file_path))
+                # 本表ファイル: 数字_で始まるPDFファイル
+                match = main_file_pattern.match(filename)
+                if match:
+                    main_files.append((filename, file_path, match))
                 # 受信通知ファイル
                 elif filename == "受信通知.pdf":
                     receipt_pdf_path = file_path
 
             # 本表ファイルがない場合
             if not main_files:
-                self.root.after(0, lambda: messagebox.showerror("エラー", "01_で始まる本表ファイルが見つかりません"))
+                self.root.after(0, lambda: messagebox.showerror("エラー", "番号_で始まる本表ファイル（PDF）が見つかりません"))
                 self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
                 return
 
             # ステップ2: 各本表ファイルからフォルダを作成して移動
-            for original_filename, original_file_path in main_files:
-                # フォルダ名: YYMM_元のファイル名（拡張子なし）
-                base_name = original_filename[:-4]  # .pdfを除去
-                folder_name = f"{yymm}_{base_name}"
+            for original_filename, original_file_path, match in main_files:
+                # ファイル名から番号と残りの部分を抽出
+                old_prefix = match.group(1)  # 元の番号（01, 02, 9999など）
+                rest_name = match.group(2)   # 残りの部分（帳票名_顧問先...）
+
+                # 新しいファイル名: 選択した接頭辞_残りの部分.pdf
+                new_filename = f"{main_prefix}_{rest_name}.pdf"
+
+                # フォルダ名: YYMM_新しいファイル名（拡張子なし）
+                folder_name = f"{yymm}_{main_prefix}_{rest_name}"
                 new_folder_path = os.path.join(folder_path, folder_name)
 
                 try:
                     # フォルダ作成
                     os.makedirs(new_folder_path, exist_ok=True)
 
-                    # 本表ファイルをフォルダ内に移動
-                    dest_file_path = os.path.join(new_folder_path, original_filename)
+                    # 本表ファイルをリネームしてフォルダ内に移動
+                    dest_file_path = os.path.join(new_folder_path, new_filename)
                     shutil.move(original_file_path, dest_file_path)
 
                     created_folders.append({
                         'folder_path': new_folder_path,
                         'folder_name': folder_name,
-                        'main_file': original_filename
+                        'main_file': new_filename
                     })
 
-                    self._log(f"[左側] フォルダ作成+移動: {folder_name}")
+                    self._log(f"[左側] フォルダ作成+リネーム: {original_filename} → {folder_name}/{new_filename}")
 
                 except Exception as e:
                     errors.append(f"フォルダ作成エラー ({original_filename}): {str(e)}")
