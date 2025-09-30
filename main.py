@@ -164,15 +164,61 @@ class TaxDocumentRenamerV5:
         # Phase 1: モダンUIテーマ適用
         apply_modern_theme(self.root)
 
+        # ボタン視認性向上スタイル設定
+        self._configure_button_styles()
+
         # UI構築
         self._create_ui()
-        
+
+        # メニューバー作成
+        self._create_menubar()
+
         # 自治体セットのデフォルト設定
         self._setup_default_municipalities()
         
         # Bundle二重処理防止: 起動時の古い__split_ファイル一括クリーンアップ
         self._cleanup_old_split_files()
     
+    def _configure_button_styles(self):
+        """ボタン視認性向上のためのスタイル設定"""
+        style = ttk.Style()
+
+        # 大きなボタンスタイル（通常操作用）
+        style.configure('Large.TButton',
+                       font=('Yu Gothic UI', 11),
+                       padding=10,
+                       foreground='black')
+
+        # アクセントボタンスタイル（主要アクション用）
+        style.configure('Accent.TButton',
+                       font=('Yu Gothic UI', 12, 'bold'),
+                       padding=12,
+                       foreground='black')
+
+        # セカンダリーボタンスタイル
+        style.configure('Secondary.TButton',
+                       font=('Yu Gothic UI', 10),
+                       padding=8,
+                       foreground='black')
+
+        # 成功ボタンスタイル（エクスポート、保存用）
+        style.configure('Success.TButton',
+                       font=('Yu Gothic UI', 10, 'bold'),
+                       padding=8,
+                       foreground='black')
+
+        # 危険ボタンスタイル（クリア、削除用）
+        style.configure('Danger.TButton',
+                       font=('Yu Gothic UI', 10),
+                       padding=8,
+                       foreground='black')
+
+        # デフォルトのTButtonスタイルも設定
+        style.configure('TButton',
+                       font=('Yu Gothic UI', 10),
+                       padding=8,
+                       foreground='black')
+
     def _validate_yymm_input(self, *args):
         """YYMMの入力値をリアルタイムバリデーション"""
         try:
@@ -766,6 +812,17 @@ class TaxDocumentRenamerV5:
 
     def _create_municipality_settings(self, parent_frame):
         """自治体設定UIの作成"""
+        # 47都道府県リスト
+        self.prefectures = [
+            "", "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+            "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+            "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+            "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+            "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+            "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+            "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+        ]
+
         # セット1-5のStringVar変数を初期化
         for i in range(1, 6):
             setattr(self, f'prefecture_var_{i}', tk.StringVar())
@@ -775,18 +832,59 @@ class TaxDocumentRenamerV5:
         for i in range(1, 6):
             set_frame = ttk.Frame(parent_frame)
             set_frame.pack(fill='x', pady=2)
-            
+
             ttk.Label(set_frame, text=f"セット{i}:", width=8).pack(side='left')
-            
+
             prefecture_var = getattr(self, f'prefecture_var_{i}')
             city_var = getattr(self, f'city_var_{i}')
-            
-            ttk.Entry(set_frame, textvariable=prefecture_var, width=12).pack(side='left', padx=2)
-            ttk.Entry(set_frame, textvariable=city_var, width=12).pack(side='left', padx=2)
+
+            # 都道府県はCombobox（プルダウン）で選択
+            prefecture_combo = ttk.Combobox(set_frame, textvariable=prefecture_var,
+                                           values=self.prefectures, width=10, state='readonly')
+            prefecture_combo.pack(side='left', padx=2)
+
+            # 市区町村欄
+            city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
+            city_entry.pack(side='left', padx=2)
+
+            # セット1のみ動的制御：東京都の場合は無効化
+            if i == 1:
+                # 市区町村入力欄への参照を保存
+                setattr(self, f'city_entry_{i}', city_entry)
+                # 都道府県変更時に市区町村欄を制御
+                prefecture_var.trace_add('write', lambda *args, idx=i: self._update_city_field_state(idx))
+                # 初期状態を設定
+                self._update_city_field_state(i)
 
             # 市町村設定の変更監視を追加
             prefecture_var.trace_add('write', self._save_municipality_settings)
-            city_var.trace_add('write', self._save_municipality_settings)
+            if i != 1:
+                city_var.trace_add('write', self._save_municipality_settings)
+            else:
+                # セット1も保存監視（東京都以外の場合に必要）
+                city_var.trace_add('write', self._save_municipality_settings)
+
+    def _update_city_field_state(self, set_index):
+        """セット1の市区町村欄の有効/無効を動的に切り替え"""
+        if set_index != 1:
+            return
+
+        prefecture_var = getattr(self, f'prefecture_var_{set_index}')
+        city_entry = getattr(self, f'city_entry_{set_index}', None)
+        city_var = getattr(self, f'city_var_{set_index}')
+
+        if city_entry is None:
+            return
+
+        prefecture_value = prefecture_var.get().strip()
+
+        # 東京都の場合は無効化、それ以外は有効化
+        if prefecture_value == "東京都":
+            city_entry.config(state='disabled')
+            # 東京都の場合は市区町村欄をクリア
+            city_var.set("")
+        else:
+            city_entry.config(state='normal')
 
     def _setup_default_municipalities(self):
         """ユーザー設定から自治体設定を復元"""
@@ -2091,9 +2189,130 @@ class TaxDocumentRenamerV5:
                 
         return False
 
+    def _create_menubar(self):
+        """メニューバーの作成"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # ファイルメニュー
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="ファイル(F)", menu=file_menu)
+        file_menu.add_command(label="ファイル追加", command=self._select_files)
+        file_menu.add_command(label="フォルダ追加", command=self._select_folder)
+        file_menu.add_separator()
+        file_menu.add_command(label="終了", command=self.root.quit)
+
+        # 表示メニュー
+        view_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="表示(V)", menu=view_menu)
+        view_menu.add_command(label="ファイル選択・設定", command=lambda: self.notebook.select(0), accelerator="Ctrl+1")
+        view_menu.add_command(label="処理結果", command=lambda: self.notebook.select(1), accelerator="Ctrl+2")
+        view_menu.add_command(label="ログ・デバッグ", command=lambda: self.notebook.select(2), accelerator="Ctrl+3")
+
+        # ツールメニュー
+        tool_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="ツール(T)", menu=tool_menu)
+        tool_menu.add_command(label="ログをクリア", command=self._clear_log)
+        tool_menu.add_command(label="結果をクリア", command=self._clear_results)
+
+        # ヘルプメニュー
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="ヘルプ(H)", menu=help_menu)
+        help_menu.add_command(label="使い方", command=self._show_help)
+        help_menu.add_command(label="バージョン情報", command=self._show_about)
+
+        # キーボードショートカット
+        self.root.bind('<Control-1>', lambda e: self.notebook.select(0))
+        self.root.bind('<Control-2>', lambda e: self.notebook.select(1))
+        self.root.bind('<Control-3>', lambda e: self.notebook.select(2))
+
+    def _show_help(self):
+        """使い方ダイアログ表示"""
+        help_window = tk.Toplevel(self.root)
+        help_window.title("使い方")
+        help_window.geometry("650x550")
+
+        text_widget = tk.Text(help_window, wrap='word', font=('Yu Gothic UI', 10), padx=15, pady=15)
+        text_widget.pack(fill='both', expand=True)
+
+        help_text = """税務書類リネームシステム v5.5.0-LATEST
+
+【画面構成】
+
+左側: フォルダリネーム機能
+  - シンプルなYYMMプレフィックス置換
+  - 4桁数字_ → YYMM_ に変更
+
+右側: AI分類・リネーム機能
+  - OCR+AI による自動分類
+  - 税務書類コード自動付与
+
+【左側：フォルダリネーム】
+
+1. YYMM入力
+   - 年月を4桁で入力（例: 2501）
+
+2. フォルダリネーム実行ボタンをクリック
+   - フォルダを選択すると自動処理開始
+   - 4桁数字_プレフィックスをYYMM_に置換
+
+【右側：AI分類・リネーム】
+
+1. YYMM設定
+   - 年月を4桁で入力（例: 2501）
+
+2. 市町村設定（オプション）
+   - セット1: 東京都専用（都道府県欄のみ）
+   - セット2～5: その他の都道府県・市区町村を設定
+
+3. フォルダリネーム実行ボタンをクリック
+   - フォルダを選択してAI分類・リネーム実行
+
+【メニュー】
+- ファイル(F): ファイル/フォルダの追加、終了
+- 表示(V): タブ切り替え（Ctrl+1/2/3）
+- ツール(T): ログ・結果のクリア
+- ヘルプ(H): このヘルプとバージョン情報
+
+【キーボードショートカット】
+- Ctrl+1: ファイル選択・設定画面
+- Ctrl+2: 処理結果画面
+- Ctrl+3: ログ・デバッグ画面
+"""
+
+        text_widget.insert('1.0', help_text)
+        text_widget.configure(state='disabled')
+
+        ttk.Button(help_window, text="閉じる", command=help_window.destroy).pack(pady=10)
+
+    def _show_about(self):
+        """バージョン情報ダイアログ表示"""
+        about_window = tk.Toplevel(self.root)
+        about_window.title("バージョン情報")
+        about_window.geometry("400x300")
+        about_window.resizable(False, False)
+
+        content_frame = ttk.Frame(about_window, padding=20)
+        content_frame.pack(fill='both', expand=True)
+
+        ttk.Label(content_frame, text="📄", font=('Arial', 48)).pack()
+        ttk.Label(content_frame, text="税務書類リネームシステム",
+                 font=('Yu Gothic UI', 14, 'bold')).pack(pady=5)
+        ttk.Label(content_frame, text="Version 5.5.0-LATEST",
+                 font=('Yu Gothic UI', 10)).pack()
+
+        import sys
+        ttk.Label(content_frame, text=f"Python {sys.version.split()[0]}",
+                 font=('Yu Gothic UI', 9)).pack(pady=10)
+
+        ttk.Label(content_frame, text="© 2025 税務書類リネームシステム",
+                 font=('Yu Gothic UI', 9)).pack()
+
+        ttk.Button(content_frame, text="閉じる", command=about_window.destroy).pack(pady=15)
+
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v5.4.2 起動 (Bundle PDF Auto-Split対応版)")
+        self._log("税務書類リネームシステム v5.5.0-LATEST 起動 (メニューバーUI対応版)")
         self.root.mainloop()
 
 if __name__ == "__main__":
