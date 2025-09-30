@@ -410,6 +410,225 @@ class MunicipalityMatcher:
             'confidence': municipality_info.confidence
         }
 
+class CompanyNameMatcher:
+    """会社名マッチングクラス（受信通知とフォルダの紐付け）"""
+
+    def __init__(self):
+        """初期化"""
+        # 会社名正規化用の記号・文字マッピング
+        self.normalize_map = {
+            # 法人格表記の統一
+            '株式会社': '',
+            '(株)': '',
+            '（株）': '',
+            '有限会社': '',
+            '(有)': '',
+            '（有）': '',
+            '合同会社': '',
+            '(同)': '',
+            '（同）': '',
+            '一般社団法人': '',
+            '一般財団法人': '',
+            '医療法人': '',
+            '社会福祉法人': '',
+            '学校法人': '',
+            # 全角・半角統一
+            'Ａ': 'A', 'Ｂ': 'B', 'Ｃ': 'C', 'Ｄ': 'D', 'Ｅ': 'E', 'Ｆ': 'F', 'Ｇ': 'G', 'Ｈ': 'H', 'Ｉ': 'I', 'Ｊ': 'J',
+            'Ｋ': 'K', 'Ｌ': 'L', 'Ｍ': 'M', 'Ｎ': 'N', 'Ｏ': 'O', 'Ｐ': 'P', 'Ｑ': 'Q', 'Ｒ': 'R', 'Ｓ': 'S', 'Ｔ': 'T',
+            'Ｕ': 'U', 'Ｖ': 'V', 'Ｗ': 'W', 'Ｘ': 'X', 'Ｙ': 'Y', 'Ｚ': 'Z',
+            'ａ': 'a', 'ｂ': 'b', 'ｃ': 'c', 'ｄ': 'd', 'ｅ': 'e', 'ｆ': 'f', 'ｇ': 'g', 'ｈ': 'h', 'ｉ': 'i', 'ｊ': 'j',
+            'ｋ': 'k', 'ｌ': 'l', 'ｍ': 'm', 'ｎ': 'n', 'ｏ': 'o', 'ｐ': 'p', 'ｑ': 'q', 'ｒ': 'r', 'ｓ': 's', 'ｔ': 't',
+            'ｕ': 'u', 'ｖ': 'v', 'ｗ': 'w', 'ｘ': 'x', 'ｙ': 'y', 'ｚ': 'z',
+            '０': '0', '１': '1', '２': '2', '３': '3', '４': '4', '５': '5', '６': '6', '７': '7', '８': '8', '９': '9',
+            '－': '-', '‐': '-', '‑': '-', '‒': '-', '–': '-', '—': '-', '―': '-',
+            # 旧字体・異体字を新字体に統一（市町村名正規化と同じ）
+            '﨑': '崎', '髙': '高', '嶋': '島', '澤': '沢', '濵': '浜', '濱': '浜',
+            '邊': '辺', '邉': '辺', '舘': '館', '廣': '広', '櫻': '桜', '斉': '斎',
+            '齋': '斎', '鐵': '鉄', '栁': '柳', '萬': '万',
+        }
+
+        # OCR設定（既存OCREngineと同じ）
+        self.ocr_config = '--psm 6 --oem 3 -c preserve_interword_spaces=1'
+
+    def extract_company_name_from_folder(self, folder_name: str) -> Optional[str]:
+        """
+        フォルダ名から会社名を抽出
+
+        フォルダ名形式: YYMM_接頭辞_帳票名_顧問先番号_顧問先名/
+        例: 2511_01_給与所得・退職所得等の所得税徴収高計算書(一般)_0413K0063_株式会社Ｘ－Ｒｅｇｕｌａｔｉｏｎ/
+
+        Args:
+            folder_name: フォルダ名
+
+        Returns:
+            抽出された会社名（正規化前）、失敗時はNone
+        """
+        if not folder_name:
+            return None
+
+        # パターン: YYMM_接頭辞_帳票名_顧問先番号_顧問先名
+        # 最後のアンダースコア以降が会社名
+        pattern = r'^(?:\d{4})_(?:\d{2,4})_[^_]+_[^_]+_(.+?)/?$'
+        match = re.match(pattern, folder_name)
+
+        if match:
+            company_name = match.group(1)
+            return company_name
+
+        return None
+
+    def extract_company_name_from_receipt(self, pdf_path: str, page_num: int = 0) -> Optional[str]:
+        """
+        受信通知PDFから会社名をOCR抽出
+
+        Args:
+            pdf_path: 受信通知PDFのパス
+            page_num: ページ番号（0始まり）
+
+        Returns:
+            抽出された会社名（正規化前）、失敗時はNone
+        """
+        try:
+            doc = fitz.open(pdf_path)
+
+            if page_num >= doc.page_count:
+                doc.close()
+                return None
+
+            page = doc[page_num]
+            page_rect = page.rect
+
+            # 会社名は中央エリアに記載されている想定（ページの中央40%、上部50%）
+            crop_rect = fitz.Rect(
+                page_rect.width * 0.30,   # 左端から30%
+                page_rect.height * 0.15,  # 上端から15%
+                page_rect.width * 0.70,   # 右端まで70%
+                page_rect.height * 0.65   # 上部65%まで
+            )
+
+            # 高解像度で画像として描画
+            mat = fitz.Matrix(3.0, 3.0)
+            pix = page.get_pixmap(matrix=mat, clip=crop_rect)
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+
+            # 画像前処理（既存OCREngineのメソッドを流用）
+            ocr_engine = OCREngine()
+            img = ocr_engine._preprocess_image_for_ocr(img)
+
+            # OCR実行
+            ocr_text = pytesseract.image_to_string(img, lang='jpn', config=self.ocr_config)
+
+            doc.close()
+
+            # 会社名抽出パターン
+            company_patterns = [
+                r'([^\s]{2,30}?)(?:様|殿|御中)',  # "株式会社ABC様"
+                r'([^\s]{2,30}?)(?:\s*納税者)',    # "株式会社ABC 納税者"
+                r'([^\s]{2,30}?)(?:\s*宛)',        # "株式会社ABC 宛"
+            ]
+
+            for pattern in company_patterns:
+                matches = re.findall(pattern, ocr_text)
+                if matches:
+                    # 最初にマッチした会社名を返す
+                    company_name = matches[0].strip()
+                    return company_name
+
+            return None
+
+        except Exception as e:
+            print(f"ERROR: 受信通知OCR失敗: {pdf_path} page={page_num}, error={e}")
+            return None
+
+    def normalize_company_name(self, company_name: str) -> str:
+        """
+        会社名を正規化
+
+        Args:
+            company_name: 正規化前の会社名
+
+        Returns:
+            正規化後の会社名
+        """
+        if not company_name:
+            return ""
+
+        normalized = company_name
+
+        # 1. マッピングテーブルによる置換
+        for old_char, new_char in self.normalize_map.items():
+            normalized = normalized.replace(old_char, new_char)
+
+        # 2. 空白・記号を除去
+        normalized = re.sub(r'[\s\u3000\-－‐‑‒–—―・]', '', normalized)
+
+        # 3. 小文字に統一
+        normalized = normalized.lower()
+
+        return normalized
+
+    def match_folder(self, receipt_company_name: str, folder_names: List[str],
+                     threshold: float = 0.7) -> Optional[Tuple[str, float]]:
+        """
+        受信通知の会社名に最も近いフォルダを検索
+
+        Args:
+            receipt_company_name: 受信通知から抽出した会社名
+            folder_names: フォルダ名のリスト
+            threshold: マッチング閾値（0.0-1.0）
+
+        Returns:
+            (マッチしたフォルダ名, 類似度スコア) または None
+        """
+        if not receipt_company_name or not folder_names:
+            return None
+
+        # 受信通知の会社名を正規化
+        receipt_normalized = self.normalize_company_name(receipt_company_name)
+
+        if not receipt_normalized:
+            return None
+
+        best_match = None
+        best_score = 0.0
+
+        for folder_name in folder_names:
+            # フォルダ名から会社名を抽出
+            folder_company = self.extract_company_name_from_folder(folder_name)
+
+            if not folder_company:
+                continue
+
+            # 正規化
+            folder_normalized = self.normalize_company_name(folder_company)
+
+            if not folder_normalized:
+                continue
+
+            # スコア計算
+            # 1. 完全一致
+            if receipt_normalized == folder_normalized:
+                return (folder_name, 1.0)
+
+            # 2. 部分一致（前方・後方）
+            if receipt_normalized in folder_normalized or folder_normalized in receipt_normalized:
+                # 共通部分の長さでスコア計算
+                common_length = min(len(receipt_normalized), len(folder_normalized))
+                max_length = max(len(receipt_normalized), len(folder_normalized))
+                score = common_length / max_length
+
+                if score > best_score:
+                    best_score = score
+                    best_match = folder_name
+
+        # 閾値以上のスコアのみ返す
+        if best_match and best_score >= threshold:
+            return (best_match, best_score)
+
+        return None
+
+
 if __name__ == "__main__":
     # テスト用
     ocr_engine = OCREngine()

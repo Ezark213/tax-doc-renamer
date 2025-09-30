@@ -1,17 +1,60 @@
-# 🧾 税務書類リネームシステム v7.0.0-FOLDER-CREATION
+# 🧾 税務書類リネームシステム v7.1.0-SMART-MATCHING
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v7.0.0--folder--creation-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v7.1.0--smart--matching-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.30-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v7.0.0では左側フォルダ作成機能が完全実装され、源泉税書類の一括処理が可能になりました。
+v7.1.0では受信通知の会社名マッチング機能が実装され、高精度な自動配置が可能になりました。
 
 ---
 
-## 🚀 **v7.0.0-FOLDER-CREATION - 最新版（2025年9月30日）**
+## 🚀 **v7.1.0-SMART-MATCHING - 最新版（2025年9月30日）**
+
+### ⭐ **NEW! 会社名マッチング機能（v7.1.0）**
+
+#### 🎯 **実装された機能**
+
+1. **受信通知からの会社名OCR抽出**
+   - 受信通知PDF各ページから会社名を自動抽出
+   - OCRエンジンによる高精度テキスト認識
+   - "様"、"殿"、"御中"などの敬称に対応
+
+2. **インテリジェント会社名マッチング**
+   - フォルダ名と受信通知の会社名を自動照合
+   - 法人格の正規化（株式会社 ⇔ (株)）
+   - 全角・半角文字の統一
+   - 旧字体・異体字の統一（髙→高、﨑→崎 など）
+   - 部分一致による柔軟なマッチング
+
+3. **高精度配置アルゴリズム**
+   - 類似度スコアによる最適フォルダ選択
+   - 閾値0.7以上のマッチングのみ許可
+   - マッチング失敗時の詳細ログ出力
+
+#### 📊 **処理フロー改善**
+
+**v7.0.0（旧）**: インデックスベース配置
+```
+受信通知ページ0 → フォルダ0
+受信通知ページ1 → フォルダ1
+受信通知ページ2 → フォルダ2
+（順序が狂うと誤配置）
+```
+
+**v7.1.0（新）**: 会社名マッチングベース配置
+```
+受信通知ページ0 → 会社名抽出 → 最適フォルダ検索 → 正確な配置
+受信通知ページ1 → 会社名抽出 → 最適フォルダ検索 → 正確な配置
+受信通知ページ2 → 会社名抽出 → 最適フォルダ検索 → 正確な配置
+（順序に依存せず、会社名で確実にマッチング）
+```
+
+---
+
+## 🚀 **v7.0.0-FOLDER-CREATION - 前バージョン（2025年9月30日）**
 
 ### 🎯 **左側機能：フォルダ作成+受信通知分割（NEW!）**
 

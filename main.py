@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v7.0.0-FOLDER-CREATION メインアプリケーション
-左側フォルダ作成+受信通知分割機能完全実装版
+税務書類リネームシステム v7.1.0-SMART-MATCHING メインアプリケーション
+会社名マッチング機能実装・受信通知高精度配置版
 YYMM Policy System・固定資産書類対応・高精度判定システム
 """
 
@@ -23,7 +23,7 @@ import atexit
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.pdf_processor import PDFProcessor
-from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
+from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet, CompanyNameMatcher
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
 from helpers.settings_context import UIContext, create_ui_context_from_gui, normalize_settings_input
 from helpers.run_config import RunConfig, create_run_config_from_gui
@@ -2070,7 +2070,7 @@ class TaxDocumentRenamerV5:
         text_widget = tk.Text(help_window, wrap='word', font=('Yu Gothic UI', 10), padx=15, pady=15)
         text_widget.pack(fill='both', expand=True)
 
-        help_text = """税務書類リネームシステム v7.0.0-FOLDER-CREATION
+        help_text = """税務書類リネームシステム v7.1.0-SMART-MATCHING
 
 【画面構成】
 
@@ -2281,26 +2281,65 @@ class TaxDocumentRenamerV5:
                     doc = fitz.open(receipt_pdf_path)
                     total_pages = len(doc)
 
-                    # 各ページを分割して対応するフォルダに配置
-                    for i, folder_info in enumerate(created_folders):
-                        if i >= total_pages:
-                            # ページ数が足りない場合
-                            errors.append(f"警告: 受信通知のページ数({total_pages})が本表ファイル数({len(created_folders)})より少ない")
-                            break
+                    # 会社名マッチングによる受信通知配置（v7.1.0）
+                    matcher = CompanyNameMatcher()
+                    folder_names = [f['folder_name'] for f in created_folders]
+                    matched_count = 0
+                    unmatched_pages = []
 
-                        # i番目のページを抽出
-                        page = doc[i]
+                    for page_num in range(total_pages):
+                        # ページごとに会社名を抽出
+                        receipt_company = matcher.extract_company_name_from_receipt(receipt_pdf_path, page_num)
+
+                        if not receipt_company:
+                            unmatched_pages.append((page_num, "会社名抽出失敗"))
+                            self._log(f"[左側] 警告: ページ{page_num + 1} - 会社名抽出失敗")
+                            continue
+
+                        self._log(f"[左側] ページ{page_num + 1} - 会社名抽出: {receipt_company}")
+
+                        # フォルダとマッチング
+                        match_result = matcher.match_folder(receipt_company, folder_names, threshold=0.7)
+
+                        if not match_result:
+                            unmatched_pages.append((page_num, f"マッチング失敗: {receipt_company}"))
+                            self._log(f"[左側] 警告: ページ{page_num + 1} - マッチング失敗（{receipt_company}）")
+                            continue
+
+                        matched_folder_name, score = match_result
+                        self._log(f"[左側] ページ{page_num + 1} - マッチング成功: {matched_folder_name} (スコア: {score:.2f})")
+
+                        # マッチしたフォルダを検索
+                        matched_folder_info = None
+                        for f in created_folders:
+                            if f['folder_name'] == matched_folder_name:
+                                matched_folder_info = f
+                                break
+
+                        if not matched_folder_info:
+                            unmatched_pages.append((page_num, f"フォルダ情報取得失敗: {matched_folder_name}"))
+                            continue
+
+                        # ページを抽出
                         new_doc = fitz.open()
-                        new_doc.insert_pdf(doc, from_page=i, to_page=i)
+                        new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
 
                         # 保存先: フォルダ内に 02_受信通知.pdf または 9999_受信通知.pdf
                         receipt_filename = f"{receipt_prefix}_受信通知.pdf"
-                        receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
+                        receipt_dest_path = os.path.join(matched_folder_info['folder_path'], receipt_filename)
 
                         new_doc.save(receipt_dest_path)
                         new_doc.close()
 
-                        self._log(f"[左側] 受信通知分割: {receipt_filename} → {folder_info['folder_name']}")
+                        matched_count += 1
+                        self._log(f"[左側] 受信通知配置: {receipt_filename} → {matched_folder_info['folder_name']}")
+
+                    # マッチング結果サマリー
+                    self._log(f"[左側] 受信通知マッチング完了: 成功={matched_count}/{total_pages}, 失敗={len(unmatched_pages)}")
+
+                    if unmatched_pages:
+                        for page_num, reason in unmatched_pages:
+                            errors.append(f"ページ{page_num + 1}: {reason}")
 
                     doc.close()
 
@@ -2341,7 +2380,7 @@ class TaxDocumentRenamerV5:
 
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v7.0.0-FOLDER-CREATION 起動 (左側フォルダ作成機能完全実装版)")
+        self._log("税務書類リネームシステム v7.1.0-SMART-MATCHING 起動 (会社名マッチング機能実装版)")
         self.root.mainloop()
 
 if __name__ == "__main__":
