@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "yymm_value": "2409",
+  "left_yymm_value": "2410",
+  "municipalities": [
+    {
+      "prefecture": "テスト県",
+      "city": "テスト市"
+    },
+    {
+      "prefecture": "愛知県",
+      "city": "蒲郡市"
+    },
+    {
+      "prefecture": "",
+      "city": ""
+    },
+    {
+      "prefecture": "",
+      "city": ""
+    },
+    {
+      "prefecture": "",
+      "city": ""
+    }
+  ]
+}
