@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v5.5.0-LATEST メインアプリケーション
-左側フォルダリネーム機能完全修正版・最新安定版
+税務書類リネームシステム v7.0.0-FOLDER-CREATION メインアプリケーション
+左側フォルダ作成+受信通知分割機能完全実装版
 YYMM Policy System・固定資産書類対応・高精度判定システム
 """
 
@@ -2065,7 +2065,7 @@ class TaxDocumentRenamerV5:
         text_widget = tk.Text(help_window, wrap='word', font=('Yu Gothic UI', 10), padx=15, pady=15)
         text_widget.pack(fill='both', expand=True)
 
-        help_text = """税務書類リネームシステム v5.5.0-LATEST
+        help_text = """税務書類リネームシステム v7.0.0-FOLDER-CREATION
 
 【画面構成】
 
@@ -2336,7 +2336,7 @@ class TaxDocumentRenamerV5:
 
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v5.5.0-LATEST 起動 (メニューバーUI対応版)")
+        self._log("税務書類リネームシステム v7.0.0-FOLDER-CREATION 起動 (左側フォルダ作成機能完全実装版)")
         self.root.mainloop()
 
 if __name__ == "__main__":
