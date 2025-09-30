@@ -15,6 +15,8 @@ import sys
 import pytesseract
 import shutil
 import datetime
+import tempfile
+import atexit
 
 # プロジェクトのルートディレクトリをパスに追加
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -123,9 +125,23 @@ class TaxDocumentRenamerV5:
         self.csv_processor = CSVProcessor()
         self.classifier_v5 = DocumentClassifierV5(debug_mode=True)
         
-        # v5.4.2: Deterministic renaming system
-        snapshots_dir = Path("./snapshots")
-        snapshots_dir.mkdir(exist_ok=True)
+        # v5.4.2: Deterministic renaming system with temporary snapshots directory
+        try:
+            # 一時ディレクトリを作成（ワークディレクトリ汚染回避）
+            self.temp_snapshots_dir = tempfile.mkdtemp(prefix="tax_snapshots_")
+            snapshots_dir = Path(self.temp_snapshots_dir)
+            self.logger.info(f"一時snapshotsディレクトリ作成: {snapshots_dir}")
+
+            # プロセス終了時の自動クリーンアップ設定
+            atexit.register(self._cleanup_temp_snapshots)
+
+        except Exception as e:
+            # 一時ディレクトリ作成失敗時のフォールバック
+            self.logger.warning(f"一時ディレクトリ作成失敗、フォールバック使用: {e}")
+            snapshots_dir = Path("./snapshots")
+            snapshots_dir.mkdir(exist_ok=True)
+            self.temp_snapshots_dir = None
+
         self.pre_extract_engine = create_pre_extract_engine(logger=self.logger, snapshot_dir=snapshots_dir)
         self.rename_engine = create_rename_engine(logger=self.logger)
         
@@ -244,6 +260,19 @@ class TaxDocumentRenamerV5:
             self.user_settings.save_municipalities(municipalities)
         except Exception as save_error:
             self.logger.warning(f"市町村設定保存エラー: {save_error}")
+
+    def _cleanup_temp_snapshots(self):
+        """一時snapshotsディレクトリのクリーンアップ"""
+        if hasattr(self, 'temp_snapshots_dir') and self.temp_snapshots_dir:
+            try:
+                import shutil
+                shutil.rmtree(self.temp_snapshots_dir, ignore_errors=True)
+                if hasattr(self, 'logger'):
+                    self.logger.info(f"一時snapshotsディレクトリ削除完了: {self.temp_snapshots_dir}")
+            except Exception as e:
+                if hasattr(self, 'logger'):
+                    self.logger.warning(f"一時snapshotsディレクトリ削除エラー: {e}")
+                # エラーが発生してもプロセス終了を阻害しない
 
     def _create_ui(self):
         """UIの構築"""
