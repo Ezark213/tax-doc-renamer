@@ -24,6 +24,7 @@ from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
 from helpers.settings_context import UIContext, create_ui_context_from_gui, normalize_settings_input
 from helpers.run_config import RunConfig, create_run_config_from_gui
+from helpers.user_settings import get_user_settings_manager
 from core.csv_processor import CSVProcessor
 from core.classification_v5 import DocumentClassifierV5  # v5.1バグ修正版エンジンを使用
 from core.runtime_paths import get_tesseract_executable_path, get_tessdata_dir_path, validate_tesseract_resources
@@ -113,6 +114,9 @@ class TaxDocumentRenamerV5:
         import logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
+
+        # ユーザー設定管理の初期化
+        self.user_settings = get_user_settings_manager()
         
         self.pdf_processor = PDFProcessor(logger=self.logger)
         self.ocr_engine = OCREngine()
@@ -167,6 +171,12 @@ class TaxDocumentRenamerV5:
                 else:
                     self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized}")
                 self.yymm_status_label.config(foreground='green')
+
+                # 正規化された値を自動保存
+                try:
+                    self.user_settings.save_yymm_value(normalized)
+                except Exception as save_error:
+                    self.logger.warning(f"YYMM値保存エラー: {save_error}")
             else:
                 self.yymm_status_var.set(f"⚠️ 無効: {current_value} (例: 2508, 25/08, ２５０８)")
                 self.yymm_status_label.config(foreground='red')
@@ -193,6 +203,13 @@ class TaxDocumentRenamerV5:
                     current_year = datetime.datetime.now().year % 100
                     if year <= current_year + 5:  # 現在年+5年まで許可
                         self.left_yymm_status_var.set("✓ 有効")
+
+                        # 有効な値を自動保存
+                        try:
+                            self.user_settings.save_left_yymm_value(yymm)
+                        except Exception as save_error:
+                            self.logger.warning(f"左側YYMM値保存エラー: {save_error}")
+
                         return True
                     else:
                         self.left_yymm_status_var.set("年が未来すぎます")
@@ -210,6 +227,23 @@ class TaxDocumentRenamerV5:
         except Exception as e:
             self.left_yymm_status_var.set("エラー")
             return False
+
+    def _save_municipality_settings(self, *args):
+        """市町村設定の変更を自動保存"""
+        try:
+            municipalities = []
+            for i in range(1, 6):
+                prefecture_var = getattr(self, f'prefecture_var_{i}', None)
+                city_var = getattr(self, f'city_var_{i}', None)
+                if prefecture_var and city_var:
+                    municipalities.append({
+                        "prefecture": prefecture_var.get(),
+                        "city": city_var.get()
+                    })
+            
+            self.user_settings.save_municipalities(municipalities)
+        except Exception as save_error:
+            self.logger.warning(f"市町村設定保存エラー: {save_error}")
 
     def _create_ui(self):
         """UIの構築"""
@@ -259,7 +293,7 @@ class TaxDocumentRenamerV5:
         left_year_month_frame.pack(fill='x', pady=5, padx=10)
         
         ttk.Label(left_year_month_frame, text="年月 (YYMM):").pack(side='left')
-        self.left_year_month_var = tk.StringVar(value="2508")
+        self.left_year_month_var = tk.StringVar(value=self.user_settings.get_left_yymm_value())
         left_yymm_entry = ttk.Entry(left_year_month_frame, textvariable=self.left_year_month_var, width=10)
         left_yymm_entry.pack(side='left', padx=(10, 0))
         
@@ -337,7 +371,7 @@ class TaxDocumentRenamerV5:
         year_month_frame.pack(fill='x', pady=5, padx=10)
         
         ttk.Label(year_month_frame, text="年月 (YYMM):").pack(side='left')
-        self.year_month_var = tk.StringVar(value="2508")
+        self.year_month_var = tk.StringVar(value=self.user_settings.get_yymm_value())
         yymm_entry = ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10)
         yymm_entry.pack(side='left', padx=(10, 0))
         
@@ -692,23 +726,21 @@ class TaxDocumentRenamerV5:
             ttk.Entry(set_frame, textvariable=prefecture_var, width=12).pack(side='left', padx=2)
             ttk.Entry(set_frame, textvariable=city_var, width=12).pack(side='left', padx=2)
 
+            # 市町村設定の変更監視を追加
+            prefecture_var.trace_add('write', self._save_municipality_settings)
+            city_var.trace_add('write', self._save_municipality_settings)
+
     def _setup_default_municipalities(self):
-        """デフォルト自治体設定"""
-        defaults = [
-            ("東京都", ""),
-            ("愛知県", "蒲郡市"),
-            ("福岡県", "福岡市"),
-            ("", ""),
-            ("", "")
-        ]
-        
-        for i, (prefecture, city) in enumerate(defaults, 1):
+        """ユーザー設定から自治体設定を復元"""
+        saved_municipalities = self.user_settings.get_municipalities()
+
+        for i, municipality_data in enumerate(saved_municipalities, 1):
             if i <= 5:
                 prefecture_var = getattr(self, f'prefecture_var_{i}', None)
                 city_var = getattr(self, f'city_var_{i}', None)
                 if prefecture_var and city_var:
-                    prefecture_var.set(prefecture)
-                    city_var.set(city)
+                    prefecture_var.set(municipality_data.get("prefecture", ""))
+                    city_var.set(municipality_data.get("city", ""))
     
     def _cleanup_old_split_files(self):
         """Bundle二重処理防止: 古い__split_ファイルを一括クリーンアップ"""
