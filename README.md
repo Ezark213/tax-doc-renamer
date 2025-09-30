@@ -1,48 +1,50 @@
-# 🧾 税務書類リネームシステム v6.0.0-COMPLETE
+# 🧾 税務書類リネームシステム v6.0.0-COMPLETE-PHASE3
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v6.0.0--complete-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v6.0.0--complete--phase3-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
-[![左側機能](https://img.shields.io/badge/%E5%B7%A6%E5%81%B4%E6%A9%9F%E8%83%BD-COMPLETE-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
-[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.26-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![Phase3完了](https://img.shields.io/badge/Phase3-%E5%AE%8C%E4%BA%86-success.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.30-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-左右独立UI、AI分類エンジン、数字プレフィックス置換機能を統合し、確実で高精度な税務書類管理を実現します。
+Phase3完了により、4つの重要バグ修正と設定永続化システムが実装され、最高品質のユーザー体験を実現します。
 
-## 🚀 **v6.0.0-COMPLETE - 左側リネーム機能完全実装版！（2025年9月26日）**
+## 🚀 **v6.0.0-COMPLETE-PHASE3 - Phase3: 4大バグ修正完全実装版！（2025年9月30日）**
 
-### 🎯 **NEW: 左側リネーム機能完全実装** - AttributeError完全解決
-- ✅ **左側機能完全独立化**: 右側エンジンから完全分離・独立動作保証
-- ✅ **数字プレフィックス置換**: `0000_`, `1001_`, `2003_` → `YYMM_` 完全対応
-- ✅ **AttributeError完全解決**: ボタン参照エラー・起動クラッシュ修正
-- ✅ **UI結果表示統合**: 左側処理結果も右側と同じ一覧表示
-- ✅ **UIタイトル最適化**: バージョン情報削除・清潔なインターフェース
+### 🎯 **Phase3完了: 4つの重要バグ修正実装**
 
-### 🔧 **技術的完成度**
-- **完全独立処理**: 左側は右側分類エンジンを一切使用しない専用ロジック
-- **正規表現対応**: 4桁数字プレフィックス自動検出・末尾YYMM重複削除
-- **UI機能共有**: `_add_result_success`メソッドで結果表示統一
-- **エラー完全排除**: AttributeError・起動クラッシュ・処理エラー全解決
+#### 🔧 **Bug #1: 不要なYYMM表示削除**
+- ✅ **問題解決**: `✓正常：2508→2508（6001,6002,6003,0000）`の冗長表示を修正
+- ✅ **実装内容**: 同値時は`✓正常: 2508`の簡潔表示に改善
+- ✅ **効果**: UIの簡素化・ユーザビリティ向上
 
-### ⚡ **動作例**:
-```
-処理前: 0000_納付税額一覧表_2508.pdf
-処理後: 2508_納付税額一覧表.pdf
+#### 🗑️ **Bug #2: キーワード辞書エクスポート機能削除**
+- ✅ **問題解決**: 開発者向け機能の誤配布を除去
+- ✅ **実装内容**: `_export_keyword_dictionary`メソッド完全削除
+- ✅ **効果**: エンドユーザー向けインターフェースの純化
 
-処理前: 1001_愛知県_都道府県申告書_2508.pdf  
-処理後: 2508_愛知県_都道府県申告書.pdf
-```
+#### 📁 **Bug #3: snapshots一時ディレクトリ化**
+- ✅ **問題解決**: 固定snapshotsフォルダの自動作成を停止
+- ✅ **実装内容**: 一時ディレクトリ使用+atexit自動クリーンアップ
+- ✅ **効果**: ディスク容量節約・環境クリーン化
 
-### 📊 **システム構成**
-- **左側**: 数字プレフィックス → YYMM置換（完全独立）
-- **右側**: AI分類・自動リネーム（従来機能継承）
-- **UI**: 統合結果表示・清潔なインターフェース
+#### 💾 **Bug #4: 設定値永続化システム**
+- ✅ **問題解決**: YYMM値・市町村設定の未保存問題を解決
+- ✅ **実装内容**: `helpers/user_settings.py`新規作成・JSON永続化
+- ✅ **効果**: ユーザー体験向上・設定保持機能実現
 
-### ✅ **動作保証**
-- **起動確認**: AttributeError完全解決・正常起動
-- **処理確認**: 32ファイル完全処理・UI表示統合
-- **安定性**: エラーハンドリング・例外処理完備
+### 🧪 **完全検証済み - 統合テスト結果**
+- ✅ **アプリケーション正常起動・動作確認**
+- ✅ **設定値保存・読み込み機能確認**
+- ✅ **一時ディレクトリ自動管理確認**
+- ✅ **UI改善効果確認**
+- ✅ **既存機能への影響なし確認**
+
+### 📦 **新規実装ファイル**
+- **`helpers/user_settings.py`**: 設定永続化システム（新規作成）
+- **`config/user_settings.json`**: 自動生成設定ファイル
+- **テスト環境**: 一時ディレクトリ自動管理システム
 
 ---
 
@@ -78,16 +80,24 @@ python main.py
 
 ```
 tax-doc-renamer/
-├── 🎯 main.py                 # メインアプリケーション（v6.0.0完全版）
-├── 🏗️ core/                  # コアモジュール
-│   ├── classification_v5.py   # AI分類エンジン
-│   ├── rename_engine.py        # リネーム処理
-│   └── ocr_engine.py          # OCR処理エンジン
-├── 🎨 ui/                     # ユーザーインターフェース
-├── 🧪 tests/                  # テストスイート
-├── 📚 docs/                   # 技術文書
-│   └── README_ARCHIVE_v5.5.0.md # 過去バージョン履歴
-└── 📄 requirements.txt        # Python依存関係
+├── 🎯 main.py                    # メインアプリケーション（Phase3完全版）
+├── 🏗️ core/                     # コアモジュール
+│   ├── classification_v5.py      # AI分類エンジン
+│   ├── rename_engine.py           # リネーム処理
+│   └── ocr_engine.py             # OCR処理エンジン
+├── 🛠️ helpers/                   # ヘルパーモジュール（NEW）
+│   └── user_settings.py          # 設定永続化システム
+├── ⚙️ config/                    # 設定ファイル（NEW）
+│   ├── ui_config.yaml            # UI設定
+│   └── user_settings.json        # ユーザー設定（自動生成）
+├── 🎨 ui/                        # ユーザーインターフェース
+├── 🧪 tests/                     # テストスイート
+├── 📚 docs/                      # 技術文書
+├── 📦 old/                       # アーカイブファイル（整理済み）
+├── 📄 requirements.txt           # Python依存関係
+├── 📋 README.md                  # プロジェクト説明（このファイル）
+├── 📝 CLAUDE.md                  # 開発記録・作業ログ
+└── 🏷️ VERSION.txt                # バージョン情報
 ```
 
 ## 📊 システム要件
@@ -118,7 +128,23 @@ tax-doc-renamer/
 
 🚀 **Complete Version!** 左右独立機能・全エラー解決・統合UI完成
 
-**📅 最終更新: 2025年9月26日**
+**📅 最終更新: 2025年9月30日**
+**🚀 Phase3完了: 4大バグ修正・完全整理版**
 
-🤖 Generated with [Claude Code](https://claude.ai/code)  
+## 📊 **Phase3成果サマリー**
+
+### ✅ **完了した改善項目**
+- **Bug修正**: 4つの重要バグ完全解決
+- **設定永続化**: JSON基盤の設定保存システム実装
+- **ディレクトリ整理**: プロジェクト構造の大幅クリーンアップ
+- **ドキュメント整備**: README.md完全更新・統合
+- **GitHub更新**: ブランチ作成・プッシュ・PR準備完了
+
+### 📈 **品質向上指標**
+- **ユーザビリティ**: 不要表示削除・UI簡素化
+- **保守性**: 設定永続化・自動クリーンアップ
+- **可読性**: プロジェクト構造整理・ドキュメント統合
+- **安定性**: 統合テスト実施・動作確認完了
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
 Co-Authored-By: Claude <noreply@anthropic.com>
