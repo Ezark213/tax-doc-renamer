@@ -324,22 +324,70 @@ class MunicipalityMatcher:
         
         return False
 
+    def _normalize_municipality_name(self, name: str) -> str:
+        """市町村名を正規化（表記ゆれ対応）"""
+        if not name:
+            return ""
+
+        # 1. 市町村区を除去
+        normalized = re.sub(r'[市町村区]$', '', name)
+
+        # 2. 旧字体・異体字を新字体に統一
+        kanji_variants = {
+            '﨑': '崎',  # 崎の異体字
+            '﨑': '崎',  # 別の崎の異体字
+            '髙': '高',  # 高の異体字
+            '﨔': '崎',  # 崎の異体字（別コードポイント）
+            '嵜': '崎',  # 崎の別字
+            '嶋': '島',  # 島の旧字
+            '嶌': '島',  # 島の異体字
+            '澤': '沢',  # 沢の旧字
+            '濵': '浜',  # 浜の旧字
+            '濱': '浜',  # 浜の異体字
+            '邊': '辺',  # 辺の旧字
+            '邉': '辺',  # 辺の異体字
+            '舘': '館',  # 館の異体字
+            '廣': '広',  # 広の旧字
+            '櫻': '桜',  # 桜の旧字
+            '斉': '斎',  # 斎の異体字
+            '齋': '斎',  # 斎の旧字
+            '鐵': '鉄',  # 鉄の旧字
+            '澤': '沢',  # 沢の旧字
+            '栁': '柳',  # 柳の異体字
+            '萬': '万',  # 万の旧字
+        }
+
+        for old_char, new_char in kanji_variants.items():
+            normalized = normalized.replace(old_char, new_char)
+
+        # 3. 空白を除去
+        normalized = normalized.replace(' ', '').replace('　', '')
+
+        return normalized
+
     def _is_municipality_match(self, ocr_municipality: str, input_municipality: str) -> bool:
-        """市町村名のマッチング判定"""
+        """市町村名のマッチング判定（表記ゆれ対応強化版）"""
         if not ocr_municipality or not input_municipality:
             return False
-        
+
         # 完全一致
         if ocr_municipality == input_municipality:
             return True
-        
-        # 部分一致（市町村区を除いた部分）
-        ocr_base = re.sub(r'[市町村区]$', '', ocr_municipality)
-        input_base = re.sub(r'[市町村区]$', '', input_municipality)
-        
-        if ocr_base == input_base and len(ocr_base) >= 2:
+
+        # 正規化してマッチング
+        ocr_normalized = self._normalize_municipality_name(ocr_municipality)
+        input_normalized = self._normalize_municipality_name(input_municipality)
+
+        # 正規化後の完全一致
+        if ocr_normalized == input_normalized and len(ocr_normalized) >= 1:
             return True
-        
+
+        # 正規化後の部分一致（前方一致）
+        if ocr_normalized and input_normalized:
+            if (ocr_normalized.startswith(input_normalized) or
+                input_normalized.startswith(ocr_normalized)) and len(min(ocr_normalized, input_normalized)) >= 2:
+                return True
+
         return False
 
     def get_best_match(self, pdf_path: str) -> Dict[str, Optional[int]]:
