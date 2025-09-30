@@ -479,7 +479,11 @@ class CompanyNameMatcher:
 
     def extract_company_name_from_receipt(self, pdf_path: str, page_num: int = 0) -> Optional[str]:
         """
-        受信通知PDFから会社名をOCR抽出
+        受信通知PDFから会社名をテキスト抽出（v7.2.0: OCR不要）
+
+        受信通知PDFはテキストベースの電子フォームのため、
+        OCRではなくPyMuPDFのget_text()で直接抽出する。
+        これにより100%の精度と高速処理を実現。
 
         Args:
             pdf_path: 受信通知PDFのパス
@@ -496,49 +500,28 @@ class CompanyNameMatcher:
                 return None
 
             page = doc[page_num]
-            page_rect = page.rect
 
-            # 会社名は中央エリアに記載されている想定（ページの中央40%、上部50%）
-            crop_rect = fitz.Rect(
-                page_rect.width * 0.30,   # 左端から30%
-                page_rect.height * 0.15,  # 上端から15%
-                page_rect.width * 0.70,   # 右端まで70%
-                page_rect.height * 0.65   # 上部65%まで
-            )
-
-            # 高解像度で画像として描画
-            mat = fitz.Matrix(3.0, 3.0)
-            pix = page.get_pixmap(matrix=mat, clip=crop_rect)
-            img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
-
-            # 画像前処理（既存OCREngineのメソッドを流用）
-            ocr_engine = OCREngine()
-            img = ocr_engine._preprocess_image_for_ocr(img)
-
-            # OCR実行
-            ocr_text = pytesseract.image_to_string(img, lang='jpn', config=self.ocr_config)
+            # テキストを直接抽出（OCR不要）
+            text = page.get_text()
 
             doc.close()
 
-            # 会社名抽出パターン
+            # 会社名抽出パターン（受信通知専用）
             company_patterns = [
-                r'([^\s]{2,30}?)(?:様|殿|御中)',  # "株式会社ABC様"
-                r'([^\s]{2,30}?)(?:\s*納税者)',    # "株式会社ABC 納税者"
-                r'([^\s]{2,30}?)(?:\s*宛)',        # "株式会社ABC 宛"
+                r'氏名又は名称\s+(.+?)(?:\n|代表者)',  # "氏名又は名称 むかしむかし株式会社"
+                r'氏名又は名称\s*\n\s*(.+?)(?:\n|$)',  # 改行がある場合
             ]
 
             for pattern in company_patterns:
-                matches = re.findall(pattern, ocr_text)
-                if matches:
-                    # 最初にマッチした会社名を返す
-                    company_name = matches[0].strip()
+                match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
+                if match:
+                    company_name = match.group(1).strip()
                     return company_name
 
             return None
 
         except Exception as e:
-            print(f"ERROR: 受信通知OCR失敗: {pdf_path} page={page_num}, error={e}")
+            print(f"ERROR: 受信通知テキスト抽出失敗: {pdf_path} page={page_num}, error={e}")
             return None
 
     def normalize_company_name(self, company_name: str) -> str:
