@@ -30,7 +30,6 @@ from helpers.user_settings import get_user_settings_manager
 from core.csv_processor import CSVProcessor
 from core.classification_v5 import DocumentClassifierV5  # v5.1バグ修正版エンジンを使用
 from core.runtime_paths import get_tesseract_executable_path, get_tessdata_dir_path, validate_tesseract_resources
-from ui.drag_drop import DropZoneFrame, AutoSplitControlFrame
 # v5.4.2: Deterministic renaming system
 from core.pre_extract import create_pre_extract_engine
 from core.rename_engine import create_rename_engine
@@ -38,6 +37,8 @@ from core.models import DocItemID, PreExtractSnapshot
 from helpers.job_context import JobContext
 # Phase 1: Modern UI theme
 from ui.theme_config import apply_modern_theme
+# Phase 2: Tooltip support
+from ui.tooltip import create_tooltip
 
 
 def _init_tesseract():
@@ -311,11 +312,12 @@ class TaxDocumentRenamerV5:
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
         # 左右分割：左側はフォルダリネーム機能、右側に全機能統合
+        # Phase 2: パネルバランス最適化（1:4比率、最小幅設定）
         paned = ttk.PanedWindow(main_frame, orient='horizontal')
         paned.pack(fill='both', expand=True)
-        
-        # 左側: フォルダリネーム機能エリア
-        left_frame = ttk.Frame(paned, width=200)
+
+        # 左側: フォルダリネーム機能エリア（最小幅250px）
+        left_frame = ttk.Frame(paned, width=250)
         paned.add(left_frame, weight=1)
         
         # === フォルダリネーム機能UI ===
@@ -330,6 +332,8 @@ class TaxDocumentRenamerV5:
         self.left_year_month_var = tk.StringVar(value=self.user_settings.get_left_yymm_value())
         left_yymm_entry = ttk.Entry(left_year_month_frame, textvariable=self.left_year_month_var, width=10)
         left_yymm_entry.pack(side='left', padx=(10, 0))
+        # Phase 2: ツールチップ追加
+        create_tooltip(left_yymm_entry, "年月を4桁で入力（例: 2501）\nファイル名のプレフィックスに使用されます")
         
         # 左側YYMM設定状態表示
         self.left_yymm_status_var = tk.StringVar()
@@ -345,14 +349,19 @@ class TaxDocumentRenamerV5:
         self._validate_left_yymm_input()  # 初期バリデーション
         
         # フォルダ選択＋処理実行ボタン（統合版）
+        # Phase 2: ボタン配置最適化（padding統一、視認性向上）
         self.folder_rename_var = tk.StringVar()
         self.folder_rename_button = ttk.Button(
             folder_rename_frame,
             text="🔄 フォルダリネーム実行",
             command=self._select_rename_folder,
-            style='Accent.TButton'
+            style='Accent.TButton',
+            width=20  # Phase 2: 最小幅設定
         )
-        self.folder_rename_button.pack(pady=(10, 5), padx=10, fill='x')
+        self.folder_rename_button.pack(pady=(15, 10), padx=10, fill='x')  # Phase 2: padding最適化
+        # Phase 2: ツールチップ追加
+        create_tooltip(self.folder_rename_button,
+                      "フォルダを選択して一括リネーム実行\nファイル名を YYMM_元ファイル名.pdf に変換します")
         
         # 選択されたフォルダパス表示
         self.folder_path_label = ttk.Label(
@@ -373,9 +382,9 @@ class TaxDocumentRenamerV5:
         )
         progress_label.pack(pady=(0, 10), padx=10)
         
-        # 右側: 全機能統合エリア
-        right_frame = ttk.Frame(paned)
-        paned.add(right_frame, weight=3)
+        # 右側: 全機能統合エリア（最小幅700px、weight増加で広く表示）
+        right_frame = ttk.Frame(paned, width=700)
+        paned.add(right_frame, weight=4)  # Phase 2: weight 3→4に変更
         
         # 右側のレイアウト設定
         right_frame.columnconfigure(0, weight=1)
@@ -385,13 +394,18 @@ class TaxDocumentRenamerV5:
         file_process_frame.pack(fill='x', pady=(0, 10))
         
         # メイン処理ボタン（名称統一）
+        # Phase 2: ボタン配置最適化（padding統一、視認性向上）
         main_process_button = ttk.Button(
             file_process_frame,
             text="🔄 フォルダリネーム実行",
             command=self._start_folder_batch_processing_direct,
-            style='Accent.TButton'
+            style='Accent.TButton',
+            width=25  # Phase 2: 最小幅設定
         )
-        main_process_button.pack(pady=10)
+        main_process_button.pack(pady=15, padx=10)  # Phase 2: padding最適化
+        # Phase 2: ツールチップ追加
+        create_tooltip(main_process_button,
+                      "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
         
         # === 設定エリア ===
         settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定")
@@ -405,6 +419,8 @@ class TaxDocumentRenamerV5:
         self.year_month_var = tk.StringVar(value=self.user_settings.get_yymm_value())
         yymm_entry = ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10)
         yymm_entry.pack(side='left', padx=(10, 0))
+        # Phase 2: ツールチップ追加
+        create_tooltip(yymm_entry, "年月を4桁で入力（例: 2501）\nAI分類・リネーム時に使用されます")
         
         # YYMM設定状態表示
         self.yymm_status_var = tk.StringVar()
@@ -707,12 +723,19 @@ class TaxDocumentRenamerV5:
         tree_scrollbar.pack(side='right', fill='y')
         
         # 結果操作ボタン
+        # Phase 2: ボタン配置最適化（padding統一、スタイル適用）
         result_button_frame = ttk.Frame(self.result_frame)
-        result_button_frame.pack(fill='x', pady=10)
-        
-        ttk.Button(result_button_frame, text="📁 出力フォルダを開く", command=self._open_output_folder).pack(side='left', padx=(0, 5))
-        ttk.Button(result_button_frame, text="📄 結果をエクスポート", command=self._export_results).pack(side='left', padx=5)
-        ttk.Button(result_button_frame, text="🔄 結果をクリア", command=self._clear_results).pack(side='left', padx=5)
+        result_button_frame.pack(fill='x', pady=15, padx=10)
+
+        ttk.Button(result_button_frame, text="📁 出力フォルダを開く",
+                  command=self._open_output_folder,
+                  style='Secondary.TButton', width=18).pack(side='left', padx=(0, 8))
+        ttk.Button(result_button_frame, text="📄 結果をエクスポート",
+                  command=self._export_results,
+                  style='Success.TButton', width=18).pack(side='left', padx=8)
+        ttk.Button(result_button_frame, text="🔄 結果をクリア",
+                  command=self._clear_results,
+                  style='Danger.TButton', width=15).pack(side='left', padx=8)
 
     def _create_log_tab(self):
         """ログタブの作成"""
@@ -730,11 +753,16 @@ class TaxDocumentRenamerV5:
         log_scrollbar.pack(side='right', fill='y')
         
         # ログ操作ボタン
+        # Phase 2: ボタン配置最適化（padding統一、スタイル適用）
         log_button_frame = ttk.Frame(self.log_frame)
-        log_button_frame.pack(fill='x', pady=10)
-        
-        ttk.Button(log_button_frame, text="🗑️ ログクリア", command=self._clear_log).pack(side='left', padx=(0, 5))
-        ttk.Button(log_button_frame, text="💾 ログ保存", command=self._save_log).pack(side='left', padx=5)
+        log_button_frame.pack(fill='x', pady=15, padx=10)
+
+        ttk.Button(log_button_frame, text="🗑️ ログクリア",
+                  command=self._clear_log,
+                  style='Danger.TButton', width=15).pack(side='left', padx=(0, 8))
+        ttk.Button(log_button_frame, text="💾 ログ保存",
+                  command=self._save_log,
+                  style='Success.TButton', width=15).pack(side='left', padx=8)
 
     def _create_municipality_settings(self, parent_frame):
         """自治体設定UIの作成"""
