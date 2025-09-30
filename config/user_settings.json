@@ -1,19 +1,19 @@
 {
   "version": "1.0.0",
-  "yymm_value": "2409",
+  "yymm_value": "2511",
   "left_yymm_value": "2410",
   "municipalities": [
     {
-      "prefecture": "テスト県",
-      "city": "テスト市"
+      "prefecture": "東京都",
+      "city": ""
     },
     {
       "prefecture": "愛知県",
-      "city": "蒲郡市"
+      "city": "tesuto"
     },
     {
-      "prefecture": "",
-      "city": ""
+      "prefecture": "福岡県",
+      "city": "福岡市"
     },
     {
       "prefecture": "",
