@@ -408,6 +408,27 @@ class TaxDocumentRenamerV5:
         # バリデーション設定
         self.left_yymm_var.trace_add('write', self._left_validate_yymm)
 
+        # 受信通知接頭辞選択
+        receipt_frame = ttk.Frame(frame)
+        receipt_frame.pack(fill='x', pady=(10, 5))
+
+        ttk.Label(receipt_frame, text="受信通知接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
+        self.left_receipt_prefix_var = tk.StringVar(value="02")
+
+        ttk.Radiobutton(
+            receipt_frame,
+            text="02",
+            variable=self.left_receipt_prefix_var,
+            value="02"
+        ).pack(side='left', padx=(10, 5))
+
+        ttk.Radiobutton(
+            receipt_frame,
+            text="9999",
+            variable=self.left_receipt_prefix_var,
+            value="9999"
+        ).pack(side='left', padx=(5, 0))
+
         # 実行ボタン
         self.left_execute_btn = ttk.Button(
             frame,
@@ -2149,59 +2170,112 @@ class TaxDocumentRenamerV5:
         self.left_progress_var.set("処理中...")
         self.left_execute_btn.config(state='disabled')
 
+        # 受信通知接頭辞を取得
+        receipt_prefix = self.left_receipt_prefix_var.get()
+
         # バックグラウンド処理開始
         thread = threading.Thread(
             target=self._left_rename_background,
-            args=(folder_path, yymm_value),
+            args=(folder_path, yymm_value, receipt_prefix),
             daemon=True
         )
         thread.start()
 
-    def _left_rename_background(self, folder_path, yymm):
-        """左側リネーム処理（バックグラウンド・完全独立）"""
+    def _left_rename_background(self, folder_path, yymm, receipt_prefix):
+        """左側リネーム処理（フォルダ作成+受信通知分割・完全独立）"""
         try:
-            # 4桁数字プレフィックスパターン: 0000_, 1234_ など
-            pattern = re.compile(r'^(\d{4})_(.+)$')
+            import fitz  # PyMuPDF
 
-            processed_count = 0
-            total_count = 0
             errors = []
+            created_folders = []
 
-            # フォルダ内の全ファイルをスキャン
+            # ステップ1: 本表ファイル（01_で始まるファイル）を収集
+            main_files = []
+            receipt_pdf_path = None
+
             for filename in os.listdir(folder_path):
                 file_path = os.path.join(folder_path, filename)
 
-                # ファイルのみ対象（ディレクトリは除外）
                 if not os.path.isfile(file_path):
                     continue
 
-                match = pattern.match(filename)
-                if not match:
-                    continue
+                # 本表ファイル: 01_で始まる
+                if filename.startswith("01_") and filename.endswith(".pdf"):
+                    main_files.append((filename, file_path))
+                # 受信通知ファイル
+                elif filename == "受信通知.pdf":
+                    receipt_pdf_path = file_path
 
-                total_count += 1
+            # 本表ファイルがない場合
+            if not main_files:
+                self.root.after(0, lambda: messagebox.showerror("エラー", "01_で始まる本表ファイルが見つかりません"))
+                self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+                return
 
-                # 新ファイル名生成: YYMM_元の名前部分
-                old_prefix = match.group(1)
-                rest_name = match.group(2)
-                new_filename = f"{yymm}_{rest_name}"
-                new_file_path = os.path.join(folder_path, new_filename)
+            # ステップ2: 各本表ファイルからフォルダを作成して移動
+            for original_filename, original_file_path in main_files:
+                # フォルダ名: YYMM_元のファイル名（拡張子なし）
+                base_name = original_filename[:-4]  # .pdfを除去
+                folder_name = f"{yymm}_{base_name}"
+                new_folder_path = os.path.join(folder_path, folder_name)
 
-                # 重複チェック
-                if os.path.exists(new_file_path):
-                    errors.append(f"{filename} → 重複: {new_filename}")
-                    continue
-
-                # ファイルリネーム実行
                 try:
-                    shutil.move(file_path, new_file_path)
-                    processed_count += 1
-                    self._log(f"[左側] リネーム: {filename} → {new_filename}")
+                    # フォルダ作成
+                    os.makedirs(new_folder_path, exist_ok=True)
+
+                    # 本表ファイルをフォルダ内に移動
+                    dest_file_path = os.path.join(new_folder_path, original_filename)
+                    shutil.move(original_file_path, dest_file_path)
+
+                    created_folders.append({
+                        'folder_path': new_folder_path,
+                        'folder_name': folder_name,
+                        'main_file': original_filename
+                    })
+
+                    self._log(f"[左側] フォルダ作成+移動: {folder_name}")
+
                 except Exception as e:
-                    errors.append(f"{filename} → エラー: {str(e)}")
+                    errors.append(f"フォルダ作成エラー ({original_filename}): {str(e)}")
+
+            # ステップ3: 受信通知PDFを分割して各フォルダに配置
+            if receipt_pdf_path and created_folders:
+                try:
+                    doc = fitz.open(receipt_pdf_path)
+                    total_pages = len(doc)
+
+                    # 各ページを分割して対応するフォルダに配置
+                    for i, folder_info in enumerate(created_folders):
+                        if i >= total_pages:
+                            # ページ数が足りない場合
+                            errors.append(f"警告: 受信通知のページ数({total_pages})が本表ファイル数({len(created_folders)})より少ない")
+                            break
+
+                        # i番目のページを抽出
+                        page = doc[i]
+                        new_doc = fitz.open()
+                        new_doc.insert_pdf(doc, from_page=i, to_page=i)
+
+                        # 保存先: フォルダ内に 02_受信通知.pdf または 9999_受信通知.pdf
+                        receipt_filename = f"{receipt_prefix}_受信通知.pdf"
+                        receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
+
+                        new_doc.save(receipt_dest_path)
+                        new_doc.close()
+
+                        self._log(f"[左側] 受信通知分割: {receipt_filename} → {folder_info['folder_name']}")
+
+                    doc.close()
+
+                    # 元の受信通知PDFを削除
+                    os.remove(receipt_pdf_path)
+                    self._log(f"[左側] 元の受信通知PDF削除完了")
+
+                except Exception as e:
+                    errors.append(f"受信通知分割エラー: {str(e)}")
 
             # UI更新（メインスレッドで実行）
-            self.root.after(0, self._left_finish, processed_count, total_count, errors)
+            self.root.after(0, self._left_finish, len(created_folders), len(main_files), errors)
 
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("処理エラー", f"予期しないエラーが発生しました:\n{str(e)}"))
@@ -2214,15 +2288,15 @@ class TaxDocumentRenamerV5:
 
         # 進捗表示更新
         if total_count == 0:
-            self.left_progress_var.set("対象ファイルなし (0000_形式)")
-            messagebox.showinfo("完了", "リネーム対象のファイルが見つかりませんでした。\n(4桁数字_形式のファイルが必要です)")
+            self.left_progress_var.set("対象ファイルなし (01_形式)")
+            messagebox.showinfo("完了", "01_で始まる本表ファイルが見つかりませんでした")
         else:
-            self.left_progress_var.set(f"完了: {processed_count}/{total_count}件")
+            self.left_progress_var.set(f"完了: {processed_count}/{total_count}フォルダ作成")
 
             # 結果ダイアログ
-            message = f"処理完了:\n成功: {processed_count}件\n対象: {total_count}件"
+            message = f"処理完了:\n\n作成フォルダ: {processed_count}個\n本表ファイル: {total_count}件"
             if errors:
-                message += f"\n\nエラー ({len(errors)}件):\n" + "\n".join(errors[:5])
+                message += f"\n\nエラー・警告 ({len(errors)}件):\n" + "\n".join(errors[:5])
                 if len(errors) > 5:
                     message += f"\n... 他{len(errors)-5}件"
 
