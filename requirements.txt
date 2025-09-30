@@ -1,9 +1,18 @@
-PyPDF2==3.0.1
-pypdf==4.0.0
+# 税務書類リネームシステム - 最小依存関係
+# Phase3完了版 - 実際に使用されるパッケージのみ
+
+# PDF処理
 PyMuPDF==1.23.8
+
+# OCR処理
 pytesseract==0.3.10
 Pillow>=10.0
-pyinstaller==6.15.0
+
+# データ処理
 pandas==2.0.3
+
+# UI (PySide6は tkinter使用のため不要)
+# GUI: tkinter (Python標準ライブラリ)
+
+# 設定ファイル処理
 PyYAML==6.0.1
-PySide6>=6.7
