@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v7.2.2-SEQUENTIAL-MATCHING メインアプリケーション
-連番方式+金額マッチングによる完全自動配置・確実版
+税務書類リネームシステム v5.5.0-LATEST メインアプリケーション
+左側フォルダリネーム機能完全修正版・最新安定版
 YYMM Policy System・固定資産書類対応・高精度判定システム
 """
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
-import re
 import threading
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -23,7 +22,7 @@ import atexit
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.pdf_processor import PDFProcessor
-from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet, CompanyNameMatcher
+from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
 from helpers.settings_context import UIContext, create_ui_context_from_gui, normalize_settings_input
 from helpers.run_config import RunConfig, create_run_config_from_gui
@@ -115,23 +114,7 @@ class TaxDocumentRenamerV5:
         self.root = tk.Tk()
         self.root.title("税務書類リネームシステム")
         self.root.geometry("1200x800")
-
-        # カラースキーム定義
-        self.colors = {
-            'primary': '#4F46E5',      # メインの青紫
-            'secondary': '#10B981',    # 成功の緑
-            'danger': '#EF4444',       # エラーの赤
-            'bg_card': '#FFFFFF',      # カード背景
-            'bg_light': '#F9FAFB',     # 薄い背景
-            'bg_window': '#F5F7FA',    # ウィンドウ背景
-            'text_dark': '#1F2937',    # メインテキスト
-            'text_medium': '#6B7280',  # サブテキスト
-            'border': '#E5E7EB'        # ボーダー
-        }
-
-        # ウィンドウ背景色設定
-        self.root.configure(bg=self.colors['bg_window'])
-
+        
         # v5.2 コアエンジンの初期化（ロガー付き）
         import logging
         logging.basicConfig(level=logging.INFO)
@@ -139,7 +122,7 @@ class TaxDocumentRenamerV5:
 
         # ユーザー設定管理の初期化
         self.user_settings = get_user_settings_manager()
-
+        
         self.pdf_processor = PDFProcessor(logger=self.logger)
         self.ocr_engine = OCREngine()
         self.csv_processor = CSVProcessor()
@@ -200,111 +183,41 @@ class TaxDocumentRenamerV5:
         """ボタン視認性向上のためのスタイル設定"""
         style = ttk.Style()
 
-        # フレームスタイル設定
-        style.configure('TFrame',
-                       background=self.colors['bg_card'])
-
-        style.configure('TLabelFrame',
-                       background=self.colors['bg_card'],
-                       borderwidth=1,
-                       relief='solid')
-        style.configure('TLabelFrame.Label',
-                       background=self.colors['bg_card'],
-                       foreground=self.colors['text_dark'],
-                       font=('Yu Gothic UI', 12, 'bold'))
-
-        # ラベルスタイル設定
-        style.configure('TLabel',
-                       background=self.colors['bg_card'],
-                       foreground=self.colors['text_dark'],
-                       font=('Yu Gothic UI', 10))
-
-        style.configure('Heading.TLabel',
-                       background=self.colors['bg_card'],
-                       foreground=self.colors['text_dark'],
-                       font=('Yu Gothic UI', 12, 'bold'))
-
-        style.configure('Muted.TLabel',
-                       background=self.colors['bg_card'],
-                       foreground=self.colors['text_medium'],
-                       font=('Yu Gothic UI', 10))
-
         # 大きなボタンスタイル（通常操作用）
         style.configure('Large.TButton',
                        font=('Yu Gothic UI', 11),
                        padding=10,
-                       background=self.colors['primary'],
                        foreground='black')
-        style.map('Large.TButton',
-                 background=[('active', '#3730A3')],  # ホバー時に濃い色
-                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # アクセントボタンスタイル（主要アクション用）
         style.configure('Accent.TButton',
                        font=('Yu Gothic UI', 12, 'bold'),
                        padding=12,
-                       background=self.colors['primary'],
                        foreground='black')
-        style.map('Accent.TButton',
-                 background=[('active', '#3730A3')],
-                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # セカンダリーボタンスタイル
         style.configure('Secondary.TButton',
                        font=('Yu Gothic UI', 10),
                        padding=8,
-                       background=self.colors['bg_light'],
                        foreground='black')
-        style.map('Secondary.TButton',
-                 background=[('active', '#E5E7EB')],
-                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # 成功ボタンスタイル（エクスポート、保存用）
         style.configure('Success.TButton',
                        font=('Yu Gothic UI', 10, 'bold'),
                        padding=8,
-                       background=self.colors['secondary'],
                        foreground='black')
-        style.map('Success.TButton',
-                 background=[('active', '#059669')],
-                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # 危険ボタンスタイル（クリア、削除用）
         style.configure('Danger.TButton',
                        font=('Yu Gothic UI', 10),
                        padding=8,
-                       background=self.colors['danger'],
                        foreground='black')
-        style.map('Danger.TButton',
-                 background=[('active', '#DC2626')],
-                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # デフォルトのTButtonスタイルも設定
         style.configure('TButton',
                        font=('Yu Gothic UI', 10),
                        padding=8,
-                       background=self.colors['primary'],
                        foreground='black')
-        style.map('TButton',
-                 background=[('active', '#3730A3')],
-                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
-
-        # Entryスタイル
-        style.configure('TEntry',
-                       fieldbackground='white',
-                       foreground=self.colors['text_dark'],
-                       font=('Yu Gothic UI', 10))
-
-        # Radiobutton, Checkbuttonスタイル
-        style.configure('TRadiobutton',
-                       background=self.colors['bg_card'],
-                       foreground=self.colors['text_dark'],
-                       font=('Yu Gothic UI', 10))
-
-        style.configure('TCheckbutton',
-                       background=self.colors['bg_card'],
-                       foreground=self.colors['text_dark'],
-                       font=('Yu Gothic UI', 10))
 
     def _validate_yymm_input(self, *args):
         """YYMMの入力値をリアルタイムバリデーション"""
@@ -340,6 +253,49 @@ class TaxDocumentRenamerV5:
             self.yymm_status_var.set(f"❌ エラー: {str(e)}")
             self.yymm_status_label.config(style='Error.TLabel')  # Phase 1: スタイル統一
 
+    def _validate_left_yymm_input(self, *args):
+        """左側YYMM入力の検証とステータス表示"""
+        try:
+            yymm = self.left_year_month_var.get()
+            if not yymm:
+                self.left_yymm_status_var.set("未入力")
+                return False
+            
+            # 4桁数字チェック
+            if len(yymm) == 4 and yymm.isdigit():
+                year = int(yymm[:2])
+                month = int(yymm[2:4])
+                
+                if 1 <= month <= 12:
+                    # 有効な年月
+                    current_year = datetime.datetime.now().year % 100
+                    if year <= current_year + 5:  # 現在年+5年まで許可
+                        self.left_yymm_status_var.set("✓ 有効")
+
+                        # 有効な値を自動保存
+                        try:
+                            self.user_settings.save_left_yymm_value(yymm)
+                        except Exception as save_error:
+                            self.logger.warning(f"左側YYMM値保存エラー: {save_error}")
+
+                        return True
+                    else:
+                        self.left_yymm_status_var.set("年が未来すぎます")
+                        return False
+                else:
+                    self.left_yymm_status_var.set("月が無効(01-12)")
+                    return False
+            else:
+                if len(yymm) < 4:
+                    self.left_yymm_status_var.set(f"入力中... ({len(yymm)}/4)")
+                else:
+                    self.left_yymm_status_var.set("4桁の数字で入力")
+                return False
+                
+        except Exception as e:
+            self.left_yymm_status_var.set("エラー")
+            return False
+
     def _save_municipality_settings(self, *args):
         """市町村設定の変更を自動保存"""
         try:
@@ -372,9 +328,9 @@ class TaxDocumentRenamerV5:
 
     def _create_ui(self):
         """UIの構築"""
-        # メインフレーム（余白を増やす）
+        # メインフレーム
         main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
         # メインコンテンツ（タブなし）
         self.file_frame = ttk.Frame(main_frame)
@@ -389,216 +345,375 @@ class TaxDocumentRenamerV5:
         self.result_tree = None
         self.log_text = None
 
-        # 処理結果バッファ（ウィンドウが開かれる前の結果を保持）
-        self._result_buffer = []
-
     def _create_file_tab(self):
         """ファイル選択タブの作成（UI改善版：右側統合レイアウト + フォルダリネーム機能）"""
         # メインフレーム作成
         main_frame = ttk.Frame(self.file_frame)
-        main_frame.pack(fill='both', expand=True)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # 左右分割：左側はフォルダリネーム機能、右側に全機能統合
+        # Phase 2: パネルバランス最適化（1:4比率、最小幅設定）
+        paned = ttk.PanedWindow(main_frame, orient='horizontal')
+        paned.pack(fill='both', expand=True)
 
-        # 左右分割コンテナ（固定幅、調整不可）
-        container = ttk.Frame(main_frame)
-        container.pack(fill='both', expand=True, padx=10, pady=10)
-        container.columnconfigure(0, weight=1, uniform="col")
-        container.columnconfigure(1, weight=1, uniform="col")
-
-        # 左側: フォルダリネーム機能エリア
-        left_container = ttk.Frame(container)
-        left_container.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
-
-        # 左側タイトル
-        left_title_frame = ttk.Frame(left_container)
-        left_title_frame.pack(fill='x', pady=(0, 10))
-        ttk.Label(left_title_frame, text="基本リネーム", style='Heading.TLabel').pack(side='left')
-        ttk.Separator(left_container, orient='horizontal').pack(fill='x', pady=(0, 15))
-
-        # 左側パネル作成（完全新規実装）
-        self._create_left_rename_panel(left_container)
-
-        # 右側: 全機能統合エリア
-        right_container = ttk.Frame(container)
-        right_container.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
-
-        # 右側タイトル
-        right_title_frame = ttk.Frame(right_container)
-        right_title_frame.pack(fill='x', pady=(0, 10))
-        ttk.Label(right_title_frame, text=" 申告書リネーム", style='Heading.TLabel').pack(side='left')
-        ttk.Separator(right_container, orient='horizontal').pack(fill='x', pady=(0, 15))
-
-        # 右側フレーム
-        right_frame = ttk.Frame(right_container)
-        right_frame.pack(fill='both', expand=True)
+        # 左側: フォルダリネーム機能エリア（最小幅250px）
+        left_frame = ttk.Frame(paned, width=250)
+        paned.add(left_frame, weight=1)
+        
+        # === フォルダリネーム機能UI ===
+        folder_rename_frame = ttk.LabelFrame(left_frame, text="📁 フォルダリネーム")
+        folder_rename_frame.pack(fill='both', expand=True, pady=(0, 10))
+        
+        # 年月設定（左側専用）
+        left_year_month_frame = ttk.Frame(folder_rename_frame)
+        left_year_month_frame.pack(fill='x', pady=5, padx=10)
+        
+        ttk.Label(left_year_month_frame, text="年月 (YYMM):").pack(side='left')
+        self.left_year_month_var = tk.StringVar(value=self.user_settings.get_left_yymm_value())
+        left_yymm_entry = ttk.Entry(left_year_month_frame, textvariable=self.left_year_month_var, width=10)
+        left_yymm_entry.pack(side='left', padx=(10, 0))
+        # Phase 2: ツールチップ追加
+        create_tooltip(left_yymm_entry, "年月を4桁で入力（例: 2501）\nファイル名のプレフィックスに使用されます")
+        
+        # 左側YYMM設定状態表示
+        self.left_yymm_status_var = tk.StringVar()
+        self.left_yymm_status_label = ttk.Label(
+            left_year_month_frame,
+            textvariable=self.left_yymm_status_var,
+            style='Info.TLabel'  # Phase 1: スタイル統一
+        )
+        self.left_yymm_status_label.pack(side='left', padx=(5, 0))
+        
+        # 左側YYMMバリデーション設定
+        self.left_year_month_var.trace_add('write', self._validate_left_yymm_input)
+        self._validate_left_yymm_input()  # 初期バリデーション
+        
+        # フォルダ選択＋処理実行ボタン（統合版）
+        # Phase 2: ボタン配置最適化（padding統一、視認性向上）
+        self.folder_rename_var = tk.StringVar()
+        self.folder_rename_button = ttk.Button(
+            folder_rename_frame,
+            text="🔄 フォルダリネーム実行",
+            command=self._select_rename_folder,
+            style='Accent.TButton',
+            width=20  # Phase 2: 最小幅設定
+        )
+        self.folder_rename_button.pack(pady=(15, 10), padx=10, fill='x')  # Phase 2: padding最適化
+        # Phase 2: ツールチップ追加
+        create_tooltip(self.folder_rename_button,
+                      "フォルダを選択して一括リネーム実行\nファイル名を YYMM_元ファイル名.pdf に変換します")
+        
+        # 選択されたフォルダパス表示
+        self.folder_path_label = ttk.Label(
+            folder_rename_frame,
+            textvariable=self.folder_rename_var,
+            style='Muted.TLabel',  # Phase 1: スタイル統一
+            wraplength=180
+        )
+        self.folder_path_label.pack(pady=(0, 10), padx=10, fill='x')
+        
+        # 処理進捗表示
+        self.folder_progress_var = tk.StringVar(value="YYMMを入力してボタンをクリック")
+        progress_label = ttk.Label(
+            folder_rename_frame,
+            textvariable=self.folder_progress_var,
+            style='Muted.TLabel',  # Phase 1: スタイル統一
+            wraplength=180
+        )
+        progress_label.pack(pady=(0, 10), padx=10)
+        
+        # 右側: 全機能統合エリア（最小幅700px、weight増加で広く表示）
+        right_frame = ttk.Frame(paned, width=700)
+        paned.add(right_frame, weight=4)  # Phase 2: weight 3→4に変更
         
         # 右側のレイアウト設定
         right_frame.columnconfigure(0, weight=1)
-
+        
+        # === ファイル処理エリア ===
+        file_process_frame = ttk.LabelFrame(right_frame, text="📄 ファイル処理")
+        file_process_frame.pack(fill='x', pady=(0, 10))
+        
+        # メイン処理ボタン（名称統一）
+        # Phase 2: ボタン配置最適化（padding統一、視認性向上）
+        main_process_button = ttk.Button(
+            file_process_frame,
+            text="🔄 フォルダリネーム実行",
+            command=self._start_folder_batch_processing_direct,
+            style='Accent.TButton',
+            width=25  # Phase 2: 最小幅設定
+        )
+        main_process_button.pack(pady=15, padx=10)  # Phase 2: padding最適化
+        # Phase 2: ツールチップ追加
+        create_tooltip(main_process_button,
+                      "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
+        
         # === 設定エリア ===
-        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定", padding=20)
-        settings_frame.pack(fill='x', pady=(0, 15), padx=20)
-
+        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定")
+        settings_frame.pack(fill='x', pady=(0, 10))
+        
         # 年月設定
         year_month_frame = ttk.Frame(settings_frame)
-        year_month_frame.pack(fill='x', pady=(0, 10))
+        year_month_frame.pack(fill='x', pady=5, padx=10)
         
         ttk.Label(year_month_frame, text="年月 (YYMM):").pack(side='left')
         self.year_month_var = tk.StringVar(value=self.user_settings.get_yymm_value())
         yymm_entry = ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10)
-        yymm_entry.pack(side='left', padx=(10, 5))
+        yymm_entry.pack(side='left', padx=(10, 0))
         # Phase 2: ツールチップ追加
         create_tooltip(yymm_entry, "年月を4桁で入力（例: 2501）\nAI分類・リネーム時に使用されます")
-
+        
         # YYMM設定状態表示
         self.yymm_status_var = tk.StringVar()
         self.yymm_status_label = ttk.Label(
             year_month_frame,
             textvariable=self.yymm_status_var,
-            font=('Yu Gothic UI', 9)
+            style='Info.TLabel'  # Phase 1: スタイル統一
         )
-        self.yymm_status_label.pack(side='left', padx=(5, 0))
+        self.yymm_status_label.pack(side='left', padx=(10, 0))
         
         # YYMMバリデーション設定（リアルタイム更新）
         self.year_month_var.trace_add('write', self._validate_yymm_input)
         self._validate_yymm_input()  # 初期バリデーション
-
+        
         # 自治体設定
-        municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定", padding=20)
-        municipality_frame.pack(fill='x', pady=(15, 15), padx=20)
+        municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定")
+        municipality_frame.pack(fill='x', pady=(0, 10))
         self._create_municipality_settings(municipality_frame)
+        
 
-        # リネーム実行ボタン（一番下）
-        button_frame = ttk.Frame(right_frame)
-        button_frame.pack(fill='x', pady=(0, 0), padx=20)
-
-        self.right_execute_btn = tk.Button(
-            button_frame,
-            text="🔄 リネーム実行",
-            command=self._start_folder_batch_processing_direct,
-            font=('Yu Gothic UI', 11, 'bold'),
-            bg='#4B5563',
-            fg='white',
-            relief='flat',
-            padx=10,
-            pady=10,
-            cursor='hand2',
-            activebackground='#374151',
-            activeforeground='white'
+    def _select_rename_folder(self):
+        """フォルダ選択＋自動処理実行（ワンボタン統合）"""
+        # YYMM入力チェック
+        if not self._validate_left_yymm_input():
+            messagebox.showerror("エラー", "有効なYYMM（年月）を入力してください")
+            return
+            
+        folder_path = filedialog.askdirectory(
+            title="リネーム対象フォルダを選択してください"
         )
-        self.right_execute_btn.pack(fill='x')
-        create_tooltip(self.right_execute_btn,
-                      "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
+        if folder_path:
+            self.folder_rename_var.set(folder_path)
+            self.folder_progress_var.set(f"選択済み: {len(os.listdir(folder_path))} 個のアイテム")
+            self._log(f"フォルダリネーム対象選択: {folder_path}")
+            
+            # 選択後即座に処理開始
+            yymm = self.left_year_month_var.get()
+            self._log(f"フォルダリネーム処理開始: {folder_path} (YYMM: {yymm})")
+            
+            # バックグラウンド処理開始
+            self.folder_progress_var.set("処理中...")
+            
+            # 別スレッドで処理実行（簡素化版）
+            thread = threading.Thread(
+                target=self._simplified_folder_rename_background,
+                args=(folder_path, yymm)
+            )
+            thread.daemon = True
+            thread.start()
+        else:
+            self.folder_rename_var.set("")
+            self.folder_progress_var.set("フォルダを選択してください")
 
-    def _create_left_rename_panel(self, parent):
-        """左側フォルダリネームパネル作成（完全新規実装）"""
-        # LabelFrame作成
-        frame = ttk.LabelFrame(parent, text="📁 フォルダリネーム", padding=20)
-        frame.pack(fill='both', expand=True, pady=(0, 15))
-
-        # YYMM入力欄
-        yymm_frame = ttk.Frame(frame)
-        yymm_frame.pack(fill='x', pady=5)
-
-        ttk.Label(yymm_frame, text="年月 (YYMM):", font=('Yu Gothic UI', 9)).pack(side='left')
-        self.left_yymm_var = tk.StringVar()
-        entry = ttk.Entry(yymm_frame, textvariable=self.left_yymm_var, width=10, font=('Yu Gothic UI', 10))
-        entry.pack(side='left', padx=(10, 5))
-
-        # ステータス表示
-        self.left_yymm_status_var = tk.StringVar(value="未入力")
-        ttk.Label(
-            yymm_frame,
-            textvariable=self.left_yymm_status_var,
-            font=('Yu Gothic UI', 9)
-        ).pack(side='left', padx=(5, 0))
-
-        # バリデーション設定
-        self.left_yymm_var.trace_add('write', self._left_validate_yymm)
-
-        # セクション区切り線
-        ttk.Separator(frame, orient='horizontal').pack(fill='x', pady=15)
-
-        # 本表接頭辞選択
-        main_prefix_frame = ttk.Frame(frame)
-        main_prefix_frame.pack(fill='x', pady=(0, 10))
-
-        ttk.Label(main_prefix_frame, text="本表接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
-        self.left_main_prefix_var = tk.StringVar(value="01")
-
-        ttk.Radiobutton(
-            main_prefix_frame,
-            text="01",
-            variable=self.left_main_prefix_var,
-            value="01"
-        ).pack(side='left', padx=(10, 5))
-
-        ttk.Radiobutton(
-            main_prefix_frame,
-            text="0001",
-            variable=self.left_main_prefix_var,
-            value="0001"
-        ).pack(side='left', padx=(5, 0))
-
-        # 受信通知接頭辞選択
-        receipt_frame = ttk.Frame(frame)
-        receipt_frame.pack(fill='x', pady=(0, 10))
-
-        ttk.Label(receipt_frame, text="受信通知接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
-        self.left_receipt_prefix_var = tk.StringVar(value="02")
-
-        ttk.Radiobutton(
-            receipt_frame,
-            text="02",
-            variable=self.left_receipt_prefix_var,
-            value="02"
-        ).pack(side='left', padx=(10, 5))
-
-        ttk.Radiobutton(
-            receipt_frame,
-            text="9999",
-            variable=self.left_receipt_prefix_var,
-            value="9999"
-        ).pack(side='left', padx=(5, 0))
-
-        # 英語半角変換オプション
-        normalize_frame = ttk.Frame(frame)
-        normalize_frame.pack(fill='x', pady=(5, 5))
-
-        self.normalize_english_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            normalize_frame,
-            text="英語を半角に変換（Ｓｔａｎｄａｒｄ→Standard）",
-            variable=self.normalize_english_var
-        ).pack(side='left', padx=(0, 0))
-
-        # 実行ボタン
-        self.left_execute_btn = tk.Button(
-            frame,
-            text="🔄 リネーム実行",
-            command=self._left_execute,
-            font=('Yu Gothic UI', 11, 'bold'),
-            bg='#4B5563',
-            fg='white',
-            disabledforeground='white',
-            relief='flat',
-            padx=10,
-            pady=10,
-            cursor='hand2',
-            activebackground='#374151',
-            activeforeground='white'
+    def _start_simplified_folder_rename(self):
+        """簡素化されたフォルダリネーム処理（問題①②対応）"""
+        folder_path = self.folder_rename_var.get()
+        if not folder_path or not os.path.exists(folder_path):
+            messagebox.showerror("エラー", "有効なフォルダが選択されていません")
+            return
+        
+        # 左側のYYMM設定を使用
+        yymm = self.left_year_month_var.get()
+        if not self._validate_left_yymm_input():
+            messagebox.showerror("エラー", "有効なYYMM（年月）を入力してください")
+            return
+        
+        self._log(f"フォルダリネーム処理開始: {folder_path} (YYMM: {yymm})")
+        
+        # バックグラウンド処理開始
+        self.folder_rename_button.config(state='disabled')
+        self.folder_progress_var.set("処理中...")
+        
+        # 別スレッドで処理実行（簡素化版）
+        thread = threading.Thread(
+            target=self._simplified_folder_rename_background,
+            args=(folder_path, yymm)
         )
-        self.left_execute_btn.pack(pady=(15, 10), fill='x')
-        self.left_execute_btn.config(state='disabled')  # 初期状態は無効化
+        thread.daemon = True
+        thread.start()
 
-        # 進捗表示
-        self.left_progress_var = tk.StringVar(value="YYMMを入力してください")
-        ttk.Label(
-            frame,
-            textvariable=self.left_progress_var,
-            wraplength=220,
-            font=('Yu Gothic UI', 9),
-            foreground='#666666'
-        ).pack(pady=5)
+    def _simplified_folder_rename_background(self, folder_path, yymm):
+        """左側専用：右側エンジン完全排除版 シンプルフォルダリネーム"""
+        try:
+            processed_count = 0
+            total_files = []
+            
+            # 出力フォルダを設定（元フォルダ内に作成）
+            base_output_folder = os.path.join(folder_path, yymm)
+            counter = 1
+            output_folder = base_output_folder
+            
+            # 重複フォルダ名を避ける
+            while os.path.exists(output_folder):
+                output_folder = f"{base_output_folder}_{counter}"
+                counter += 1
+            
+            os.makedirs(output_folder, exist_ok=True)
+            self._log(f"[LEFT_ONLY] 出力フォルダ作成: {output_folder}")
+            
+            # 処理対象ファイルを収集
+            for item in os.listdir(folder_path):
+                item_path = os.path.join(folder_path, item)
+                if os.path.isfile(item_path) and item_path.lower().endswith('.pdf'):
+                    total_files.append(item_path)
+            
+            self._log(f"[LEFT_ONLY] 処理対象ファイル数: {len(total_files)}")
+            
+            # 左側専用：完全独立処理（右側エンジン一切使用禁止）
+            for file_path in total_files:
+                try:
+                    # 完全独立：右側を一切使わない左側専用処理
+                    filename = os.path.basename(file_path)
+                    name_part, ext = os.path.splitext(filename)
+                    
+                    # 数字プレフィックス（4桁_）をYYMM_に置換
+                    import re
+                    # 数字4桁_パターンをチェック（0000_, 1001_, 2003_, 3001_など）
+                    match = re.match(r'^(\d{4}_)', name_part)
+                    if match:
+                        prefix_to_remove = match.group(1)  # "0000_", "1001_"など
+                        remaining_part = name_part[len(prefix_to_remove):]  # 残りの部分
+                        
+                        # 末尾の_YYMMを削除（例：納付税額一覧表_2508 → 納付税額一覧表）
+                        if remaining_part.endswith(f'_{yymm}'):
+                            remaining_part = remaining_part[:-5]  # "_2508"の5文字を削除
+                        
+                        new_name_part = f"{yymm}_{remaining_part}"
+                        new_filename = new_name_part + ext
+                        
+                        self._log(f"[LEFT_ONLY] リネーム: {prefix_to_remove}{remaining_part} → {new_name_part}")
+                    else:
+                        new_filename = filename
+                        self._log(f"[LEFT_ONLY] そのまま: {filename}")
+                    
+                    # ファイルコピー実行
+                    output_path = os.path.join(output_folder, new_filename)
+                    
+                    # 重複回避
+                    counter = 1
+                    base_output_path = output_path
+                    while os.path.exists(output_path):
+                        name_part, ext = os.path.splitext(base_output_path)
+                        output_path = f"{name_part}_{counter:03d}{ext}"
+                        counter += 1
+                    
+                    # ファイルコピー
+                    import shutil
+                    shutil.copy2(file_path, output_path)
+                    
+                    if os.path.exists(output_path):
+                        file_size = os.path.getsize(output_path)
+                        self._log(f"[LEFT_ONLY] ✅ コピー成功: {os.path.basename(output_path)} ({file_size} bytes)")
+                        processed_count += 1
+                        
+                        # UI結果一覧に追加
+                        original_filename = os.path.basename(file_path)
+                        new_filename = os.path.basename(output_path)
+                        self.root.after(0, lambda orig=original_filename, new=new_filename: self._add_result_success(
+                            file_path, new, "LEFT_RENAME", "数字→YYMM置換", "1.00", ["数字プレフィックス削除"]
+                        ))
+                    else:
+                        self._log(f"[LEFT_ONLY] ❌ コピー失敗: {output_path}")
+                    
+                    # UI更新（メインスレッドで実行）
+                    self.root.after(0, lambda: self.folder_progress_var.set(
+                        f"処理中... {processed_count}/{len(total_files)}"
+                    ))
+                    
+                except Exception as e:
+                    self._log(f"[LEFT_ONLY] ファイル処理エラー: {file_path} - {str(e)}")
+            
+            # 処理完了
+            self._log(f"[LEFT_ONLY] ✅ 処理完了: {processed_count}/{len(total_files)}ファイル")
+            self.root.after(0, self._folder_rename_processing_finished, processed_count, len(total_files))
+            
+        except Exception as e:
+            self._log(f"[LEFT_ONLY] フォルダリネーム処理エラー: {str(e)}")
+            self.root.after(0, lambda: [
+                self.folder_progress_var.set("処理エラーが発生しました"),
+                self.folder_rename_button.config(state='normal') if hasattr(self, 'folder_rename_button') else None
+            ])
+
+    def _process_left_simple_rename(self, file_path: str, output_folder: str, yymm: str) -> str:
+        """
+        左側専用: 単純なYYMMプレフィックス置換処理
+        01_ → 指定YYMM_ の単純置換のみ実行（右側分類エンジン使用禁止）
+        
+        Args:
+            file_path: 処理対象PDFファイルパス
+            output_folder: 出力フォルダパス
+            yymm: 置換するYYMM値（例："2508"）
+        
+        Returns:
+            str: 処理後ファイルパス
+        """
+        try:
+            filename = os.path.basename(file_path)
+            name_part, ext = os.path.splitext(filename)
+            
+            # 左側専用：01_をYYMM_に単純置換
+            if name_part.startswith('01_'):
+                # 01_ → YYMM_に置換（例：01_書類名_顧客名.pdf → 2508_書類名_顧客名.pdf）
+                new_name_part = yymm + '_' + name_part[3:]  # "01_"（3文字）を削除してYYMM_を付加
+                new_filename = new_name_part + ext
+                
+                self._log(f"[LEFT_SIMPLE] {name_part} → {new_name_part}")
+            else:
+                # 01_で始まらない場合はそのまま
+                new_filename = filename
+                self._log(f"[LEFT_SIMPLE] スキップ（01_接頭辞なし）: {filename}")
+            
+            # ファイルコピー実行
+            output_path = os.path.join(output_folder, new_filename)
+            output_path = self._generate_unique_filename(output_path)
+            
+            # 出力フォルダの存在確認・作成
+            output_dir = os.path.dirname(output_path)
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                self._log(f"[LEFT_SIMPLE] 出力フォルダ作成: {output_dir}")
+            
+            # ファイルコピー
+            import shutil
+            shutil.copy2(file_path, output_path)
+            
+            # コピー結果確認
+            if os.path.exists(output_path):
+                file_size = os.path.getsize(output_path)
+                self._log(f"[LEFT_SIMPLE] ✅ コピー成功: {os.path.basename(output_path)} ({file_size} bytes)")
+            else:
+                self._log(f"[LEFT_SIMPLE] ❌ コピー失敗: {output_path}")
+                return None
+            
+            return output_path
+            
+        except Exception as e:
+            self._log(f"[LEFT_SIMPLE] エラー: {file_path} - {str(e)}")
+            return None
+
+    def _folder_rename_processing_finished(self, processed_count, total_count):
+        """フォルダリネーム処理完了"""
+        self.folder_progress_var.set(f"完了: {processed_count}/{total_count} 件処理")
+        self.folder_rename_button.config(state='normal')
+        self._log(f"フォルダリネーム処理完了: {processed_count}/{total_count} 件")
+        
+        if processed_count > 0:
+            messagebox.showinfo(
+                "処理完了", 
+                f"フォルダリネーム処理が完了しました。\n処理件数: {processed_count}/{total_count}"
+            )
+        
+        # 処理ボタン（簡素化版 - フォルダ指定による自動処理）
+        # ※従来の分割実行・リネーム実行ボタンは削除し、フォルダ指定による一括自動処理に統一
 
     def _create_municipality_settings(self, parent):
         """自治体設定UIの作成"""
@@ -618,29 +733,18 @@ class TaxDocumentRenamerV5:
             
             self.municipality_vars.append((prefecture_var, municipality_var))
 
-    def _show_result_window(self):
-        """処理結果ウィンドウを表示"""
-        if self.result_window and self.result_window.winfo_exists():
-            # 既に開いている場合は前面に表示
-            self.result_window.lift()
-            self.result_window.focus_force()
-            return
-
-        # 新しいウィンドウを作成
-        self.result_window = tk.Toplevel(self.root)
-        self.result_window.title("処理結果")
-        self.result_window.geometry("1000x600")
-
+    def _create_result_tab(self):
+        """処理結果タブの作成"""
         # 結果表示用のTreeview
-        ttk.Label(self.result_window, text="処理結果", font=('Yu Gothic UI', 12, 'bold')).pack(pady=(10, 10))
-
+        ttk.Label(self.result_frame, text="処理結果", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
+        
         # Treeviewとスクロールバー
-        tree_frame = ttk.Frame(self.result_window)
-        tree_frame.pack(fill='both', expand=True, padx=10)
-
+        tree_frame = ttk.Frame(self.result_frame)
+        tree_frame.pack(fill='both', expand=True)
+        
         columns = ('元ファイル名', '新ファイル名', '分類', '判定方法', '信頼度', 'マッチしたキーワード', '状態')
         self.result_tree = ttk.Treeview(tree_frame, columns=columns, show='headings')
-
+        
         for col in columns:
             self.result_tree.heading(col, text=col)
             if col == '判定方法':
@@ -651,75 +755,46 @@ class TaxDocumentRenamerV5:
                 self.result_tree.column(col, width=200)
             else:
                 self.result_tree.column(col, width=130)
-
+        
         tree_scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=self.result_tree.yview)
         self.result_tree.configure(yscrollcommand=tree_scrollbar.set)
-
+        
         self.result_tree.pack(side='left', fill='both', expand=True)
         tree_scrollbar.pack(side='right', fill='y')
-
-        # バッファに溜まっている結果を表示
-        print(f"[DEBUG] _show_result_window called")
-        print(f"[DEBUG] Has _result_buffer: {hasattr(self, '_result_buffer')}")
-        if hasattr(self, '_result_buffer'):
-            print(f"[DEBUG] Buffer size: {len(self._result_buffer)}")
-
-        if hasattr(self, '_result_buffer') and self._result_buffer:
-            print(f"[DEBUG] Adding {len(self._result_buffer)} results to tree")
-            for result_data in self._result_buffer:
-                self.result_tree.insert('', 'end', values=result_data['values'])
-                print(f"[DEBUG] Added: {result_data['values'][0]}")
-        else:
-            print(f"[DEBUG] No results in buffer to display")
-
+        
         # 結果操作ボタン
-        result_button_frame = ttk.Frame(self.result_window)
+        # Phase 2: ボタン配置最適化（padding統一、スタイル適用）
+        result_button_frame = ttk.Frame(self.result_frame)
         result_button_frame.pack(fill='x', pady=15, padx=10)
 
-        ttk.Button(result_button_frame, text="出力フォルダを開く",
+        ttk.Button(result_button_frame, text="📁 出力フォルダを開く",
                   command=self._open_output_folder,
                   style='Secondary.TButton', width=18).pack(side='left', padx=(0, 8))
-        ttk.Button(result_button_frame, text="結果をエクスポート",
+        ttk.Button(result_button_frame, text="📄 結果をエクスポート",
                   command=self._export_results,
                   style='Success.TButton', width=18).pack(side='left', padx=8)
-        ttk.Button(result_button_frame, text="結果をクリア",
+        ttk.Button(result_button_frame, text="🔄 結果をクリア",
                   command=self._clear_results,
                   style='Danger.TButton', width=15).pack(side='left', padx=8)
 
-    def _show_log_window(self):
-        """ログウィンドウを表示"""
-        if self.log_window and self.log_window.winfo_exists():
-            # 既に開いている場合は前面に表示
-            self.log_window.lift()
-            self.log_window.focus_force()
-            return
-
-        # 新しいウィンドウを作成
-        self.log_window = tk.Toplevel(self.root)
-        self.log_window.title("処理ログ・デバッグ")
-        self.log_window.geometry("900x500")
-
-        ttk.Label(self.log_window, text="処理ログ・デバッグ情報", font=('Yu Gothic UI', 12, 'bold')).pack(pady=(10, 10))
-
+    def _create_log_tab(self):
+        """ログタブの作成"""
+        ttk.Label(self.log_frame, text="処理ログ・デバッグ情報", font=('Arial', 12, 'bold')).pack(pady=(0, 10))
+        
         # ログ表示エリア
-        log_text_frame = ttk.Frame(self.log_window)
-        log_text_frame.pack(fill='both', expand=True, padx=10)
-
+        log_text_frame = ttk.Frame(self.log_frame)
+        log_text_frame.pack(fill='both', expand=True)
+        
         self.log_text = tk.Text(log_text_frame, wrap='word', font=('Consolas', 9))
         log_scrollbar = ttk.Scrollbar(log_text_frame, orient='vertical', command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=log_scrollbar.set)
-
+        
         self.log_text.pack(side='left', fill='both', expand=True)
         log_scrollbar.pack(side='right', fill='y')
-
-        # バッファに溜まっているログを表示
-        if hasattr(self, '_log_buffer') and self._log_buffer:
-            for entry in self._log_buffer:
-                self.log_text.insert(tk.END, entry)
-            self.log_text.see(tk.END)
-
+        
         # ログ操作ボタン
-        log_button_frame = ttk.Frame(self.log_window)
+        # Phase 2: ボタン配置最適化（padding統一、スタイル適用）
+        log_button_frame = ttk.Frame(self.log_frame)
         log_button_frame.pack(fill='x', pady=15, padx=10)
 
         ttk.Button(log_button_frame, text="🗑️ ログクリア",
@@ -752,7 +827,6 @@ class TaxDocumentRenamerV5:
             set_frame = ttk.Frame(parent_frame)
             set_frame.pack(fill='x', pady=2)
 
-            # セット番号ラベル（幅を統一）
             ttk.Label(set_frame, text=f"セット{i}:", width=8).pack(side='left')
 
             prefecture_var = getattr(self, f'prefecture_var_{i}')
@@ -763,18 +837,9 @@ class TaxDocumentRenamerV5:
                                            values=self.prefectures, width=10, state='readonly')
             prefecture_combo.pack(side='left', padx=2)
 
-            # Combobox選択後の黒背景問題を修正
-            def fix_combobox_selection(event):
-                event.widget.selection_clear()
-            prefecture_combo.bind('<<ComboboxSelected>>', fix_combobox_selection)
-
             # 市区町村欄
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
-
-            # セット1のみ「（東京都優先）」の注釈を右側に表示
-            if i == 1:
-                ttk.Label(set_frame, text="（東京都優先）", foreground='gray').pack(side='left', padx=(5, 0))
 
             # セット1のみ動的制御：東京都の場合は無効化
             if i == 1:
@@ -1540,11 +1605,11 @@ class TaxDocumentRenamerV5:
         # 表示用に元コードと最終結果を比較
         if classification_result and hasattr(classification_result, 'original_doc_type_code') and classification_result.original_doc_type_code:
             if classification_result.original_doc_type_code != classification_result.document_type:
-                self._log(f"[v5.4.2] 市町村連番適用: {classification_result.original_doc_type_code} → {final_document_type}")
+                self._log(f"[v5.4.2] 🎯 市町村連番適用: {classification_result.original_doc_type_code} → {final_document_type}")
             else:
-                self._log(f"[v5.4.2] 分類結果: {final_document_type}")
+                self._log(f"[v5.4.2] 🎯 分類結果: {final_document_type}")
         else:
-            self._log(f"[v5.4.2] 分類結果: {final_document_type}")
+            self._log(f"[v5.4.2] 🎯 分類結果: {final_document_type}")
         
         # YYMMポリシーシステムでYYMM値を取得
         user_yymm = self._resolve_yymm_with_policy(file_path, final_document_type)
@@ -1673,9 +1738,9 @@ class TaxDocumentRenamerV5:
             classification_result.original_doc_type_code
         ) else classification_result.document_type
         
-        self._log(f"[分類] 分類結果: {display_document_type}")
-        self._log(f"[分類] 信頼度: {classification_result.confidence:.2f}")
-        self._log(f"[分類] 判定方法: {classification_result.classification_method}")
+        self._log(f"📋 分類結果: {display_document_type}")
+        self._log(f"🎯 信頼度: {classification_result.confidence:.2f}")
+        self._log(f"⚙️ 判定方法: {classification_result.classification_method}")
         
         # 自治体変更版がある場合のみ表示
         if (hasattr(classification_result, 'original_doc_type_code') and 
@@ -2019,65 +2084,28 @@ class TaxDocumentRenamerV5:
                 keywords_display += f" (+{len(matched_keywords)-3}件)"
         else:
             keywords_display = "なし"
-
-        # 結果データを作成
-        result_data = {
-            'type': 'success',
-            'values': (
-                os.path.basename(original_file),
-                new_filename,
-                doc_type,
-                method,
-                confidence,
-                keywords_display,
-                "成功"  # 絵文字を除去
-            )
-        }
-
-        # バッファに追加
-        if not hasattr(self, '_result_buffer'):
-            self._result_buffer = []
-        self._result_buffer.append(result_data)
-
-        # デバッグログ
-        print(f"[DEBUG] Result added to buffer. Buffer size: {len(self._result_buffer)}")
-        print(f"[DEBUG] Result: {result_data['values'][0]} -> {result_data['values'][1]}")
-
-        # 結果ウィンドウが存在する場合はTreeviewに追加
-        if self.result_window and self.result_window.winfo_exists() and self.result_tree:
-            try:
-                self.result_tree.insert('', 'end', values=result_data['values'])
-                print(f"[DEBUG] Result added to tree widget")
-            except tk.TclError as e:
-                print(f"[DEBUG] Failed to add result to tree: {e}")
+        
+        self.result_tree.insert('', 'end', values=(
+            os.path.basename(original_file),
+            new_filename,
+            doc_type,
+            method,
+            confidence,
+            keywords_display,
+            "✅ 成功"
+        ))
 
     def _add_result_error(self, original_file: str, error: str):
         """エラー結果を追加"""
-        # 結果データを作成
-        result_data = {
-            'type': 'error',
-            'values': (
-                os.path.basename(original_file),
-                "-",
-                "-",
-                "-",
-                "0.00",
-                "-",
-                f"エラー: {error}"  # 絵文字を除去
-            )
-        }
-
-        # バッファに追加
-        if not hasattr(self, '_result_buffer'):
-            self._result_buffer = []
-        self._result_buffer.append(result_data)
-
-        # 結果ウィンドウが存在する場合はTreeviewに追加
-        if self.result_window and self.result_window.winfo_exists() and self.result_tree:
-            try:
-                self.result_tree.insert('', 'end', values=result_data['values'])
-            except tk.TclError as e:
-                print(f"[DEBUG] Failed to add error to tree: {e}")
+        self.result_tree.insert('', 'end', values=(
+            os.path.basename(original_file),
+            "-",
+            "-",
+            "-",
+            "0.00",
+            "-",
+            f"❌ エラー: {error}"
+        ))
 
     def _open_output_folder(self):
         """出力フォルダを開く"""
@@ -2091,33 +2119,21 @@ class TaxDocumentRenamerV5:
 
     def _clear_results(self):
         """結果をクリア"""
-        if self.result_tree and hasattr(self.result_tree, 'get_children'):
-            for item in self.result_tree.get_children():
-                self.result_tree.delete(item)
+        for item in self.result_tree.get_children():
+            self.result_tree.delete(item)
 
     def _log(self, message: str):
         """ログメッセージ追加"""
         import datetime
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {message}\n"
-
-        # ログバッファに追加（ウィンドウが開かれる前のログを保持）
-        if not hasattr(self, '_log_buffer'):
-            self._log_buffer = []
-        self._log_buffer.append(log_entry)
-
-        # ログウィンドウが存在する場合はログに追記
-        if self.log_text and hasattr(self.log_text, 'insert'):
-            self.root.after(0, lambda: self.log_text.insert(tk.END, log_entry))
-            self.root.after(0, lambda: self.log_text.see(tk.END))
-
-        # コンソールにも出力
-        print(log_entry.strip())
+        
+        self.root.after(0, lambda: self.log_text.insert(tk.END, log_entry))
+        self.root.after(0, lambda: self.log_text.see(tk.END))
 
     def _clear_log(self):
         """ログクリア"""
-        if self.log_text and hasattr(self.log_text, 'delete'):
-            self.log_text.delete(1.0, tk.END)
+        self.log_text.delete(1.0, tk.END)
 
     def _save_log(self):
         """ログ保存"""
@@ -2175,21 +2191,17 @@ class TaxDocumentRenamerV5:
         # ファイルメニュー
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="ファイル(F)", menu=file_menu)
-
-        # 左側処理
-        file_menu.add_command(label="左側（フォルダリネーム）", command=self._left_execute)
-
-        # 右側処理
-        file_menu.add_command(label="右側（AI分類・リネーム）", command=self._select_folder)
-
+        file_menu.add_command(label="ファイル追加", command=self._select_files)
+        file_menu.add_command(label="フォルダ追加", command=self._select_folder)
         file_menu.add_separator()
         file_menu.add_command(label="終了", command=self.root.quit)
 
         # 表示メニュー
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="表示(V)", menu=view_menu)
-        view_menu.add_command(label="処理結果を表示", command=self._show_result_window, accelerator="Ctrl+1")
-        view_menu.add_command(label="ログを表示", command=self._show_log_window, accelerator="Ctrl+2")
+        view_menu.add_command(label="ファイル選択・設定", command=lambda: self.notebook.select(0), accelerator="Ctrl+1")
+        view_menu.add_command(label="処理結果", command=lambda: self.notebook.select(1), accelerator="Ctrl+2")
+        view_menu.add_command(label="ログ・デバッグ", command=lambda: self.notebook.select(2), accelerator="Ctrl+3")
 
         # ツールメニュー
         tool_menu = tk.Menu(menubar, tearoff=0)
@@ -2204,8 +2216,9 @@ class TaxDocumentRenamerV5:
         help_menu.add_command(label="バージョン情報", command=self._show_about)
 
         # キーボードショートカット
-        self.root.bind('<Control-1>', lambda e: self._show_result_window())
-        self.root.bind('<Control-2>', lambda e: self._show_log_window())
+        self.root.bind('<Control-1>', lambda e: self.notebook.select(0))
+        self.root.bind('<Control-2>', lambda e: self.notebook.select(1))
+        self.root.bind('<Control-3>', lambda e: self.notebook.select(2))
 
     def _show_help(self):
         """使い方ダイアログ表示"""
@@ -2216,79 +2229,49 @@ class TaxDocumentRenamerV5:
         text_widget = tk.Text(help_window, wrap='word', font=('Yu Gothic UI', 10), padx=15, pady=15)
         text_widget.pack(fill='both', expand=True)
 
-        help_text = """税務書類リネームシステム 使い方ガイド
+        help_text = """税務書類リネームシステム v5.5.0-LATEST
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-■ 画面の使い分け
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【画面構成】
 
-【左側】源泉税などのフォルダ整理
-　受信通知を自動で分割して、正しいフォルダに振り分けます
+左側: フォルダリネーム機能
+  - シンプルなYYMMプレフィックス置換
+  - 4桁数字_ → YYMM_ に変更
 
-【右側】税務書類の自動分類・ファイル名変更
-　PDFを読み取って、書類の種類を自動判定します
+右側: AI分類・リネーム機能
+  - OCR+AI による自動分類
+  - 税務書類コード自動付与
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-■ 左側の使い方（源泉税フォルダ整理）
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【左側：フォルダリネーム】
 
-ステップ1: 年月を入力
-　→ 4桁の数字で入力（例：2025年1月 → 2501）
+1. YYMM入力
+   - 年月を4桁で入力（例: 2501）
 
-ステップ2: 本表の番号を選択
-　→ 通常は「01」を選択
+2. フォルダリネーム実行ボタンをクリック
+   - フォルダを選択すると自動処理開始
+   - 4桁数字_プレフィックスをYYMM_に置換
 
-ステップ3: 受信通知の番号を選択
-　→ 通常は「02」を選択
+【右側：AI分類・リネーム】
 
-ステップ4: 会社名の英語表記（オプション）
-　→ 全角の英語を半角にしたい場合はチェック
-　　（例：Ｓｔａｎｄａｒｄ → Standard）
+1. YYMM設定
+   - 年月を4桁で入力（例: 2501）
 
-ステップ5: 実行ボタンをクリック
-　→ フォルダを選ぶと自動で処理が始まります
+2. 市町村設定（オプション）
+   - セット1: 東京都専用（都道府県欄のみ）
+   - セット2～5: その他の都道府県・市区町村を設定
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-■ 右側の使い方（書類の自動分類）
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. フォルダリネーム実行ボタンをクリック
+   - フォルダを選択してAI分類・リネーム実行
 
-ステップ1: 年月を入力
-　→ 4桁の数字で入力（例：2025年1月 → 2501）
+【メニュー】
+- ファイル(F): ファイル/フォルダの追加、終了
+- 表示(V): タブ切り替え（Ctrl+1/2/3）
+- ツール(T): ログ・結果のクリア
+- ヘルプ(H): このヘルプとバージョン情報
 
-ステップ2: 市区町村を設定（該当する場合のみ）
-　→ セット1: 東京都優先（あれば）
-　→ セット2～5: その他の市区町村
-
-ステップ3: 実行ボタンをクリック
-　→ フォルダを選ぶと自動で分類が始まります
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-■ メニューバーの使い方
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-ファイル(F)
-　・左側（フォルダリネーム）：源泉税フォルダの整理
-　・右側（AI分類・リネーム）：書類の自動分類
-　・終了：アプリを閉じる
-
-表示(V)
-　・処理結果を表示：何が処理されたか確認
-　・ログを表示：詳しい処理内容を確認
-
-ツール(T)
-　・ログをクリア：ログを消去
-　・結果をクリア：処理結果を消去
-
-ヘルプ(H)
-　・使い方：このヘルプを表示
-　・バージョン情報：アプリの情報を表示
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-■ ショートカットキー
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Ctrl+1：処理結果ウィンドウを開く
-Ctrl+2：ログウィンドウを開く
+【キーボードショートカット】
+- Ctrl+1: ファイル選択・設定画面
+- Ctrl+2: 処理結果画面
+- Ctrl+3: ログ・デバッグ画面
 """
 
         text_widget.insert('1.0', help_text)
@@ -2321,456 +2304,9 @@ Ctrl+2：ログウィンドウを開く
 
         ttk.Button(content_frame, text="閉じる", command=about_window.destroy).pack(pady=15)
 
-    # ==================== 左側フォルダリネーム機能メソッド ====================
-
-    def _left_validate_yymm(self, *args):
-        """左側YYMM入力バリデーション（完全独立）"""
-        yymm_value = self.left_yymm_var.get()
-
-        # 空欄チェック
-        if not yymm_value:
-            self.left_yymm_status_var.set("未入力")
-            self.left_execute_btn.config(state='disabled')
-            return
-
-        # 4桁数字チェック
-        if not re.match(r'^\d{4}$', yymm_value):
-            self.left_yymm_status_var.set("✗ 4桁数字")
-            self.left_execute_btn.config(state='disabled')
-            return
-
-        # 月の妥当性チェック (01-12)
-        month = int(yymm_value[2:4])
-        if month < 1 or month > 12:
-            self.left_yymm_status_var.set("✗ 月は01-12")
-            self.left_execute_btn.config(state='disabled')
-            return
-
-        # 正常
-        self.left_yymm_status_var.set("✓ 正常")
-        self.left_execute_btn.config(state='normal')
-
-    def _left_execute(self):
-        """左側フォルダリネーム実行（完全独立）"""
-        yymm_value = self.left_yymm_var.get()
-
-        # 最終バリデーション
-        if not re.match(r'^\d{4}$', yymm_value):
-            messagebox.showerror("エラー", "YYMMは4桁の数字で入力してください")
-            return
-
-        month = int(yymm_value[2:4])
-        if month < 1 or month > 12:
-            messagebox.showerror("エラー", "月は01-12の範囲で入力してください")
-            return
-
-        # フォルダ選択
-        folder_path = filedialog.askdirectory(title="リネーム対象フォルダを選択")
-        if not folder_path:
-            return
-
-        # 進捗表示更新
-        self.left_progress_var.set("処理中...")
-        self.left_execute_btn.config(state='disabled')
-
-        # 接頭辞を取得
-        main_prefix = self.left_main_prefix_var.get()
-        receipt_prefix = self.left_receipt_prefix_var.get()
-        normalize_english = self.normalize_english_var.get()
-
-        # バックグラウンド処理開始
-        thread = threading.Thread(
-            target=self._left_rename_background,
-            args=(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english),
-            daemon=True
-        )
-        thread.start()
-
-    def _get_final_receipt_name(self, receipt_prefix, folder_path, folder_name):
-        """
-        受信通知の最終ファイル名を決定
-
-        Args:
-            receipt_prefix: UIで選択された受信通知のプレフィックス（"02" または "9999"）
-            folder_path: 格納先フォルダのパス
-            folder_name: フォルダ名（YYMM_帳票名_会社名）
-
-        Returns:
-            最終ファイル名（例: "02_帳票名_会社名.pdf" または "9999_帳票名_会社名.pdf"）
-        """
-        # folder_nameから帳票名と会社名を抽出
-        # 形式: YYMM_帳票名_会社名
-        parts = folder_name.split('_', 1)  # 最初の_で分割
-        if len(parts) >= 2:
-            name_part = parts[1]  # 帳票名_会社名
-        else:
-            name_part = folder_name
-
-        # UIで選択されたプレフィックスを常に使用
-        return f"{receipt_prefix}_{name_part}.pdf"
-
-    def _normalize_fullwidth_english(self, text):
-        """全角英字を半角英字に変換"""
-        if not text:
-            return text
-
-        result = []
-        for char in text:
-            code = ord(char)
-            # 全角英大文字 (Ａ-Ｚ: 0xFF21-0xFF3A)
-            if 0xFF21 <= code <= 0xFF3A:
-                result.append(chr(code - 0xFEE0))
-            # 全角英小文字 (ａ-ｚ: 0xFF41-0xFF5A)
-            elif 0xFF41 <= code <= 0xFF5A:
-                result.append(chr(code - 0xFEE0))
-            else:
-                result.append(char)
-        return ''.join(result)
-
-    def _left_rename_background(self, folder_path, yymm, main_prefix, receipt_prefix, normalize_english=False):
-        """左側リネーム処理（フォルダ作成+受信通知分割・完全独立）"""
-        try:
-            # UI更新を強制して黒画面を防ぐ
-            self.root.update_idletasks()
-
-            import fitz  # PyMuPDF
-
-            errors = []
-            created_folders = []
-
-            # ステップ1: 本表ファイル（任意の番号_で始まるPDF）を収集
-            main_files = []
-            receipt_pdf_path = None
-
-            # 本表ファイルパターン: 2桁または4桁の数字_で始まる
-            main_file_pattern = re.compile(r'^(\d{2,4})_(.+)\.pdf$')
-
-            for filename in os.listdir(folder_path):
-                file_path = os.path.join(folder_path, filename)
-
-                if not os.path.isfile(file_path):
-                    continue
-
-                # 本表ファイル: 数字_で始まるPDFファイル
-                match = main_file_pattern.match(filename)
-                if match:
-                    main_files.append((filename, file_path, match))
-                # 受信通知ファイル
-                elif filename == "受信通知.pdf":
-                    receipt_pdf_path = file_path
-
-            # 本表ファイルがない場合
-            if not main_files:
-                self.root.after(0, lambda: messagebox.showerror("エラー", "番号_で始まる本表ファイル（PDF）が見つかりません"))
-                self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
-                return
-
-            # ステップ2: 各本表ファイルからフォルダを作成して移動
-            for original_filename, original_file_path, match in main_files:
-                # ファイル名から番号と残りの部分を抽出
-                old_prefix = match.group(1)  # 元の番号（01, 02, 9999など）
-                rest_name = match.group(2)   # 残りの部分（帳票名_顧問先...）
-
-                # 英語半角変換が有効な場合は適用
-                if normalize_english:
-                    rest_name = self._normalize_fullwidth_english(rest_name)
-
-                # 新しいファイル名: 選択した接頭辞_残りの部分.pdf
-                new_filename = f"{main_prefix}_{rest_name}.pdf"
-
-                # rest_nameから帳票名と会社名を抽出（顧問先番号を除去）
-                # 形式: 帳票名_顧問先番号_会社名 → 帳票名_会社名
-                parts = rest_name.split('_')
-                if len(parts) >= 3:
-                    # 最初の部分が帳票名、最後から2番目が顧問先番号、最後が会社名
-                    # 顧問先番号を除去: 帳票名 + 会社名
-                    doc_type = '_'.join(parts[:-2])  # 帳票名（複数の_を含む可能性）
-                    company_name = parts[-1]          # 会社名
-
-                    # 英語半角変換が有効な場合は適用
-                    if normalize_english:
-                        company_name = self._normalize_fullwidth_english(company_name)
-
-                    folder_base_name = f"{doc_type}_{company_name}"
-                else:
-                    # パースできない場合はそのまま使用
-                    folder_base_name = rest_name
-                    if normalize_english:
-                        folder_base_name = self._normalize_fullwidth_english(folder_base_name)
-
-                # フォルダ名: YYMM_帳票名_会社名
-                folder_name = f"{yymm}_{folder_base_name}"
-                new_folder_path = os.path.join(folder_path, folder_name)
-
-                try:
-                    # フォルダ作成
-                    os.makedirs(new_folder_path, exist_ok=True)
-
-                    # 本表ファイルをリネームしてフォルダ内に移動
-                    dest_file_path = os.path.join(new_folder_path, new_filename)
-                    shutil.move(original_file_path, dest_file_path)
-
-                    created_folders.append({
-                        'folder_path': new_folder_path,
-                        'folder_name': folder_name,
-                        'main_file': new_filename
-                    })
-
-                    self._log(f"[左側] フォルダ作成+リネーム: {original_filename} → {folder_name}/{new_filename}")
-
-                    # 処理結果ウィンドウに追加
-                    self._add_result_success(
-                        original_file=original_filename,
-                        new_filename=f"{folder_name}/{new_filename}",
-                        doc_type="フォルダリネーム",
-                        method="左側処理",
-                        confidence="100%"
-                    )
-
-                except Exception as e:
-                    errors.append(f"フォルダ作成エラー ({original_filename}): {str(e)}")
-
-            # ステップ3: 受信通知PDFを分割して各フォルダに配置
-            if receipt_pdf_path and created_folders:
-                try:
-                    doc = fitz.open(receipt_pdf_path)
-                    total_pages = len(doc)
-
-                    # 連番方式による受信通知配置（v7.2.2-SEQUENTIAL-MATCHING）
-                    matcher = CompanyNameMatcher()
-                    folder_names = [f['folder_name'] for f in created_folders]
-                    matched_count = 0
-                    unmatched_pages = []
-
-                    # 一時フォルダ作成
-                    import tempfile
-                    temp_dir = tempfile.mkdtemp(prefix="receipt_temp_")
-                    self._log(f"[左側] 一時フォルダ作成: {temp_dir}")
-
-                    # ステップ1: 全ページを連番付きで一時分割
-                    temp_receipt_files = []  # [(temp_path, page_num, company_name), ...]
-
-                    for page_num in range(total_pages):
-                        # ページを抽出
-                        page_doc = fitz.open()
-                        page_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-
-                        # 連番付きファイル名で一時保存
-                        temp_filename = f"{receipt_prefix}_受信通知_{page_num + 1:02d}.pdf"
-                        temp_path = os.path.join(temp_dir, temp_filename)
-
-                        page_doc.save(temp_path)
-                        page_doc.close()
-
-                        # 会社名抽出
-                        receipt_company = matcher.extract_company_name_from_receipt(receipt_pdf_path, page_num)
-
-                        if receipt_company:
-                            temp_receipt_files.append((temp_path, page_num, receipt_company))
-                            self._log(f"[左側] 一時ファイル作成: {temp_filename} ({receipt_company})")
-                        else:
-                            self._log(f"[左側] 警告: ページ{page_num + 1} - 会社名抽出失敗")
-                            unmatched_pages.append((page_num, "会社名抽出失敗"))
-
-                    doc.close()
-
-                    # ステップ2: 各ページを金額マッチングで最適フォルダに配置（v7.2.3）
-                    for temp_path, page_num, receipt_company in temp_receipt_files:
-                        # すべてのマッチするフォルダを取得
-                        matched_folders = matcher.match_all_folders(receipt_company, folder_names, threshold=0.7)
-
-                        if not matched_folders:
-                            unmatched_pages.append((page_num, f"マッチング失敗: {receipt_company}"))
-                            self._log(f"[左側] 警告: ページ{page_num + 1} - マッチング失敗（{receipt_company}）")
-                            continue
-
-                        if len(matched_folders) == 1:
-                            # 単一フォルダ: 連番保持で即配置
-                            folder_name, score = matched_folders[0]
-                            self._log(f"[左側] ページ{page_num + 1} - 単一フォルダ: {folder_name} (スコア: {score:.2f})")
-
-                            # フォルダ情報取得
-                            folder_info = None
-                            for f in created_folders:
-                                if f['folder_name'] == folder_name:
-                                    folder_info = f
-                                    break
-
-                            if folder_info:
-                                receipt_filename = os.path.basename(temp_path)
-                                receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
-                                shutil.move(temp_path, receipt_dest_path)
-
-                                # 連番を削除してreceipt_prefix_帳票名_会社名.pdfにリネーム
-                                final_filename = self._get_final_receipt_name(receipt_prefix, folder_info['folder_path'], folder_name)
-                                final_dest_path = os.path.join(folder_info['folder_path'], final_filename)
-                                if receipt_dest_path != final_dest_path:
-                                    shutil.move(receipt_dest_path, final_dest_path)
-                                    self._log(f"[左側] 受信通知リネーム: {receipt_filename} → {final_filename}")
-
-                                matched_count += 1
-                                self._log(f"[左側] 受信通知配置: {final_filename} → {folder_name}")
-
-                                # 処理結果ウィンドウに追加
-                                self._add_result_success(
-                                    original_file=f"受信通知.pdf (ページ{page_num + 1})",
-                                    new_filename=f"{folder_name}/{final_filename}",
-                                    doc_type="受信通知分割",
-                                    method="左側処理",
-                                    confidence=f"{score:.0%}"
-                                )
-                            else:
-                                unmatched_pages.append((page_num, f"フォルダ情報なし: {folder_name}"))
-
-                        else:
-                            # 複数フォルダ: 金額マッチングで最適フォルダ選択
-                            self._log(f"[左側] ページ{page_num + 1} - 複数フォルダ検出: {len(matched_folders)}件（金額マッチング実行）")
-                            self._log(f"[左側] 候補フォルダ: {[f[0] for f in matched_folders]}")
-
-                            # 受信通知から金額抽出
-                            receipt_amount = matcher.extract_amount_from_receipt(temp_path, 0)
-
-                            if not receipt_amount:
-                                self._log(f"[左側] 警告: 受信通知金額抽出失敗 - ページ{page_num + 1}")
-                                unmatched_pages.append((page_num, "金額抽出失敗"))
-                                if os.path.exists(temp_path):
-                                    os.remove(temp_path)
-                                continue
-
-                            self._log(f"[左側] 受信通知金額: {receipt_amount:,}円")
-
-                            # 各フォルダの本表金額と比較
-                            best_folder = None
-                            best_diff = float('inf')
-                            self._log(f"[左側] 金額マッチング開始:")
-
-                            for folder_name, score in matched_folders:
-                                # フォルダ情報取得
-                                folder_info = None
-                                for f in created_folders:
-                                    if f['folder_name'] == folder_name:
-                                        folder_info = f
-                                        break
-
-                                if not folder_info:
-                                    self._log(f"[左側]   {folder_name}: フォルダ情報取得失敗")
-                                    continue
-
-                                # 本表金額抽出
-                                main_pdf_path = os.path.join(folder_info['folder_path'], folder_info['main_file'])
-                                self._log(f"[左側]   {folder_name}: 本表PDF={folder_info['main_file']}")
-                                main_amount = matcher.extract_amount_from_main_pdf(main_pdf_path)
-
-                                if main_amount:
-                                    diff = abs(receipt_amount - main_amount)
-                                    self._log(f"[左側]   {folder_name}: 本表={main_amount:,}円, 差額={diff:,}円")
-
-                                    if diff < best_diff:
-                                        best_diff = diff
-                                        best_folder = (folder_name, folder_info)
-                                else:
-                                    self._log(f"[左側]   {folder_name}: 本表金額抽出失敗")
-
-                            # 最適フォルダに配置
-                            if best_folder:
-                                folder_name, folder_info = best_folder
-                                receipt_filename = os.path.basename(temp_path)
-                                receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
-                                shutil.move(temp_path, receipt_dest_path)
-
-                                # 連番を削除してreceipt_prefix_帳票名_会社名.pdfにリネーム
-                                final_filename = self._get_final_receipt_name(receipt_prefix, folder_info['folder_path'], folder_name)
-                                final_dest_path = os.path.join(folder_info['folder_path'], final_filename)
-                                if receipt_dest_path != final_dest_path:
-                                    shutil.move(receipt_dest_path, final_dest_path)
-                                    self._log(f"[左側] 受信通知リネーム: {receipt_filename} → {final_filename}")
-
-                                matched_count += 1
-                                self._log(f"[左側] 金額マッチング成功: {final_filename} → {folder_name} (差額: {best_diff:,}円)")
-
-                                # 処理結果ウィンドウに追加
-                                self._add_result_success(
-                                    original_file=f"受信通知.pdf (ページ{page_num + 1})",
-                                    new_filename=f"{folder_name}/{final_filename}",
-                                    doc_type="受信通知分割（金額マッチング）",
-                                    method="左側処理",
-                                    confidence=f"差額{best_diff:,}円"
-                                )
-                            else:
-                                self._log(f"[左側] 警告: 金額マッチング失敗 - ページ{page_num + 1}")
-                                unmatched_pages.append((page_num, "金額マッチング失敗"))
-                                if os.path.exists(temp_path):
-                                    os.remove(temp_path)
-
-                    # マッチング結果サマリー
-                    self._log(f"[左側] 受信通知マッチング完了: 成功={matched_count}/{total_pages}, 失敗={len(unmatched_pages)}")
-
-                    if unmatched_pages:
-                        for page_num, reason in unmatched_pages:
-                            errors.append(f"ページ{page_num + 1}: {reason}")
-
-                    # 一時フォルダクリーンアップ
-                    try:
-                        remaining_files = os.listdir(temp_dir)
-                        if remaining_files:
-                            self._log(f"[左側] 警告: 一時フォルダに {len(remaining_files)} 件の未処理ファイル")
-                            for f in remaining_files:
-                                os.remove(os.path.join(temp_dir, f))
-                        os.rmdir(temp_dir)
-                        self._log(f"[左側] 一時フォルダ削除完了")
-                    except Exception as e:
-                        self._log(f"[左側] 警告: 一時フォルダ削除エラー: {e}")
-
-                    # 元の受信通知PDFを削除
-                    os.remove(receipt_pdf_path)
-                    self._log(f"[左側] 元の受信通知PDF削除完了")
-
-                except Exception as e:
-                    import traceback
-                    error_detail = traceback.format_exc()
-                    errors.append(f"受信通知分割エラー: {str(e)}")
-                    self._log(f"[左側] ERROR: 受信通知分割エラー詳細:\n{error_detail}")
-                    # 一時フォルダクリーンアップ
-                    try:
-                        if 'temp_dir' in locals() and os.path.exists(temp_dir):
-                            shutil.rmtree(temp_dir)
-                            self._log(f"[左側] エラー時一時フォルダ削除: {temp_dir}")
-                    except Exception as cleanup_err:
-                        self._log(f"[左側] 一時フォルダ削除失敗: {cleanup_err}")
-
-            # UI更新（メインスレッドで実行）- 必ず実行
-            self.root.after(0, self._left_finish, len(created_folders), len(main_files), errors)
-
-        except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("処理エラー", f"予期しないエラーが発生しました:\n{str(e)}"))
-            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
-
-    def _left_finish(self, processed_count, total_count, errors):
-        """左側リネーム処理完了（完全独立）"""
-        self._log(f"[左側] _left_finish呼び出し: processed={processed_count}, total={total_count}, errors={len(errors)}")
-
-        # ボタン再有効化
-        self.left_execute_btn.config(state='normal')
-
-        # 進捗表示更新
-        if total_count == 0:
-            self.left_progress_var.set("対象ファイルなし (01_形式)")
-            messagebox.showinfo("完了", "01_で始まる本表ファイルが見つかりませんでした")
-        else:
-            self.left_progress_var.set(f"完了: {processed_count}/{total_count}フォルダ作成")
-
-            # 結果ダイアログ
-            message = f"処理完了:\n\n作成フォルダ: {processed_count}個\n本表ファイル: {total_count}件"
-            if errors:
-                message += f"\n\nエラー・警告 ({len(errors)}件):\n" + "\n".join(errors[:5])
-                if len(errors) > 5:
-                    message += f"\n... 他{len(errors)-5}件"
-
-            messagebox.showinfo("処理完了", message)
-
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v7.2.2-SEQUENTIAL-MATCHING 起動 (連番方式+金額マッチング実装版)")
+        self._log("税務書類リネームシステム v5.5.0-LATEST 起動 (メニューバーUI対応版)")
         self.root.mainloop()
 
 if __name__ == "__main__":
