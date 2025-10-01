@@ -1,17 +1,54 @@
-# 🧾 税務書類リネームシステム v8.0.0-UI-REDESIGN
+# 🧾 税務書類リネームシステム v8.0.1
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.0.0--ui--redesign-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.0.1-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.01-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.0.0では完全なUIリデザインにより、さらに使いやすく、モダンなインターフェースを実現しました。
+v8.0.1では顧問先番号の除去により、ファイル名とフォルダ名の完全な統一を実現しました。
 
 ---
 
-## 🚀 **v8.0.0-UI-REDESIGN - 最新版（2025年10月1日）**
+## 🚀 **v8.0.1 - 最新版（2025年10月1日）**
+
+### 🔧 **FIX: 本表ファイル名から顧問先番号除去（v8.0.1）**
+
+#### 🎯 **修正内容**
+
+**問題:**
+- 本表ファイル名に不要な顧問先番号が含まれていた
+- 例: `01_報酬・料金等の所得税徴収高計算書_0345N0033_株式会社ＮｏｒｔｈＷｉｎｇ.pdf`
+
+**解決:**
+- ✅ 本表ファイル名から顧問先番号（例: 0345N0033）を除去
+- ✅ フォルダ名と同じ命名規則に統一
+- ✅ 新しい形式: `01_報酬・料金等の所得税徴収高計算書_株式会社ＮｏｒｔｈＷｉｎｇ.pdf`
+
+#### 📋 **命名規則統一**
+
+**フォルダ名:**
+```
+YYMM_帳票名_会社名/
+例: 2511_報酬・料金等の所得税徴収高計算書_株式会社ＮｏｒｔｈＷｉｎｇ/
+```
+
+**本表ファイル名:**
+```
+接頭辞_帳票名_会社名.pdf
+例: 01_報酬・料金等の所得税徴収高計算書_株式会社ＮｏｒｔｈＷｉｎｇ.pdf
+```
+
+**受信通知ファイル名:**
+```
+接頭辞_受信通知.pdf
+例: 02_受信通知.pdf または 9999_受信通知.pdf
+```
+
+---
+
+## 🚀 **v8.0.0-UI-REDESIGN - 前バージョン（2025年10月1日）**
 
 ### 🎨 **NEW! 完全UIリデザイン（v8.0.0）**
 
@@ -390,6 +427,11 @@ tax-doc-renamer/
 
 ## 📝 変更履歴
 
+### v8.0.1 (2025-10-01)
+- ✅ **FIX**: 本表ファイル名から顧問先番号除去（例: 0345N0033）
+- ✅ **IMPROVE**: フォルダ名とファイル名の命名規則完全統一
+- ✅ **IMPROVE**: YYMM_帳票名_会社名 形式に統一
+
 ### v8.0.0 (2025-10-01)
 - ✅ **NEW**: 完全UIリデザイン実装
 - ✅ **NEW**: モダンなカラースキーム適用
@@ -450,13 +492,13 @@ tax-doc-renamer/
 
 ---
 
-**🎯 税務書類リネームシステム v8.0.0-UI-REDESIGN**
-**完全UIリデザイン・モダンインターフェース実現**
+**🎯 税務書類リネームシステム v8.0.1**
+**命名規則完全統一・顧問先番号除去実現**
 
-🚀 **Latest Version!** モダンUI・50/50レイアウト・Windows完全対応
+🚀 **Latest Version!** フォルダ・ファイル名統一・モダンUI・Windows完全対応
 
 **📅 最終更新: 2025年10月1日**
-**🚀 v8.0.0: 完全UIリデザイン実装**
+**🚀 v8.0.1: 本表ファイル名から顧問先番号除去**
 
 ---
 
