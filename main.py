@@ -115,7 +115,23 @@ class TaxDocumentRenamerV5:
         self.root = tk.Tk()
         self.root.title("税務書類リネームシステム")
         self.root.geometry("1200x800")
-        
+
+        # カラースキーム定義
+        self.colors = {
+            'primary': '#4F46E5',      # メインの青紫
+            'secondary': '#10B981',    # 成功の緑
+            'danger': '#EF4444',       # エラーの赤
+            'bg_card': '#FFFFFF',      # カード背景
+            'bg_light': '#F9FAFB',     # 薄い背景
+            'bg_window': '#F5F7FA',    # ウィンドウ背景
+            'text_dark': '#1F2937',    # メインテキスト
+            'text_medium': '#6B7280',  # サブテキスト
+            'border': '#E5E7EB'        # ボーダー
+        }
+
+        # ウィンドウ背景色設定
+        self.root.configure(bg=self.colors['bg_window'])
+
         # v5.2 コアエンジンの初期化（ロガー付き）
         import logging
         logging.basicConfig(level=logging.INFO)
@@ -123,7 +139,7 @@ class TaxDocumentRenamerV5:
 
         # ユーザー設定管理の初期化
         self.user_settings = get_user_settings_manager()
-        
+
         self.pdf_processor = PDFProcessor(logger=self.logger)
         self.ocr_engine = OCREngine()
         self.csv_processor = CSVProcessor()
@@ -184,41 +200,111 @@ class TaxDocumentRenamerV5:
         """ボタン視認性向上のためのスタイル設定"""
         style = ttk.Style()
 
+        # フレームスタイル設定
+        style.configure('TFrame',
+                       background=self.colors['bg_card'])
+
+        style.configure('TLabelFrame',
+                       background=self.colors['bg_card'],
+                       borderwidth=1,
+                       relief='solid')
+        style.configure('TLabelFrame.Label',
+                       background=self.colors['bg_card'],
+                       foreground=self.colors['text_dark'],
+                       font=('Yu Gothic UI', 12, 'bold'))
+
+        # ラベルスタイル設定
+        style.configure('TLabel',
+                       background=self.colors['bg_card'],
+                       foreground=self.colors['text_dark'],
+                       font=('Yu Gothic UI', 10))
+
+        style.configure('Heading.TLabel',
+                       background=self.colors['bg_card'],
+                       foreground=self.colors['text_dark'],
+                       font=('Yu Gothic UI', 12, 'bold'))
+
+        style.configure('Muted.TLabel',
+                       background=self.colors['bg_card'],
+                       foreground=self.colors['text_medium'],
+                       font=('Yu Gothic UI', 10))
+
         # 大きなボタンスタイル（通常操作用）
         style.configure('Large.TButton',
                        font=('Yu Gothic UI', 11),
                        padding=10,
+                       background=self.colors['primary'],
                        foreground='black')
+        style.map('Large.TButton',
+                 background=[('active', '#3730A3')],  # ホバー時に濃い色
+                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # アクセントボタンスタイル（主要アクション用）
         style.configure('Accent.TButton',
                        font=('Yu Gothic UI', 12, 'bold'),
                        padding=12,
+                       background=self.colors['primary'],
                        foreground='black')
+        style.map('Accent.TButton',
+                 background=[('active', '#3730A3')],
+                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # セカンダリーボタンスタイル
         style.configure('Secondary.TButton',
                        font=('Yu Gothic UI', 10),
                        padding=8,
+                       background=self.colors['bg_light'],
                        foreground='black')
+        style.map('Secondary.TButton',
+                 background=[('active', '#E5E7EB')],
+                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # 成功ボタンスタイル（エクスポート、保存用）
         style.configure('Success.TButton',
                        font=('Yu Gothic UI', 10, 'bold'),
                        padding=8,
+                       background=self.colors['secondary'],
                        foreground='black')
+        style.map('Success.TButton',
+                 background=[('active', '#059669')],
+                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # 危険ボタンスタイル（クリア、削除用）
         style.configure('Danger.TButton',
                        font=('Yu Gothic UI', 10),
                        padding=8,
+                       background=self.colors['danger'],
                        foreground='black')
+        style.map('Danger.TButton',
+                 background=[('active', '#DC2626')],
+                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
 
         # デフォルトのTButtonスタイルも設定
         style.configure('TButton',
                        font=('Yu Gothic UI', 10),
                        padding=8,
+                       background=self.colors['primary'],
                        foreground='black')
+        style.map('TButton',
+                 background=[('active', '#3730A3')],
+                 foreground=[('!disabled', 'black'), ('disabled', '#999999')])
+
+        # Entryスタイル
+        style.configure('TEntry',
+                       fieldbackground='white',
+                       foreground=self.colors['text_dark'],
+                       font=('Yu Gothic UI', 10))
+
+        # Radiobutton, Checkbuttonスタイル
+        style.configure('TRadiobutton',
+                       background=self.colors['bg_card'],
+                       foreground=self.colors['text_dark'],
+                       font=('Yu Gothic UI', 10))
+
+        style.configure('TCheckbutton',
+                       background=self.colors['bg_card'],
+                       foreground=self.colors['text_dark'],
+                       font=('Yu Gothic UI', 10))
 
     def _validate_yymm_input(self, *args):
         """YYMMの入力値をリアルタイムバリデーション"""
@@ -286,9 +372,9 @@ class TaxDocumentRenamerV5:
 
     def _create_ui(self):
         """UIの構築"""
-        # メインフレーム
+        # メインフレーム（余白を増やす）
         main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
         # メインコンテンツ（タブなし）
         self.file_frame = ttk.Frame(main_frame)
@@ -310,83 +396,104 @@ class TaxDocumentRenamerV5:
         """ファイル選択タブの作成（UI改善版：右側統合レイアウト + フォルダリネーム機能）"""
         # メインフレーム作成
         main_frame = ttk.Frame(self.file_frame)
-        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # 左右分割：左側はフォルダリネーム機能、右側に全機能統合
-        # Phase 2: パネルバランス最適化（1:4比率、最小幅設定）
-        paned = ttk.PanedWindow(main_frame, orient='horizontal')
-        paned.pack(fill='both', expand=True)
+        main_frame.pack(fill='both', expand=True)
 
-        # 左側: フォルダリネーム機能エリア（最小幅250px）
-        left_frame = ttk.Frame(paned, width=250)
-        paned.add(left_frame, weight=1)
+        # 左右分割コンテナ（固定幅、調整不可）
+        container = ttk.Frame(main_frame)
+        container.pack(fill='both', expand=True, padx=10, pady=10)
+        container.columnconfigure(0, weight=1, uniform="col")
+        container.columnconfigure(1, weight=1, uniform="col")
+
+        # 左側: フォルダリネーム機能エリア
+        left_container = ttk.Frame(container)
+        left_container.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
+
+        # 左側タイトル
+        left_title_frame = ttk.Frame(left_container)
+        left_title_frame.pack(fill='x', pady=(0, 10))
+        ttk.Label(left_title_frame, text="基本リネーム", style='Heading.TLabel').pack(side='left')
+        ttk.Separator(left_container, orient='horizontal').pack(fill='x', pady=(0, 15))
 
         # 左側パネル作成（完全新規実装）
-        self._create_left_rename_panel(left_frame)
+        self._create_left_rename_panel(left_container)
 
-        # 右側: 全機能統合エリア（最小幅700px、weight増加で広く表示）
-        right_frame = ttk.Frame(paned, width=700)
-        paned.add(right_frame, weight=4)  # Phase 2: weight 3→4に変更
+        # 右側: 全機能統合エリア
+        right_container = ttk.Frame(container)
+        right_container.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
+
+        # 右側タイトル
+        right_title_frame = ttk.Frame(right_container)
+        right_title_frame.pack(fill='x', pady=(0, 10))
+        ttk.Label(right_title_frame, text=" 申告書リネーム", style='Heading.TLabel').pack(side='left')
+        ttk.Separator(right_container, orient='horizontal').pack(fill='x', pady=(0, 15))
+
+        # 右側フレーム
+        right_frame = ttk.Frame(right_container)
+        right_frame.pack(fill='both', expand=True)
         
         # 右側のレイアウト設定
         right_frame.columnconfigure(0, weight=1)
-        
-        # === ファイル処理エリア ===
-        file_process_frame = ttk.LabelFrame(right_frame, text="📄 ファイル処理")
-        file_process_frame.pack(fill='x', pady=(0, 10))
-        
-        # メイン処理ボタン（名称統一）
-        # Phase 2: ボタン配置最適化（padding統一、視認性向上）
-        main_process_button = ttk.Button(
-            file_process_frame,
-            text="🔄 フォルダリネーム実行",
-            command=self._start_folder_batch_processing_direct,
-            style='Accent.TButton',
-            width=25  # Phase 2: 最小幅設定
-        )
-        main_process_button.pack(pady=15, padx=10)  # Phase 2: padding最適化
-        # Phase 2: ツールチップ追加
-        create_tooltip(main_process_button,
-                      "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
-        
+
         # === 設定エリア ===
-        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定")
-        settings_frame.pack(fill='x', pady=(0, 10))
-        
+        settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定", padding=20)
+        settings_frame.pack(fill='x', pady=(0, 15), padx=20)
+
         # 年月設定
         year_month_frame = ttk.Frame(settings_frame)
-        year_month_frame.pack(fill='x', pady=5, padx=10)
+        year_month_frame.pack(fill='x', pady=(0, 10))
         
         ttk.Label(year_month_frame, text="年月 (YYMM):").pack(side='left')
         self.year_month_var = tk.StringVar(value=self.user_settings.get_yymm_value())
         yymm_entry = ttk.Entry(year_month_frame, textvariable=self.year_month_var, width=10)
-        yymm_entry.pack(side='left', padx=(10, 0))
+        yymm_entry.pack(side='left', padx=(10, 5))
         # Phase 2: ツールチップ追加
         create_tooltip(yymm_entry, "年月を4桁で入力（例: 2501）\nAI分類・リネーム時に使用されます")
-        
+
         # YYMM設定状態表示
         self.yymm_status_var = tk.StringVar()
         self.yymm_status_label = ttk.Label(
             year_month_frame,
             textvariable=self.yymm_status_var,
-            style='Info.TLabel'  # Phase 1: スタイル統一
+            font=('Yu Gothic UI', 9)
         )
-        self.yymm_status_label.pack(side='left', padx=(10, 0))
+        self.yymm_status_label.pack(side='left', padx=(5, 0))
         
         # YYMMバリデーション設定（リアルタイム更新）
         self.year_month_var.trace_add('write', self._validate_yymm_input)
         self._validate_yymm_input()  # 初期バリデーション
-        
+
         # 自治体設定
-        municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定")
-        municipality_frame.pack(fill='x', pady=(0, 10))
+        municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定", padding=20)
+        municipality_frame.pack(fill='x', pady=(15, 15), padx=20)
         self._create_municipality_settings(municipality_frame)
+
+        # リネーム実行ボタン（一番下）
+        button_frame = ttk.Frame(right_frame)
+        button_frame.pack(fill='x', pady=(0, 0), padx=20)
+
+        self.right_execute_btn = tk.Button(
+            button_frame,
+            text="🔄 リネーム実行",
+            command=self._start_folder_batch_processing_direct,
+            font=('Yu Gothic UI', 11, 'bold'),
+            bg='#4B5563',
+            fg='white',
+            relief='flat',
+            padx=10,
+            pady=10,
+            cursor='hand2',
+            activebackground='#374151',
+            activeforeground='white'
+        )
+        self.right_execute_btn.pack(fill='x')
+        create_tooltip(self.right_execute_btn,
+                      "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
 
     def _create_left_rename_panel(self, parent):
         """左側フォルダリネームパネル作成（完全新規実装）"""
         # LabelFrame作成
-        frame = ttk.LabelFrame(parent, text="📁 フォルダリネーム", padding=10)
-        frame.pack(fill='both', expand=True, pady=(0, 10))
+        frame = ttk.LabelFrame(parent, text="📁 フォルダリネーム", padding=20)
+        frame.pack(fill='both', expand=True, pady=(0, 15))
 
         # YYMM入力欄
         yymm_frame = ttk.Frame(frame)
@@ -408,9 +515,12 @@ class TaxDocumentRenamerV5:
         # バリデーション設定
         self.left_yymm_var.trace_add('write', self._left_validate_yymm)
 
+        # セクション区切り線
+        ttk.Separator(frame, orient='horizontal').pack(fill='x', pady=15)
+
         # 本表接頭辞選択
         main_prefix_frame = ttk.Frame(frame)
-        main_prefix_frame.pack(fill='x', pady=(10, 5))
+        main_prefix_frame.pack(fill='x', pady=(0, 10))
 
         ttk.Label(main_prefix_frame, text="本表接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
         self.left_main_prefix_var = tk.StringVar(value="01")
@@ -431,7 +541,7 @@ class TaxDocumentRenamerV5:
 
         # 受信通知接頭辞選択
         receipt_frame = ttk.Frame(frame)
-        receipt_frame.pack(fill='x', pady=(5, 5))
+        receipt_frame.pack(fill='x', pady=(0, 10))
 
         ttk.Label(receipt_frame, text="受信通知接頭辞:", font=('Yu Gothic UI', 9)).pack(side='left')
         self.left_receipt_prefix_var = tk.StringVar(value="02")
@@ -462,11 +572,20 @@ class TaxDocumentRenamerV5:
         ).pack(side='left', padx=(0, 0))
 
         # 実行ボタン
-        self.left_execute_btn = ttk.Button(
+        self.left_execute_btn = tk.Button(
             frame,
-            text="🔄 フォルダリネーム実行",
+            text="🔄 リネーム実行",
             command=self._left_execute,
-            style='Accent.TButton'
+            font=('Yu Gothic UI', 11, 'bold'),
+            bg='#4B5563',
+            fg='white',
+            disabledforeground='white',
+            relief='flat',
+            padx=10,
+            pady=10,
+            cursor='hand2',
+            activebackground='#374151',
+            activeforeground='white'
         )
         self.left_execute_btn.pack(pady=(15, 10), fill='x')
         self.left_execute_btn.config(state='disabled')  # 初期状態は無効化
@@ -1925,9 +2044,12 @@ class TaxDocumentRenamerV5:
         print(f"[DEBUG] Result: {result_data['values'][0]} -> {result_data['values'][1]}")
 
         # 結果ウィンドウが存在する場合はTreeviewに追加
-        if self.result_tree and hasattr(self.result_tree, 'insert'):
-            self.result_tree.insert('', 'end', values=result_data['values'])
-            print(f"[DEBUG] Result added to tree widget")
+        if self.result_window and self.result_window.winfo_exists() and self.result_tree:
+            try:
+                self.result_tree.insert('', 'end', values=result_data['values'])
+                print(f"[DEBUG] Result added to tree widget")
+            except tk.TclError as e:
+                print(f"[DEBUG] Failed to add result to tree: {e}")
 
     def _add_result_error(self, original_file: str, error: str):
         """エラー結果を追加"""
@@ -1951,8 +2073,11 @@ class TaxDocumentRenamerV5:
         self._result_buffer.append(result_data)
 
         # 結果ウィンドウが存在する場合はTreeviewに追加
-        if self.result_tree and hasattr(self.result_tree, 'insert'):
-            self.result_tree.insert('', 'end', values=result_data['values'])
+        if self.result_window and self.result_window.winfo_exists() and self.result_tree:
+            try:
+                self.result_tree.insert('', 'end', values=result_data['values'])
+            except tk.TclError as e:
+                print(f"[DEBUG] Failed to add error to tree: {e}")
 
     def _open_output_folder(self):
         """出力フォルダを開く"""
