@@ -1,17 +1,46 @@
-# 🧾 税務書類リネームシステム v7.2.3-AMOUNT-MATCHING
+# 🧾 税務書類リネームシステム v7.2.6-ENHANCED
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v7.2.3--amount--matching-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v7.2.6--enhanced-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
-[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.09.30-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.01-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v7.2.3では同一会社の複数フォルダに対応した金額マッチング機能により、完全自動配置を実現しました。
+v7.2.6では使いやすさ向上とフォルダ命名規則の改善により、業務効率がさらに向上しました。
 
 ---
 
-## 🚀 **v7.2.3-AMOUNT-MATCHING - 最新版（2025年9月30日）**
+## 🚀 **v7.2.6-ENHANCED - 最新版（2025年10月1日）**
+
+### ⚡ **NEW! 機能拡張・使いやすさ向上（v7.2.6）**
+
+#### 🎯 **主な改善内容**
+
+**1. フォルダ命名規則の最適化**
+- ✅ フォルダ名形式を簡素化: `YYMM_帳票名_会社名`
+- ✅ 本表ファイル名も同様に簡素化
+- ✅ 受信通知のプレフィックス制御改善（02/9999の正確な選択）
+
+**2. 全角英字→半角英字変換機能**
+- ✅ UIチェックボックスで簡単に有効化
+- ✅ 会社名の全角英字を半角に統一（例: Ｓｔａｎｄａｒｄ→Standard）
+- ✅ フォルダ名、本表、受信通知すべてに適用
+
+**3. UIと使いやすさの改善**
+- ✅ セット1に「（東京都優先）」表記を追加
+- ✅ メニューバーの整理（左側/右側処理を明確化）
+- ✅ ヘルプテキストを従業員向けに分かりやすく改善
+- ✅ 処理結果ウィンドウに左側処理の結果も表示
+
+**4. 金額抽出の改善**
+- ✅ 行ベースの金額抽出を実装（スペース区切り対応）
+- ✅ Counter使用で重複金額を検出（納付税額の正確な識別）
+- ✅ フォールバック処理で抽出成功率向上
+
+---
+
+## 🚀 **v7.2.3-AMOUNT-MATCHING - 前バージョン（2025年9月30日）**
 
 ### ⚡ **NEW! 複数フォルダ金額マッチング（v7.2.3）**
 

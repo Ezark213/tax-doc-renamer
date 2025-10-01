@@ -450,6 +450,17 @@ class TaxDocumentRenamerV5:
             value="9999"
         ).pack(side='left', padx=(5, 0))
 
+        # 英語半角変換オプション
+        normalize_frame = ttk.Frame(frame)
+        normalize_frame.pack(fill='x', pady=(5, 5))
+
+        self.normalize_english_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            normalize_frame,
+            text="英語を半角に変換（Ｓｔａｎｄａｒｄ→Standard）",
+            variable=self.normalize_english_var
+        ).pack(side='left', padx=(0, 0))
+
         # 実行ボタン
         self.left_execute_btn = ttk.Button(
             frame,
@@ -622,6 +633,7 @@ class TaxDocumentRenamerV5:
             set_frame = ttk.Frame(parent_frame)
             set_frame.pack(fill='x', pady=2)
 
+            # セット番号ラベル（幅を統一）
             ttk.Label(set_frame, text=f"セット{i}:", width=8).pack(side='left')
 
             prefecture_var = getattr(self, f'prefecture_var_{i}')
@@ -640,6 +652,10 @@ class TaxDocumentRenamerV5:
             # 市区町村欄
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
+
+            # セット1のみ「（東京都優先）」の注釈を右側に表示
+            if i == 1:
+                ttk.Label(set_frame, text="（東京都優先）", foreground='gray').pack(side='left', padx=(5, 0))
 
             # セット1のみ動的制御：東京都の場合は無効化
             if i == 1:
@@ -2034,8 +2050,13 @@ class TaxDocumentRenamerV5:
         # ファイルメニュー
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="ファイル(F)", menu=file_menu)
-        file_menu.add_command(label="ファイル追加", command=self._select_files)
-        file_menu.add_command(label="フォルダ追加", command=self._select_folder)
+
+        # 左側処理
+        file_menu.add_command(label="左側（フォルダリネーム）", command=self._left_execute)
+
+        # 右側処理
+        file_menu.add_command(label="右側（AI分類・リネーム）", command=self._select_folder)
+
         file_menu.add_separator()
         file_menu.add_command(label="終了", command=self.root.quit)
 
@@ -2070,48 +2091,79 @@ class TaxDocumentRenamerV5:
         text_widget = tk.Text(help_window, wrap='word', font=('Yu Gothic UI', 10), padx=15, pady=15)
         text_widget.pack(fill='both', expand=True)
 
-        help_text = """税務書類リネームシステム v7.1.0-SMART-MATCHING
+        help_text = """税務書類リネームシステム 使い方ガイド
 
-【画面構成】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ 画面の使い分け
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-左側: フォルダリネーム機能
-  - シンプルなYYMMプレフィックス置換
-  - 4桁数字_ → YYMM_ に変更
+【左側】源泉税などのフォルダ整理
+　受信通知を自動で分割して、正しいフォルダに振り分けます
 
-右側: AI分類・リネーム機能
-  - OCR+AI による自動分類
-  - 税務書類コード自動付与
+【右側】税務書類の自動分類・ファイル名変更
+　PDFを読み取って、書類の種類を自動判定します
 
-【左側：フォルダリネーム】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ 左側の使い方（源泉税フォルダ整理）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. YYMM入力
-   - 年月を4桁で入力（例: 2501）
+ステップ1: 年月を入力
+　→ 4桁の数字で入力（例：2025年1月 → 2501）
 
-2. フォルダリネーム実行ボタンをクリック
-   - フォルダを選択すると自動処理開始
-   - 4桁数字_プレフィックスをYYMM_に置換
+ステップ2: 本表の番号を選択
+　→ 通常は「01」を選択
 
-【右側：AI分類・リネーム】
+ステップ3: 受信通知の番号を選択
+　→ 通常は「02」を選択
 
-1. YYMM設定
-   - 年月を4桁で入力（例: 2501）
+ステップ4: 会社名の英語表記（オプション）
+　→ 全角の英語を半角にしたい場合はチェック
+　　（例：Ｓｔａｎｄａｒｄ → Standard）
 
-2. 市町村設定（オプション）
-   - セット1: 東京都専用（都道府県欄のみ）
-   - セット2～5: その他の都道府県・市区町村を設定
+ステップ5: 実行ボタンをクリック
+　→ フォルダを選ぶと自動で処理が始まります
 
-3. フォルダリネーム実行ボタンをクリック
-   - フォルダを選択してAI分類・リネーム実行
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ 右側の使い方（書類の自動分類）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-【メニュー】
-- ファイル(F): ファイル/フォルダの追加、終了
-- 表示(V): 処理結果・ログを別ウィンドウで表示
-- ツール(T): ログ・結果のクリア
-- ヘルプ(H): このヘルプとバージョン情報
+ステップ1: 年月を入力
+　→ 4桁の数字で入力（例：2025年1月 → 2501）
 
-【キーボードショートカット】
-- Ctrl+1: 処理結果ウィンドウを表示
-- Ctrl+2: ログウィンドウを表示
+ステップ2: 市区町村を設定（該当する場合のみ）
+　→ セット1: 東京都優先（あれば）
+　→ セット2～5: その他の市区町村
+
+ステップ3: 実行ボタンをクリック
+　→ フォルダを選ぶと自動で分類が始まります
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ メニューバーの使い方
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ファイル(F)
+　・左側（フォルダリネーム）：源泉税フォルダの整理
+　・右側（AI分類・リネーム）：書類の自動分類
+　・終了：アプリを閉じる
+
+表示(V)
+　・処理結果を表示：何が処理されたか確認
+　・ログを表示：詳しい処理内容を確認
+
+ツール(T)
+　・ログをクリア：ログを消去
+　・結果をクリア：処理結果を消去
+
+ヘルプ(H)
+　・使い方：このヘルプを表示
+　・バージョン情報：アプリの情報を表示
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ ショートカットキー
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ctrl+1：処理結果ウィンドウを開く
+Ctrl+2：ログウィンドウを開く
 """
 
         text_widget.insert('1.0', help_text)
@@ -2199,18 +2251,63 @@ class TaxDocumentRenamerV5:
         # 接頭辞を取得
         main_prefix = self.left_main_prefix_var.get()
         receipt_prefix = self.left_receipt_prefix_var.get()
+        normalize_english = self.normalize_english_var.get()
 
         # バックグラウンド処理開始
         thread = threading.Thread(
             target=self._left_rename_background,
-            args=(folder_path, yymm_value, main_prefix, receipt_prefix),
+            args=(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english),
             daemon=True
         )
         thread.start()
 
-    def _left_rename_background(self, folder_path, yymm, main_prefix, receipt_prefix):
+    def _get_final_receipt_name(self, receipt_prefix, folder_path, folder_name):
+        """
+        受信通知の最終ファイル名を決定
+
+        Args:
+            receipt_prefix: UIで選択された受信通知のプレフィックス（"02" または "9999"）
+            folder_path: 格納先フォルダのパス
+            folder_name: フォルダ名（YYMM_帳票名_会社名）
+
+        Returns:
+            最終ファイル名（例: "02_帳票名_会社名.pdf" または "9999_帳票名_会社名.pdf"）
+        """
+        # folder_nameから帳票名と会社名を抽出
+        # 形式: YYMM_帳票名_会社名
+        parts = folder_name.split('_', 1)  # 最初の_で分割
+        if len(parts) >= 2:
+            name_part = parts[1]  # 帳票名_会社名
+        else:
+            name_part = folder_name
+
+        # UIで選択されたプレフィックスを常に使用
+        return f"{receipt_prefix}_{name_part}.pdf"
+
+    def _normalize_fullwidth_english(self, text):
+        """全角英字を半角英字に変換"""
+        if not text:
+            return text
+
+        result = []
+        for char in text:
+            code = ord(char)
+            # 全角英大文字 (Ａ-Ｚ: 0xFF21-0xFF3A)
+            if 0xFF21 <= code <= 0xFF3A:
+                result.append(chr(code - 0xFEE0))
+            # 全角英小文字 (ａ-ｚ: 0xFF41-0xFF5A)
+            elif 0xFF41 <= code <= 0xFF5A:
+                result.append(chr(code - 0xFEE0))
+            else:
+                result.append(char)
+        return ''.join(result)
+
+    def _left_rename_background(self, folder_path, yymm, main_prefix, receipt_prefix, normalize_english=False):
         """左側リネーム処理（フォルダ作成+受信通知分割・完全独立）"""
         try:
+            # UI更新を強制して黒画面を防ぐ
+            self.root.update_idletasks()
+
             import fitz  # PyMuPDF
 
             errors = []
@@ -2249,11 +2346,35 @@ class TaxDocumentRenamerV5:
                 old_prefix = match.group(1)  # 元の番号（01, 02, 9999など）
                 rest_name = match.group(2)   # 残りの部分（帳票名_顧問先...）
 
+                # 英語半角変換が有効な場合は適用
+                if normalize_english:
+                    rest_name = self._normalize_fullwidth_english(rest_name)
+
                 # 新しいファイル名: 選択した接頭辞_残りの部分.pdf
                 new_filename = f"{main_prefix}_{rest_name}.pdf"
 
-                # フォルダ名: YYMM_新しいファイル名（拡張子なし）
-                folder_name = f"{yymm}_{main_prefix}_{rest_name}"
+                # rest_nameから帳票名と会社名を抽出（顧問先番号を除去）
+                # 形式: 帳票名_顧問先番号_会社名 → 帳票名_会社名
+                parts = rest_name.split('_')
+                if len(parts) >= 3:
+                    # 最初の部分が帳票名、最後から2番目が顧問先番号、最後が会社名
+                    # 顧問先番号を除去: 帳票名 + 会社名
+                    doc_type = '_'.join(parts[:-2])  # 帳票名（複数の_を含む可能性）
+                    company_name = parts[-1]          # 会社名
+
+                    # 英語半角変換が有効な場合は適用
+                    if normalize_english:
+                        company_name = self._normalize_fullwidth_english(company_name)
+
+                    folder_base_name = f"{doc_type}_{company_name}"
+                else:
+                    # パースできない場合はそのまま使用
+                    folder_base_name = rest_name
+                    if normalize_english:
+                        folder_base_name = self._normalize_fullwidth_english(folder_base_name)
+
+                # フォルダ名: YYMM_帳票名_会社名
+                folder_name = f"{yymm}_{folder_base_name}"
                 new_folder_path = os.path.join(folder_path, folder_name)
 
                 try:
@@ -2271,6 +2392,15 @@ class TaxDocumentRenamerV5:
                     })
 
                     self._log(f"[左側] フォルダ作成+リネーム: {original_filename} → {folder_name}/{new_filename}")
+
+                    # 処理結果ウィンドウに追加
+                    self._add_result_success(
+                        original_file=original_filename,
+                        new_filename=f"{folder_name}/{new_filename}",
+                        doc_type="フォルダリネーム",
+                        method="左側処理",
+                        confidence="100%"
+                    )
 
                 except Exception as e:
                     errors.append(f"フォルダ作成エラー ({original_filename}): {str(e)}")
@@ -2345,14 +2475,32 @@ class TaxDocumentRenamerV5:
                                 receipt_filename = os.path.basename(temp_path)
                                 receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
                                 shutil.move(temp_path, receipt_dest_path)
+
+                                # 連番を削除してreceipt_prefix_帳票名_会社名.pdfにリネーム
+                                final_filename = self._get_final_receipt_name(receipt_prefix, folder_info['folder_path'], folder_name)
+                                final_dest_path = os.path.join(folder_info['folder_path'], final_filename)
+                                if receipt_dest_path != final_dest_path:
+                                    shutil.move(receipt_dest_path, final_dest_path)
+                                    self._log(f"[左側] 受信通知リネーム: {receipt_filename} → {final_filename}")
+
                                 matched_count += 1
-                                self._log(f"[左側] 受信通知配置: {receipt_filename} → {folder_name}")
+                                self._log(f"[左側] 受信通知配置: {final_filename} → {folder_name}")
+
+                                # 処理結果ウィンドウに追加
+                                self._add_result_success(
+                                    original_file=f"受信通知.pdf (ページ{page_num + 1})",
+                                    new_filename=f"{folder_name}/{final_filename}",
+                                    doc_type="受信通知分割",
+                                    method="左側処理",
+                                    confidence=f"{score:.0%}"
+                                )
                             else:
                                 unmatched_pages.append((page_num, f"フォルダ情報なし: {folder_name}"))
 
                         else:
                             # 複数フォルダ: 金額マッチングで最適フォルダ選択
                             self._log(f"[左側] ページ{page_num + 1} - 複数フォルダ検出: {len(matched_folders)}件（金額マッチング実行）")
+                            self._log(f"[左側] 候補フォルダ: {[f[0] for f in matched_folders]}")
 
                             # 受信通知から金額抽出
                             receipt_amount = matcher.extract_amount_from_receipt(temp_path, 0)
@@ -2369,6 +2517,7 @@ class TaxDocumentRenamerV5:
                             # 各フォルダの本表金額と比較
                             best_folder = None
                             best_diff = float('inf')
+                            self._log(f"[左側] 金額マッチング開始:")
 
                             for folder_name, score in matched_folders:
                                 # フォルダ情報取得
@@ -2379,10 +2528,12 @@ class TaxDocumentRenamerV5:
                                         break
 
                                 if not folder_info:
+                                    self._log(f"[左側]   {folder_name}: フォルダ情報取得失敗")
                                     continue
 
                                 # 本表金額抽出
                                 main_pdf_path = os.path.join(folder_info['folder_path'], folder_info['main_file'])
+                                self._log(f"[左側]   {folder_name}: 本表PDF={folder_info['main_file']}")
                                 main_amount = matcher.extract_amount_from_main_pdf(main_pdf_path)
 
                                 if main_amount:
@@ -2392,6 +2543,8 @@ class TaxDocumentRenamerV5:
                                     if diff < best_diff:
                                         best_diff = diff
                                         best_folder = (folder_name, folder_info)
+                                else:
+                                    self._log(f"[左側]   {folder_name}: 本表金額抽出失敗")
 
                             # 最適フォルダに配置
                             if best_folder:
@@ -2399,8 +2552,25 @@ class TaxDocumentRenamerV5:
                                 receipt_filename = os.path.basename(temp_path)
                                 receipt_dest_path = os.path.join(folder_info['folder_path'], receipt_filename)
                                 shutil.move(temp_path, receipt_dest_path)
+
+                                # 連番を削除してreceipt_prefix_帳票名_会社名.pdfにリネーム
+                                final_filename = self._get_final_receipt_name(receipt_prefix, folder_info['folder_path'], folder_name)
+                                final_dest_path = os.path.join(folder_info['folder_path'], final_filename)
+                                if receipt_dest_path != final_dest_path:
+                                    shutil.move(receipt_dest_path, final_dest_path)
+                                    self._log(f"[左側] 受信通知リネーム: {receipt_filename} → {final_filename}")
+
                                 matched_count += 1
-                                self._log(f"[左側] 金額マッチング成功: {receipt_filename} → {folder_name} (差額: {best_diff:,}円)")
+                                self._log(f"[左側] 金額マッチング成功: {final_filename} → {folder_name} (差額: {best_diff:,}円)")
+
+                                # 処理結果ウィンドウに追加
+                                self._add_result_success(
+                                    original_file=f"受信通知.pdf (ページ{page_num + 1})",
+                                    new_filename=f"{folder_name}/{final_filename}",
+                                    doc_type="受信通知分割（金額マッチング）",
+                                    method="左側処理",
+                                    confidence=f"差額{best_diff:,}円"
+                                )
                             else:
                                 self._log(f"[左側] 警告: 金額マッチング失敗 - ページ{page_num + 1}")
                                 unmatched_pages.append((page_num, "金額マッチング失敗"))

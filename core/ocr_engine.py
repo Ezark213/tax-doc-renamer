@@ -9,6 +9,7 @@ import pytesseract
 from PIL import Image
 import re
 import io
+import os
 from typing import List, Optional, Dict, Tuple
 from dataclasses import dataclass
 
@@ -454,8 +455,8 @@ class CompanyNameMatcher:
         """
         フォルダ名から会社名を抽出
 
-        フォルダ名形式: YYMM_接頭辞_帳票名_顧問先番号_顧問先名/
-        例: 2511_01_給与所得・退職所得等の所得税徴収高計算書(一般)_0413K0063_株式会社Ｘ－Ｒｅｇｕｌａｔｉｏｎ/
+        フォルダ名形式: YYMM_帳票名_会社名/
+        例: 2501_給与所得・退職所得等の所得税徴収高計算書(一般)_株式会社Ｘ－Ｒｅｇｕｌａｔｉｏｎ/
 
         Args:
             folder_name: フォルダ名
@@ -466,9 +467,9 @@ class CompanyNameMatcher:
         if not folder_name:
             return None
 
-        # パターン: YYMM_接頭辞_帳票名_顧問先番号_顧問先名
+        # パターン: YYMM_帳票名_会社名
         # 最後のアンダースコア以降が会社名
-        pattern = r'^(?:\d{4})_(?:\d{2,4})_[^_]+_[^_]+_(.+?)/?$'
+        pattern = r'^(?:\d{4})_[^_]+_(.+?)/?$'
         match = re.match(pattern, folder_name)
 
         if match:
@@ -526,7 +527,7 @@ class CompanyNameMatcher:
 
     def extract_amount_from_main_pdf(self, pdf_path: str) -> Optional[int]:
         """
-        本表PDFから金額を抽出（v7.2.1-AMOUNT-MATCHING）
+        本表PDFから金額を抽出（v7.2.6-LINE-BASED）
 
         Args:
             pdf_path: 本表PDFのパス
@@ -545,23 +546,55 @@ class CompanyNameMatcher:
             text = page.get_text()
             doc.close()
 
-            # 金額抽出パターン
+            # 方法1: キーワードベースの抽出
             patterns = [
-                r'納付税額[^\d]*?([\d,]+)',           # パターン1: 納付税額
-                r'合計[額金][^\d]*?([\d,]+)',          # パターン2: 合計額/合計金
-                r'納付すべき[^\d]*?([\d,]+)',         # パターン3: 納付すべき税額
-                r'本税[^\d]*?([\d,]+)',                # パターン4: 本税
+                (r'納付税額[^\d]*([\d\s,]+)', '納付税額'),
+                (r'本税[^\d]*([\d\s,]+)', '本税'),
+                (r'納付すべき税額[^\d]*([\d\s,]+)', '納付すべき税額'),
+                (r'差引納付税額[^\d]*([\d\s,]+)', '差引納付税額'),
             ]
 
-            for pattern in patterns:
+            for pattern, label in patterns:
                 match = re.search(pattern, text, re.MULTILINE)
                 if match:
-                    amount_str = match.group(1).replace(',', '').replace(' ', '')
-                    try:
-                        return int(amount_str)
-                    except ValueError:
-                        continue
+                    amount_str = match.group(1).replace(',', '').replace(' ', '').replace('\u3000', '')
+                    if len(amount_str) >= 3:
+                        try:
+                            amount = int(amount_str)
+                            if amount > 0:
+                                print(f"DEBUG: 本表金額抽出成功: {amount:,}円 (パターン: {label})")
+                                return amount
+                        except ValueError:
+                            continue
 
+            # 方法2: 行ベースの金額抽出（フォールバック）
+            all_amounts = []
+            for line in text.split('\n'):
+                # カンマを含む行のみ処理
+                if ',' in line:
+                    cleaned = line.replace(',', '').replace(' ', '').replace('\u3000', '').strip()
+                    if cleaned.isdigit() and len(cleaned) >= 3:
+                        amount = int(cleaned)
+                        if 100 <= amount <= 100000000:  # 100円〜1億円の範囲
+                            all_amounts.append(amount)
+
+            if all_amounts:
+                # 重複する金額があれば、それを返す（通常、納付税額は繰り返し表示される）
+                from collections import Counter
+                counter = Counter(all_amounts)
+                most_common = counter.most_common(1)
+                if most_common and most_common[0][1] >= 2:  # 2回以上出現
+                    amount = most_common[0][0]
+                    print(f"DEBUG: 本表金額抽出成功（重複パターン）: {amount:,}円 (出現回数: {most_common[0][1]})")
+                    return amount
+
+                # 重複がなければ最後の金額を返す
+                amount = all_amounts[-1]
+                print(f"DEBUG: 本表金額抽出成功（最終金額）: {amount:,}円")
+                return amount
+
+            print(f"WARNING: 本表金額抽出失敗: {os.path.basename(pdf_path)}")
+            print(f"DEBUG: テキスト抽出（最初の500文字）:\n{text[:500]}")
             return None
 
         except Exception as e:
@@ -570,7 +603,7 @@ class CompanyNameMatcher:
 
     def extract_amount_from_receipt(self, pdf_path: str, page_num: int) -> Optional[int]:
         """
-        受信通知PDFから金額を抽出（v7.2.1-AMOUNT-MATCHING）
+        受信通知PDFから金額を抽出（v7.2.4-IMPROVED-PATTERN）
 
         Args:
             pdf_path: 受信通知PDFのパス
@@ -590,23 +623,34 @@ class CompanyNameMatcher:
             text = page.get_text()
             doc.close()
 
-            # 金額抽出パターン
+            # 金額抽出パターン（空白を考慮）
             patterns = [
-                r'納付すべき税額[^\d]*?([\d,]+)',     # パターン1: 納付すべき税額
-                r'本税[^\d]*?([\d,]+)',                # パターン2: 本税
-                r'合計[額金][^\d]*?([\d,]+)',          # パターン3: 合計額
-                r'納付税額[^\d]*?([\d,]+)',           # パターン4: 納付税額
+                (r'合計金額[^\d]*([\d\s,]+)', '合計金額'),
+                (r'納付金額[^\d]*([\d\s,]+)', '納付金額'),
+                (r'納付税額[^\d]*([\d\s,]+)', '納付税額'),
+                (r'納付すべき税額[^\d]*([\d\s,]+)', '納付すべき税額'),
+                (r'本税[^\d]*([\d\s,]+)', '本税'),
             ]
 
-            for pattern in patterns:
+            for pattern, label in patterns:
                 match = re.search(pattern, text, re.MULTILINE)
                 if match:
-                    amount_str = match.group(1).replace(',', '').replace(' ', '')
-                    try:
-                        return int(amount_str)
-                    except ValueError:
-                        continue
+                    amount_str = match.group(1)
+                    # 空白とカンマを除去
+                    amount_str_cleaned = amount_str.replace(',', '').replace(' ', '').replace('\u3000', '')
+                    
+                    # 3桁以上の数字のみ（誤抽出防止）
+                    if len(amount_str_cleaned) >= 3:
+                        try:
+                            amount = int(amount_str_cleaned)
+                            if amount > 0:  # 0円は無効
+                                print(f"DEBUG: 受信通知金額抽出成功: {amount:,}円 (パターン: {label})")
+                                return amount
+                        except ValueError:
+                            continue
 
+            print(f"WARNING: 受信通知金額抽出失敗: {os.path.basename(pdf_path)} page={page_num}")
+            print(f"DEBUG: テキスト抽出（最初の500文字）:\n{text[:500]}")
             return None
 
         except Exception as e:
@@ -639,6 +683,73 @@ class CompanyNameMatcher:
         normalized = normalized.lower()
 
         return normalized
+
+    def calculate_similarity(self, str1: str, str2: str) -> float:
+        """
+        2つの文字列の類似度を計算（0.0～1.0）
+
+        Args:
+            str1: 比較文字列1（正規化済み）
+            str2: 比較文字列2（正規化済み）
+
+        Returns:
+            類似度スコア（0.0～1.0）
+        """
+        if not str1 or not str2:
+            return 0.0
+
+        # 完全一致
+        if str1 == str2:
+            return 1.0
+
+        # 部分一致チェック
+        if str1 in str2 or str2 in str1:
+            # 短い方の文字列の長さを基準に類似度を計算
+            shorter = min(len(str1), len(str2))
+            longer = max(len(str1), len(str2))
+            return shorter / longer
+
+        # Levenshtein距離ベースの類似度計算
+        # 編集距離を計算
+        distance = self._levenshtein_distance(str1, str2)
+        max_len = max(len(str1), len(str2))
+        
+        if max_len == 0:
+            return 0.0
+        
+        # 類似度 = 1 - (編集距離 / 最大長)
+        similarity = 1.0 - (distance / max_len)
+        return max(0.0, similarity)
+
+    def _levenshtein_distance(self, s1: str, s2: str) -> int:
+        """
+        Levenshtein距離（編集距離）を計算
+
+        Args:
+            s1: 文字列1
+            s2: 文字列2
+
+        Returns:
+            編集距離
+        """
+        if len(s1) < len(s2):
+            return self._levenshtein_distance(s2, s1)
+
+        if len(s2) == 0:
+            return len(s1)
+
+        previous_row = range(len(s2) + 1)
+        for i, c1 in enumerate(s1):
+            current_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                # 挿入、削除、置換のコストを計算
+                insertions = previous_row[j + 1] + 1
+                deletions = current_row[j] + 1
+                substitutions = previous_row[j] + (c1 != c2)
+                current_row.append(min(insertions, deletions, substitutions))
+            previous_row = current_row
+
+        return previous_row[-1]
 
     def match_all_folders(self, receipt_company_name: str, folder_names: List[str],
                           threshold: float = 0.7) -> List[Tuple[str, float]]:
