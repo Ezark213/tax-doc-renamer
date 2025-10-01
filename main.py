@@ -2475,9 +2475,6 @@ Ctrl+2：ログウィンドウを開く
                 if normalize_english:
                     rest_name = self._normalize_fullwidth_english(rest_name)
 
-                # 新しいファイル名: 選択した接頭辞_残りの部分.pdf
-                new_filename = f"{main_prefix}_{rest_name}.pdf"
-
                 # rest_nameから帳票名と会社名を抽出（顧問先番号を除去）
                 # 形式: 帳票名_顧問先番号_会社名 → 帳票名_会社名
                 parts = rest_name.split('_')
@@ -2497,6 +2494,9 @@ Ctrl+2：ログウィンドウを開く
                     folder_base_name = rest_name
                     if normalize_english:
                         folder_base_name = self._normalize_fullwidth_english(folder_base_name)
+
+                # 新しいファイル名: 選択した接頭辞_帳票名_会社名.pdf（顧問先番号除去済み）
+                new_filename = f"{main_prefix}_{folder_base_name}.pdf"
 
                 # フォルダ名: YYMM_帳票名_会社名
                 folder_name = f"{yymm}_{folder_base_name}"
