@@ -2524,18 +2524,18 @@ Ctrl+2：ログウィンドウを開く
         給与支払報告書処理（NEW Phase 3-4実装）
         
         処理フロー:
-        1. 本表ファイルのリネーム・フォルダ作成
-        2. 01_受信通知.pdfの各ページから会社名と市区町村名を抽出
-        3. マッチングしてページを配置
+        1. 本表ファイルのリネーム・フォルダ作成（顧問先コード削除機能付き）
+        2. 01_受信通知.pdfを1ページずつ分割
+        3. 各ページから会社名を抽出してマッチング
         """
         self._log("[NEW Phase 3-4] 給与支払報告書処理を開始")
         
         try:
             import fitz
             
-            # Step 1: 本表ファイル処理
+            # Step 1: 本表ファイル処理（顧問先コード削除機能付き）
             self._log("[給与支払報告書] Step 1: 本表ファイル処理開始")
-            created_folders = self._process_main_files_without_receipt(
+            created_folders = self._process_payroll_main_files(
                 folder_path, yymm_value, main_prefix, normalize_english
             )
             
@@ -2548,11 +2548,11 @@ Ctrl+2：ログウィンドウを開く
             
             self._log(f"[給与支払報告書] 作成されたフォルダ数: {len(created_folders)}")
             
-            # Step 2: 受信通知処理
+            # Step 2: 受信通知処理（ページ分割版）
             receipt_pdf = os.path.join(folder_path, "01_受信通知.pdf")
             if os.path.exists(receipt_pdf):
-                self._log("[給与支払報告書] Step 2: 受信通知処理開始")
-                self._process_payroll_receipts(receipt_pdf, created_folders, receipt_prefix)
+                self._log("[給与支払報告書] Step 2: 受信通知処理開始（ページ分割版）")
+                self._process_payroll_receipts_with_split(receipt_pdf, created_folders, receipt_prefix)
             else:
                 self._log("[給与支払報告書] 01_受信通知.pdfが見つかりません（スキップ）")
             
@@ -2567,6 +2567,297 @@ Ctrl+2：ログウィンドウを開く
             self._log(traceback.format_exc())
             self.root.after(0, lambda: messagebox.showerror("エラー", f"給与支払報告書処理中にエラーが発生しました:\n{str(e)}"))
             self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+
+    def _process_payroll_main_files(self, folder_path, yymm_value, main_prefix, normalize_english):
+        """
+        給与支払報告書の本表ファイル処理（顧問先コード削除機能付き）
+        
+        Args:
+            folder_path: 処理対象フォルダ
+            yymm_value: 年月（YYMM形式）
+            main_prefix: 本表プレフィックス（"01" or "01_給与支払報告書"）
+            normalize_english: 英数字を半角に変換するか
+        
+        Returns:
+            created_folders: [(folder_path, folder_name, company_name), ...]
+        """
+        created_folders = []
+        
+        try:
+            # フォルダ内のPDFファイルを取得
+            # 給与支払報告書では、既に "01_" で始まる本表ファイルを処理対象とする
+            # ただし、"01_受信通知.pdf" は除外
+            pdf_files = [f for f in os.listdir(folder_path) 
+                        if f.lower().endswith('.pdf') 
+                        and f.startswith('01_')
+                        and f != '01_受信通知.pdf']
+            
+            self._log(f"[給与支払報告書本表] 処理対象PDFファイル数: {len(pdf_files)}")
+            
+            for pdf_file in pdf_files:
+                # ファイル名から "01_" を除去
+                # 例: "01_市原市役所_個人都道府県民税・市区町村民税　給与支払報告_0404A0027_Ｎｄｉｏｔ　株式会社.pdf"
+                # → "市原市役所_個人都道府県民税・市区町村民税　給与支払報告_0404A0027_Ｎｄｉｏｔ　株式会社"
+                original_name = pdf_file[3:-4]  # "01_" を除去して .pdf も除去
+                
+                # 🔧 顧問先コード削除処理
+                # 構造: "市区町村名_帳票名_顧問先コード_会社名"
+                # 顧問先コードは "NNNNXNNNN" 形式（例: 0404A0027）
+                parts = original_name.split('_')
+                
+                company_name = ""
+                if len(parts) >= 4:
+                    # parts[0]: 市区町村名
+                    # parts[1]: 帳票名（の一部）
+                    # parts[2以降]: 顧問先コード or 帳票名の続き or 会社名
+                    
+                    # 顧問先コードを探す（NNNNXNNNN形式）
+                    filtered_parts = []
+                    found_code = False
+                    
+                    for i, part in enumerate(parts):
+                        if not found_code and re.match(r'^\d{4}[A-Z]\d{4}$', part):
+                            # 顧問先コードを検出・削除
+                            self._log(f"[給与支払報告書本表] 顧問先コード検出・削除: {part}")
+                            found_code = True
+                            # この部分は filtered_parts に追加しない（削除）
+                        else:
+                            filtered_parts.append(part)
+                    
+                    # 顧問先コード削除後の名前を再構築
+                    original_name = '_'.join(filtered_parts)
+                    
+                    # 会社名を抽出（最後の要素）
+                    company_name = filtered_parts[-1] if filtered_parts else ""
+                
+                # 🔧 空白行（連続するアンダースコア）の削除
+                # "__" → "_" に置換
+                while '__' in original_name:
+                    original_name = original_name.replace('__', '_')
+                    self._log(f"[給与支払報告書本表] 空白行削除: 連続アンダースコア除去")
+                
+                # 🔧 会社名内の空白削除（株式会社、合同会社などの前後の空白）
+                # 例: "株式会社　藤田総研" → "株式会社藤田総研"
+                # 例: "ＡＨｉｓ　株式会社" → "ＡＨｉｓ株式会社"
+                original_name = re.sub(r'\s+', '', original_name)
+                company_name = re.sub(r'\s+', '', company_name)
+                
+                # 🔧 英数字の正規化（全角→半角変換）
+                if normalize_english:
+                    original_name = self._normalize_fullwidth_english(original_name)
+                    company_name = self._normalize_fullwidth_english(company_name)
+                    self._log(f"[給与支払報告書本表] 英数字正規化後: '{original_name}'")
+                else:
+                    self._log(f"[給与支払報告書本表] 空白削除後: '{original_name}'")
+                
+                # フォルダ名とPDFファイル名を作成
+                # 重要: YYMMの後に main_prefix (01) は付けない！元のファイル名の01は既に削除済み
+                folder_name = f"{yymm_value}_{original_name}"
+                new_pdf_name = f"{main_prefix}_{original_name}.pdf"
+                
+                # フォルダ作成
+                new_folder_path = os.path.join(folder_path, folder_name)
+                os.makedirs(new_folder_path, exist_ok=True)
+                
+                # 🔧 PDFファイルを移動ではなくコピー（元ファイルを残す）
+                src_pdf = os.path.join(folder_path, pdf_file)
+                dest_pdf = os.path.join(new_folder_path, new_pdf_name)
+                
+                shutil.copy2(src_pdf, dest_pdf)
+                self._log(f"[給与支払報告書本表] フォルダ作成・コピー完了: {folder_name}")
+                self._log(f"[給与支払報告書本表] 抽出された会社名: '{company_name}'")
+                
+                created_folders.append((new_folder_path, folder_name, company_name))
+            
+            self._log(f"[給与支払報告書本表] 作成されたフォルダ数: {len(created_folders)}")
+            return created_folders
+            
+        except Exception as e:
+            self._log(f"[給与支払報告書本表] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+            return []
+
+    def _process_payroll_receipts_with_split(self, receipt_pdf_path, created_folders, receipt_prefix):
+        """
+        給与支払報告書の受信通知PDF処理（ページ分割版）
+        
+        処理フロー:
+        1. 全ページを一時ファイルとして分割
+        2. 各ページから会社名を抽出してマッチング
+        3. マッチしたフォルダに受信通知を配置（重複時は番号付与）
+        
+        Args:
+            receipt_pdf_path: 01_受信通知.pdf のパス
+            created_folders: [(folder_path, folder_name, company_name), ...]
+            receipt_prefix: 受信通知プレフィックス（"02" or "9999"）
+        """
+        import fitz
+        import tempfile
+        
+        try:
+            doc = fitz.open(receipt_pdf_path)
+            self._log(f"[給与支払報告書受信通知] ページ数: {len(doc)}")
+            
+            # Step 1: まず全ページを一時ファイルとして分割
+            temp_pages = []
+            temp_dir = tempfile.mkdtemp()
+            
+            self._log("[給与支払報告書受信通知] Step 1: ページ分割開始")
+            
+            for page_num in range(len(doc)):
+                # 一時ファイルとして保存
+                temp_pdf_path = os.path.join(temp_dir, f"page_{page_num + 1}.pdf")
+                single_page_doc = fitz.open()
+                single_page_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                single_page_doc.save(temp_pdf_path)
+                single_page_doc.close()
+                
+                # テキスト抽出
+                page = doc[page_num]
+                text = page.get_text()
+                
+                temp_pages.append({
+                    'page_num': page_num + 1,
+                    'temp_path': temp_pdf_path,
+                    'text': text
+                })
+                
+                self._log(f"[給与支払報告書受信通知] Page {page_num + 1} 分割完了")
+            
+            doc.close()
+            
+            # Step 2: 各分割ページから会社名を抽出してマッチング
+            self._log("[給与支払報告書受信通知] Step 2: 会社名抽出とマッチング開始")
+            
+            for page_info in temp_pages:
+                page_num = page_info['page_num']
+                temp_path = page_info['temp_path']
+                text = page_info['text']
+                
+                # 会社名を抽出
+                company_name = self._extract_company_from_receipt(text)
+                
+                if not company_name:
+                    self._log(f"[給与支払報告書受信通知] Page {page_num}: 会社名抽出失敗")
+                    continue
+                
+                self._log(f"[給与支払報告書受信通知] Page {page_num}: 会社名='{company_name}'")
+                
+                # マッチするフォルダを検索（会社名のみでマッチング）
+                matched_folder = self._match_payroll_folder_by_company(company_name, created_folders)
+                
+                if matched_folder:
+                    folder_path, folder_name, _ = matched_folder
+                    
+                    # 受信通知ファイル名を決定（重複時は番号付与）
+                    base_filename = f"{receipt_prefix}_受信通知"
+                    receipt_filename = f"{base_filename}.pdf"
+                    dest_path = os.path.join(folder_path, receipt_filename)
+                    
+                    # 既存ファイルがある場合は番号を付与
+                    counter = 2
+                    while os.path.exists(dest_path):
+                        receipt_filename = f"{base_filename}_{counter:02d}.pdf"
+                        dest_path = os.path.join(folder_path, receipt_filename)
+                        counter += 1
+                    
+                    # 一時ファイルからコピー
+                    shutil.copy2(temp_path, dest_path)
+                    self._log(f"[給与支払報告書受信通知] マッチ成功: {folder_name} → {receipt_filename}")
+                else:
+                    self._log(f"[給与支払報告書受信通知] Page {page_num}: マッチするフォルダが見つかりません")
+            
+            # Step 3: 一時ファイルをクリーンアップ
+            import shutil as shutil_module
+            try:
+                shutil_module.rmtree(temp_dir)
+                self._log("[給与支払報告書受信通知] 一時ファイル削除完了")
+            except Exception as e:
+                self._log(f"[給与支払報告書受信通知] 一時ファイル削除エラー: {str(e)}")
+            
+        except Exception as e:
+            self._log(f"[給与支払報告書受信通知] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+
+    def _extract_company_from_receipt(self, text):
+        """
+        受信通知から会社名のみを抽出
+        
+        Args:
+            text: PDFページのテキスト
+        
+        Returns:
+            company_name: 抽出された会社名（正規化済み）、抽出失敗時はNone
+        """
+        company_name = None
+        
+        # 会社名抽出: "納税者の氏名又は名称" の後の行
+        # パターン1: 通常の形式
+        company_match = re.search(r'納税者の[\s\n]*氏名又は名称[\s\n]+(.+?)(?:\n|発行元|電話番号)', text, re.MULTILINE | re.DOTALL)
+        if company_match:
+            company_name = company_match.group(1).strip()
+            # 改行や余分な空白を除去
+            company_name = re.sub(r'\s+', '', company_name)
+            self._log(f"[給与支払報告書会社名抽出] 抽出成功: '{company_name}'")
+        else:
+            # パターン2: より柔軟なパターン
+            company_match = re.search(r'氏名又は名称[\s\n]+([^\n]+)', text, re.MULTILINE)
+            if company_match:
+                company_name = company_match.group(1).strip()
+                company_name = re.sub(r'\s+', '', company_name)
+                self._log(f"[給与支払報告書会社名抽出] 抽出成功(パターン2): '{company_name}'")
+            else:
+                self._log(f"[給与支払報告書会社名抽出] パターンマッチ失敗")
+        
+        return company_name
+    
+    def _match_payroll_folder_by_company(self, company_name, created_folders):
+        """
+        会社名のみに基づいてフォルダをマッチング
+        
+        Args:
+            company_name: 受信通知から抽出した会社名
+            created_folders: [(folder_path, folder_name, company_name), ...]
+        
+        Returns:
+            matched_folder: (folder_path, folder_name, company_name) or None
+        """
+        normalized_company = self._normalize_application_name(company_name)
+        
+        best_match = None
+        best_score = 0
+        
+        for folder_path, folder_name, folder_company_name in created_folders:
+            # フォルダの会社名を正規化
+            normalized_folder_company = self._normalize_application_name(folder_company_name)
+            
+            # 完全一致チェック
+            if normalized_company == normalized_folder_company:
+                self._log(f"[給与支払報告書マッチング] 完全一致: '{company_name}' == '{folder_company_name}'")
+                return (folder_path, folder_name, folder_company_name)
+            
+            # 部分一致チェック（スコアリング）
+            if normalized_company in normalized_folder_company:
+                score = len(normalized_company) / len(normalized_folder_company) * 100
+                if score > best_score:
+                    best_score = score
+                    best_match = (folder_path, folder_name, folder_company_name)
+                    self._log(f"[給与支払報告書マッチング] 部分一致候補: '{company_name}' in '{folder_company_name}' (スコア: {score:.1f})")
+            elif normalized_folder_company in normalized_company:
+                score = len(normalized_folder_company) / len(normalized_company) * 100
+                if score > best_score:
+                    best_score = score
+                    best_match = (folder_path, folder_name, folder_company_name)
+                    self._log(f"[給与支払報告書マッチング] 部分一致候補: '{folder_company_name}' in '{company_name}' (スコア: {score:.1f})")
+        
+        if best_match and best_score >= 50:  # 50%以上の一致率で許容
+            self._log(f"[給与支払報告書マッチング] ベストマッチ選択 (スコア: {best_score:.1f})")
+            return best_match
+        
+        self._log(f"[給与支払報告書マッチング] マッチ失敗: '{company_name}'")
+        return None
 
     def _process_depreciable_assets(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
         """

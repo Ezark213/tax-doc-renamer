@@ -1,17 +1,44 @@
-# 🧾 税務書類リネームシステム v8.1.1
+# 🧾 税務書類リネームシステム v8.1.2
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.1.1-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.1.2-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.08-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.1.1では申請届出処理の高度なマッチング機能を完全実装しました。
+v8.1.2では給与支払報告書処理の完全実装と全角半角変換機能の統一を完了しました。
 
 ---
 
-## 🚀 **v8.1.1 - 最新版（2025年10月8日）**
+## 🚀 **v8.1.2 - 最新版（2025年10月8日）**
+
+### 🆕 **給与支払報告書処理の完全実装 + 全角半角変換統一（v8.1.2）**
+
+#### 🎯 **v8.1.2での実装内容**
+
+**1. 給与支払報告書処理の完全実装**
+- **顧問先コード自動除去**: フォルダ名・ファイル名から顧問先コード（例: 0404A0027）を自動削除
+- **受信通知ページ分割**: 01_受信通知.pdfを1ページずつ分割して処理
+- **会社名マッチング**: 分割された各ページから会社名を抽出してフォルダにマッチング
+- **自動連番対応**: 重複時に `02_受信通知.pdf`, `02_受信通知_02.pdf` と自動採番
+- **空白完全除去**: 会社名と法人種別間の空白を完全削除
+
+**2. 全角半角変換機能の統一**
+- **左側リネーム全機能対応**: 源泉税、法定調書、申請届出、給与支払報告書、償却資産申告書の全てで有効
+- **統一メソッド使用**: `_normalize_fullwidth_english()` メソッドに統一
+- **右側機能は対象外**: 既存の右側機能には影響なし
+
+#### 📝 **給与支払報告書処理フロー**
+```
+1. 本表ファイル（01_*.pdf）から顧問先コード除去 → フォルダ作成
+2. 01_受信通知.pdf → 1ページずつ分割
+3. 各ページから会社名を抽出 → マッチング → 配置
+4. 重複時は自動連番（_02, _03...）
+```
+
+---
+
 
 ### 🆕 **申請届出処理の完全実装（v8.1.1）**
 
