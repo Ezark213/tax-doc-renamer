@@ -2624,6 +2624,7 @@ Ctrl+2：ログウィンドウを開く
     def _process_main_files_without_receipt(self, folder_path, yymm, main_prefix, normalize_english=False):
         """
         本表ファイルのみ処理してフォルダ作成（受信通知処理なし）
+        申請届出用: 顧問先コードを除去
         
         Returns:
             created_folders: [(folder_path, folder_name, application_name), ...]
@@ -2631,7 +2632,7 @@ Ctrl+2：ログウィンドウを開く
         import fitz
         created_folders = []
         
-        # 本表ファイルパターン
+        # 本表ファイルパターン: 数字_届出名称_顧問先コード_会社名.pdf
         main_file_pattern = re.compile(r'^(\d{2,4})_(.+)\.pdf$')
         
         for filename in os.listdir(folder_path):
@@ -2646,13 +2647,25 @@ Ctrl+2：ログウィンドウを開く
             
             # ファイル名解析
             old_prefix = match.group(1)
-            rest_name = match.group(2)
+            rest_name = match.group(2)  # 例: "届出名称_0801A0094_会社名"
+            
+            # 🔧 修正: 顧問先コード（数字のみのパート）を除去
+            # パターン: 届出名称_顧問先コード_会社名 → 届出名称_会社名
+            parts = rest_name.split('_')
+            if len(parts) >= 3:
+                # 真ん中のパートが顧問先コード（数字+英字）かチェック
+                # 例: "0801A0094" のようなパターン
+                middle_part = parts[1]
+                if re.match(r'^\d{4}[A-Z]\d{4}$', middle_part):
+                    # 顧問先コードを除去: [届出名称, 会社名, ...] に再構成
+                    rest_name = '_'.join([parts[0]] + parts[2:])
+                    self._log(f"[申請届出] 顧問先コード除去: {middle_part}")
             
             # 英語半角変換
             if normalize_english:
                 rest_name = self._normalize_fullwidth_english(rest_name)
             
-            # フォルダ名: YYMM_新番号_帳票名
+            # フォルダ名: YYMM_新番号_届出名称_会社名
             new_folder_name = f"{yymm}_{main_prefix}_{rest_name}"
             new_folder_path = os.path.join(folder_path, new_folder_name)
             
@@ -2664,7 +2677,7 @@ Ctrl+2：ログウィンドウを開く
             dest_file = os.path.join(new_folder_path, new_main_filename)
             shutil.copy2(file_path, dest_file)
             
-            # 申請名を抽出（フォルダ名から会社名を除去した部分）
+            # 申請名を抽出（届出名称部分）
             application_name = rest_name.split('_')[0] if '_' in rest_name else rest_name
             
             created_folders.append((new_folder_path, new_folder_name, application_name))
