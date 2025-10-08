@@ -2396,18 +2396,10 @@ Ctrl+2：ログウィンドウを開く
             folder_name: フォルダ名（YYMM_帳票名_会社名）
 
         Returns:
-            最終ファイル名（例: "02_帳票名_会社名.pdf" または "9999_帳票名_会社名.pdf"）
+            最終ファイル名（例: "02_受信通知.pdf" または "9999_受信通知.pdf"）
         """
-        # folder_nameから帳票名と会社名を抽出
-        # 形式: YYMM_帳票名_会社名
-        parts = folder_name.split('_', 1)  # 最初の_で分割
-        if len(parts) >= 2:
-            name_part = parts[1]  # 帳票名_会社名
-        else:
-            name_part = folder_name
-
-        # UIで選択されたプレフィックスを常に使用
-        return f"{receipt_prefix}_{name_part}.pdf"
+        # UIで選択されたプレフィックスを使用
+        return f"{receipt_prefix}_受信通知.pdf"
 
     def _normalize_fullwidth_english(self, text):
         """全角英字を半角英字に変換"""
@@ -2487,16 +2479,19 @@ Ctrl+2：ログウィンドウを開く
                     # 英語半角変換が有効な場合は適用
                     if normalize_english:
                         company_name = self._normalize_fullwidth_english(company_name)
+                        doc_type = self._normalize_fullwidth_english(doc_type)
 
                     folder_base_name = f"{doc_type}_{company_name}"
                 else:
                     # パースできない場合はそのまま使用
                     folder_base_name = rest_name
+                    doc_type = rest_name
                     if normalize_english:
                         folder_base_name = self._normalize_fullwidth_english(folder_base_name)
+                        doc_type = self._normalize_fullwidth_english(doc_type)
 
-                # 新しいファイル名: 選択した接頭辞_帳票名_会社名.pdf（顧問先番号除去済み）
-                new_filename = f"{main_prefix}_{folder_base_name}.pdf"
+                # 新しいファイル名: 選択した接頭辞_帳票名.pdf（会社名除去）
+                new_filename = f"{main_prefix}_{doc_type}.pdf"
 
                 # フォルダ名: YYMM_帳票名_会社名
                 folder_name = f"{yymm}_{folder_base_name}"
@@ -2506,9 +2501,9 @@ Ctrl+2：ログウィンドウを開く
                     # フォルダ作成
                     os.makedirs(new_folder_path, exist_ok=True)
 
-                    # 本表ファイルをリネームしてフォルダ内に移動
+                    # 本表ファイルをコピーしてフォルダ内に配置（元ファイルは残す）
                     dest_file_path = os.path.join(new_folder_path, new_filename)
-                    shutil.move(original_file_path, dest_file_path)
+                    shutil.copy2(original_file_path, dest_file_path)
 
                     created_folders.append({
                         'folder_path': new_folder_path,
@@ -2516,7 +2511,7 @@ Ctrl+2：ログウィンドウを開く
                         'main_file': new_filename
                     })
 
-                    self._log(f"[左側] フォルダ作成+リネーム: {original_filename} → {folder_name}/{new_filename}")
+                    self._log(f"[左側] フォルダ作成+コピー: {original_filename} → {folder_name}/{new_filename} (元ファイルは保持)")
 
                     # 処理結果ウィンドウに追加
                     self._add_result_success(
@@ -2721,9 +2716,8 @@ Ctrl+2：ログウィンドウを開く
                     except Exception as e:
                         self._log(f"[左側] 警告: 一時フォルダ削除エラー: {e}")
 
-                    # 元の受信通知PDFを削除
-                    os.remove(receipt_pdf_path)
-                    self._log(f"[左側] 元の受信通知PDF削除完了")
+                    # 元の受信通知PDFは削除せずに残す
+                    self._log(f"[左側] 受信通知PDF分割完了（元ファイルは保持）")
 
                 except Exception as e:
                     import traceback
