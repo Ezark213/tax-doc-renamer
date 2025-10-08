@@ -2774,6 +2774,7 @@ Ctrl+2：ログウィンドウを開く
     def _extract_application_name_from_receipt(self, text, receipt_type):
         """
         受信通知から申請名を抽出
+        🔧 修正: 複数行にまたがる種目/手続名に対応
         
         Args:
             text: PDFページのテキスト
@@ -2783,21 +2784,30 @@ Ctrl+2：ログウィンドウを開く
             application_name: 抽出された申請名（正規化済み）
         """
         if receipt_type == "国税":
-            # 国税パターン: "種目："または "種　目："
-            match = re.search(r'種[\s　]*目[:：]\s*(.+)', text, re.MULTILINE)
+            # 国税パターン: "種目："の後ろ、次のフィールドまで
+            # メール詳細形式: "種目 定款の定め等による申告期限の\n延長の特例の申請"
+            match = re.search(r'種[\s\u3000]*目[\s\u3000]*[:：]?[\s\u3000\n]*(.*?)(?=備考|メッセージ|Page|file:|$)', text, re.DOTALL)
             if match:
                 raw_name = match.group(1).strip()
                 # 改行や余分な空白を除去
                 raw_name = re.sub(r'\s+', '', raw_name)
+                # 空の場合はNone
+                if not raw_name:
+                    return None
+                self._log(f"[国税] 抽出された種目: '{raw_name}'")
                 return self._normalize_application_name(raw_name)
         
         elif receipt_type == "地方税":
-            # 地方税パターン: "手続名："
-            match = re.search(r'手続名[:：]\s*(.+)', text, re.MULTILINE)
+            # 地方税パターン: "手続名："の後ろ、次のフィールドまで
+            # 受付状況照会結果形式: "手続名 法人設立・設置届出書" または複数行
+            match = re.search(r'手続名[\s\u3000]*[:：]?[\s\u3000\n]*(.*?)(?=提出先|受付日|Page|file:|$)', text, re.DOTALL)
             if match:
                 raw_name = match.group(1).strip()
                 # 改行や余分な空白を除去
                 raw_name = re.sub(r'\s+', '', raw_name)
+                if not raw_name:
+                    return None
+                self._log(f"[地方税] 抽出された手続名: '{raw_name}'")
                 return self._normalize_application_name(raw_name)
         
         return None
