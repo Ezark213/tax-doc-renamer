@@ -2459,11 +2459,65 @@ Ctrl+2：ログウィンドウを開く
         self._left_rename_background(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
 
     def _process_application(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
-        """申請届出処理（Phase 3-3で実装予定）"""
-        self._log("[NEW Phase 3] 申請届出処理 - 未実装")
-        messagebox.showwarning("未実装", "申請届出処理はPhase 3-3で実装予定です")
-        self.left_progress_var.set("未実装")
-        self.left_execute_btn.config(state='normal')
+        """
+        申請届出処理（NEW Phase 3-3実装）
+        
+        処理フロー:
+        1. 本表ファイルのリネーム・フォルダ作成（既存処理を再利用）
+        2. 国税受信通知.pdfと地方税受信通知.pdfを別々に処理
+        3. 各ページから申請名を抽出してマッチング
+        """
+        self._log("[NEW Phase 3-3] 申請届出処理を開始")
+        
+        try:
+            import fitz  # PyMuPDF
+            
+            # Step 1: 既存処理で本表ファイルを処理してフォルダ作成
+            self._log("[申請届出] Step 1: 本表ファイル処理開始")
+            created_folders = self._process_main_files_without_receipt(
+                folder_path, yymm_value, main_prefix, normalize_english
+            )
+            
+            if not created_folders:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "エラー", "本表ファイルが見つからないか、フォルダ作成に失敗しました"
+                ))
+                self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+                return
+            
+            self._log(f"[申請届出] 作成されたフォルダ数: {len(created_folders)}")
+            
+            # Step 2: 国税受信通知を処理
+            kokuzei_receipt = os.path.join(folder_path, "国税受信通知.pdf")
+            if os.path.exists(kokuzei_receipt):
+                self._log("[申請届出] Step 2: 国税受信通知処理開始")
+                self._process_application_receipt(
+                    kokuzei_receipt, created_folders, receipt_prefix, "国税"
+                )
+            else:
+                self._log("[申請届出] 国税受信通知.pdfが見つかりません（スキップ）")
+            
+            # Step 3: 地方税受信通知を処理
+            chihou_receipt = os.path.join(folder_path, "地方税受信通知.pdf")
+            if os.path.exists(chihou_receipt):
+                self._log("[申請届出] Step 3: 地方税受信通知処理開始")
+                self._process_application_receipt(
+                    chihou_receipt, created_folders, receipt_prefix, "地方税"
+                )
+            else:
+                self._log("[申請届出] 地方税受信通知.pdfが見つかりません（スキップ）")
+            
+            # 完了
+            self.root.after(0, lambda: self.left_progress_var.set("完了"))
+            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+            self._log("[申請届出] 処理完了")
+            
+        except Exception as e:
+            self._log(f"[申請届出] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+            self.root.after(0, lambda: messagebox.showerror("エラー", f"申請届出処理中にエラーが発生しました:\n{str(e)}"))
+            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
 
     def _process_payroll_report(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
         """給与支払報告書処理（Phase 3-4で実装予定）"""
@@ -2478,6 +2532,210 @@ Ctrl+2：ログウィンドウを開く
         messagebox.showwarning("未実装", "償却資産申告書処理はPhase 3-5で実装予定です")
         self.left_progress_var.set("未実装")
         self.left_execute_btn.config(state='normal')
+
+    # ============================================================
+    # 🆕 NEW Phase 3-3: 申請届出専用ヘルパーメソッド
+    # ============================================================
+
+    def _process_main_files_without_receipt(self, folder_path, yymm, main_prefix, normalize_english=False):
+        """
+        本表ファイルのみ処理してフォルダ作成（受信通知処理なし）
+        
+        Returns:
+            created_folders: [(folder_path, folder_name, application_name), ...]
+        """
+        import fitz
+        created_folders = []
+        
+        # 本表ファイルパターン
+        main_file_pattern = re.compile(r'^(\d{2,4})_(.+)\.pdf$')
+        
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            
+            if not os.path.isfile(file_path):
+                continue
+            
+            match = main_file_pattern.match(filename)
+            if not match:
+                continue
+            
+            # ファイル名解析
+            old_prefix = match.group(1)
+            rest_name = match.group(2)
+            
+            # 英語半角変換
+            if normalize_english:
+                rest_name = self._normalize_fullwidth_english(rest_name)
+            
+            # フォルダ名: YYMM_新番号_帳票名
+            new_folder_name = f"{yymm}_{main_prefix}_{rest_name}"
+            new_folder_path = os.path.join(folder_path, new_folder_name)
+            
+            # フォルダ作成
+            os.makedirs(new_folder_path, exist_ok=True)
+            
+            # 本表ファイルをコピー
+            new_main_filename = f"{main_prefix}_{rest_name}.pdf"
+            dest_file = os.path.join(new_folder_path, new_main_filename)
+            shutil.copy2(file_path, dest_file)
+            
+            # 申請名を抽出（フォルダ名から会社名を除去した部分）
+            application_name = rest_name.split('_')[0] if '_' in rest_name else rest_name
+            
+            created_folders.append((new_folder_path, new_folder_name, application_name))
+            self._log(f"[本表処理] フォルダ作成: {new_folder_name} (申請名: {application_name})")
+        
+        return created_folders
+
+    def _process_application_receipt(self, receipt_pdf_path, created_folders, receipt_prefix, receipt_type):
+        """
+        申請届出の受信通知PDF処理（国税または地方税）
+        
+        Args:
+            receipt_pdf_path: 受信通知PDFのパス
+            created_folders: [(folder_path, folder_name, application_name), ...]
+            receipt_prefix: 受信通知プレフィックス（"02" or "9999"）
+            receipt_type: "国税" or "地方税"
+        """
+        import fitz
+        
+        try:
+            doc = fitz.open(receipt_pdf_path)
+            self._log(f"[{receipt_type}受信通知] ページ数: {len(doc)}")
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
+                
+                # 申請名を抽出
+                application_name = self._extract_application_name_from_receipt(text, receipt_type)
+                
+                if not application_name:
+                    self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: 申請名抽出失敗")
+                    continue
+                
+                self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: 申請名='{application_name}'")
+                
+                # マッチするフォルダを検索
+                matched_folder = self._match_application_folder(application_name, created_folders)
+                
+                if matched_folder:
+                    folder_path, folder_name, _ = matched_folder
+                    # 受信通知ページを保存
+                    receipt_filename = f"{receipt_prefix}_受信通知.pdf"
+                    self._save_receipt_page_to_folder(doc, page_num, folder_path, receipt_filename)
+                    self._log(f"[{receipt_type}受信通知] マッチ成功: {folder_name}")
+                else:
+                    self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: マッチするフォルダが見つかりません")
+            
+            doc.close()
+            
+        except Exception as e:
+            self._log(f"[{receipt_type}受信通知] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+
+    def _extract_application_name_from_receipt(self, text, receipt_type):
+        """
+        受信通知から申請名を抽出
+        
+        Args:
+            text: PDFページのテキスト
+            receipt_type: "国税" or "地方税"
+        
+        Returns:
+            application_name: 抽出された申請名（正規化済み）
+        """
+        if receipt_type == "国税":
+            # 国税パターン: "種目："または "種　目："
+            match = re.search(r'種[\s　]*目[:：]\s*(.+)', text, re.MULTILINE)
+            if match:
+                raw_name = match.group(1).strip()
+                # 改行や余分な空白を除去
+                raw_name = re.sub(r'\s+', '', raw_name)
+                return self._normalize_application_name(raw_name)
+        
+        elif receipt_type == "地方税":
+            # 地方税パターン: "手続名："
+            match = re.search(r'手続名[:：]\s*(.+)', text, re.MULTILINE)
+            if match:
+                raw_name = match.group(1).strip()
+                # 改行や余分な空白を除去
+                raw_name = re.sub(r'\s+', '', raw_name)
+                return self._normalize_application_name(raw_name)
+        
+        return None
+
+    def _normalize_application_name(self, name):
+        """
+        申請名を正規化（マッチング用）
+        
+        - 全角英数字を半角に変換
+        - 括弧内の情報を除去
+        - 余分な空白を除去
+        """
+        if not name:
+            return ""
+        
+        # 全角英数字を半角に変換
+        normalized = self._normalize_fullwidth_english(name)
+        
+        # 全角数字を半角数字に変換
+        normalized = normalized.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+        
+        # 括弧内を除去: （内容）、(内容)、【内容】、[内容]
+        normalized = re.sub(r'[（\(].*?[）\)]', '', normalized)
+        normalized = re.sub(r'[【\[].*?[】\]]', '', normalized)
+        
+        # 余分な空白・記号を除去
+        normalized = re.sub(r'\s+', '', normalized)
+        
+        return normalized
+
+    def _match_application_folder(self, application_name, created_folders):
+        """
+        申請名に基づいてフォルダをマッチング
+        
+        Args:
+            application_name: 受信通知から抽出した申請名（正規化済み）
+            created_folders: [(folder_path, folder_name, folder_application_name), ...]
+        
+        Returns:
+            matched_folder: (folder_path, folder_name, application_name) or None
+        """
+        normalized_receipt_name = self._normalize_application_name(application_name)
+        
+        for folder_path, folder_name, folder_app_name in created_folders:
+            normalized_folder_name = self._normalize_application_name(folder_app_name)
+            
+            # 部分一致でマッチング
+            if normalized_receipt_name in normalized_folder_name or \
+               normalized_folder_name in normalized_receipt_name:
+                return (folder_path, folder_name, folder_app_name)
+        
+        return None
+
+    def _save_receipt_page_to_folder(self, doc, page_num, folder_path, filename):
+        """
+        受信通知PDFの特定ページをフォルダに保存
+        
+        Args:
+            doc: fitz.Document
+            page_num: ページ番号（0-indexed）
+            folder_path: 保存先フォルダパス
+            filename: 保存ファイル名
+        """
+        import fitz
+        
+        # 新しいPDFを作成して1ページだけ追加
+        new_doc = fitz.open()
+        new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+        
+        # 保存
+        output_path = os.path.join(folder_path, filename)
+        new_doc.save(output_path)
+        new_doc.close()
 
     def _get_final_receipt_name(self, receipt_prefix, folder_path, folder_name):
         """
