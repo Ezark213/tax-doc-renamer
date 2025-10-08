@@ -2520,11 +2520,53 @@ Ctrl+2：ログウィンドウを開く
             self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
 
     def _process_payroll_report(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
-        """給与支払報告書処理（Phase 3-4で実装予定）"""
-        self._log("[NEW Phase 3] 給与支払報告書処理 - 未実装")
-        messagebox.showwarning("未実装", "給与支払報告書処理はPhase 3-4で実装予定です")
-        self.left_progress_var.set("未実装")
-        self.left_execute_btn.config(state='normal')
+        """
+        給与支払報告書処理（NEW Phase 3-4実装）
+        
+        処理フロー:
+        1. 本表ファイルのリネーム・フォルダ作成
+        2. 01_受信通知.pdfの各ページから会社名と市区町村名を抽出
+        3. マッチングしてページを配置
+        """
+        self._log("[NEW Phase 3-4] 給与支払報告書処理を開始")
+        
+        try:
+            import fitz
+            
+            # Step 1: 本表ファイル処理
+            self._log("[給与支払報告書] Step 1: 本表ファイル処理開始")
+            created_folders = self._process_main_files_without_receipt(
+                folder_path, yymm_value, main_prefix, normalize_english
+            )
+            
+            if not created_folders:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "エラー", "本表ファイルが見つからないか、フォルダ作成に失敗しました"
+                ))
+                self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+                return
+            
+            self._log(f"[給与支払報告書] 作成されたフォルダ数: {len(created_folders)}")
+            
+            # Step 2: 受信通知処理
+            receipt_pdf = os.path.join(folder_path, "01_受信通知.pdf")
+            if os.path.exists(receipt_pdf):
+                self._log("[給与支払報告書] Step 2: 受信通知処理開始")
+                self._process_payroll_receipts(receipt_pdf, created_folders, receipt_prefix)
+            else:
+                self._log("[給与支払報告書] 01_受信通知.pdfが見つかりません（スキップ）")
+            
+            # 完了
+            self.root.after(0, lambda: self.left_progress_var.set("完了"))
+            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+            self._log("[給与支払報告書] 処理完了")
+            
+        except Exception as e:
+            self._log(f"[給与支払報告書] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+            self.root.after(0, lambda: messagebox.showerror("エラー", f"給与支払報告書処理中にエラーが発生しました:\n{str(e)}"))
+            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
 
     def _process_depreciable_assets(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
         """償却資産申告書処理（Phase 3-5で実装予定）"""
@@ -2736,6 +2778,141 @@ Ctrl+2：ログウィンドウを開く
         output_path = os.path.join(folder_path, filename)
         new_doc.save(output_path)
         new_doc.close()
+
+    # ============================================================
+    # 🆕 NEW Phase 3-4: 給与支払報告書専用ヘルパーメソッド
+    # ============================================================
+
+    def _process_payroll_receipts(self, receipt_pdf_path, created_folders, receipt_prefix):
+        """
+        給与支払報告書の受信通知PDF処理
+        
+        Args:
+            receipt_pdf_path: 01_受信通知.pdfのパス
+            created_folders: [(folder_path, folder_name, application_name), ...]
+            receipt_prefix: 受信通知プレフィックス（"02" or "9999"）
+        """
+        import fitz
+        
+        try:
+            doc = fitz.open(receipt_pdf_path)
+            self._log(f"[給与支払報告書受信通知] ページ数: {len(doc)}")
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
+                
+                # 会社名と市区町村名を抽出
+                company_name, municipality = self._extract_company_and_municipality_from_receipt(text)
+                
+                if not company_name or not municipality:
+                    self._log(f"[給与支払報告書受信通知] Page {page_num + 1}: 抽出失敗 (会社名={company_name}, 市区町村={municipality})")
+                    continue
+                
+                self._log(f"[給与支払報告書受信通知] Page {page_num + 1}: 会社名='{company_name}', 市区町村='{municipality}'")
+                
+                # マッチするフォルダを検索
+                matched_folder = self._match_payroll_folder(company_name, municipality, created_folders)
+                
+                if matched_folder:
+                    folder_path, folder_name, _ = matched_folder
+                    # 受信通知ページを保存
+                    receipt_filename = f"{receipt_prefix}_受信通知.pdf"
+                    self._save_receipt_page_to_folder(doc, page_num, folder_path, receipt_filename)
+                    self._log(f"[給与支払報告書受信通知] マッチ成功: {folder_name}")
+                else:
+                    self._log(f"[給与支払報告書受信通知] Page {page_num + 1}: マッチするフォルダが見つかりません")
+            
+            doc.close()
+            
+        except Exception as e:
+            self._log(f"[給与支払報告書受信通知] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+
+    def _extract_company_and_municipality_from_receipt(self, text):
+        """
+        受信通知から会社名と市区町村名を抽出
+        
+        Args:
+            text: PDFページのテキスト
+        
+        Returns:
+            (company_name, municipality): 抽出された会社名と市区町村名（正規化済み）
+        """
+        company_name = None
+        municipality = None
+        
+        # 会社名抽出: "納税者の氏名又は名称："または "納税者の\n氏名又は名称："
+        company_match = re.search(r'納税者の[\s\n]*氏名又は名称[:：]\s*(.+?)[\s\n]', text, re.MULTILINE | re.DOTALL)
+        if company_match:
+            company_name = company_match.group(1).strip()
+            # 改行や余分な空白を除去
+            company_name = re.sub(r'\s+', '', company_name)
+        
+        # 市区町村名抽出: "発行元："の後ろ
+        municipality_match = re.search(r'発行元[:：]\s*(.+?)[\s\n（\(]', text, re.MULTILINE)
+        if municipality_match:
+            municipality = municipality_match.group(1).strip()
+            # 余分な情報を除去
+            municipality = self._extract_municipality_name(municipality)
+        
+        return company_name, municipality
+
+    def _extract_municipality_name(self, raw_municipality):
+        """
+        市区町村名を抽出・正規化
+        
+        Args:
+            raw_municipality: 生の市区町村名（例: "藤沢市役所", "船橋市"）
+        
+        Returns:
+            normalized_name: 正規化された市区町村名
+        """
+        if not raw_municipality:
+            return ""
+        
+        # "〇〇市役所" → "〇〇市"
+        # "〇〇区役所" → "〇〇区"
+        # "〇〇町役場" → "〇〇町"
+        # "〇〇村役場" → "〇〇村"
+        
+        normalized = raw_municipality
+        normalized = re.sub(r'役所$', '', normalized)
+        normalized = re.sub(r'役場$', '', normalized)
+        
+        # 余分な空白を除去
+        normalized = re.sub(r'\s+', '', normalized)
+        
+        return normalized
+
+    def _match_payroll_folder(self, company_name, municipality, created_folders):
+        """
+        会社名と市区町村名に基づいてフォルダをマッチング
+        
+        Args:
+            company_name: 受信通知から抽出した会社名
+            municipality: 受信通知から抽出した市区町村名
+            created_folders: [(folder_path, folder_name, application_name), ...]
+        
+        Returns:
+            matched_folder: (folder_path, folder_name, application_name) or None
+        """
+        normalized_company = self._normalize_application_name(company_name)
+        normalized_municipality = self._normalize_application_name(municipality)
+        
+        for folder_path, folder_name, folder_app_name in created_folders:
+            # フォルダ名から会社名と市区町村名を抽出
+            # フォーマット想定: "YYMM_番号_帳票名_会社名_市区町村名" など
+            folder_parts = folder_name.split('_')
+            
+            # 会社名と市区町村名がフォルダ名に含まれているかチェック
+            folder_text = self._normalize_application_name(folder_name)
+            
+            if normalized_company in folder_text and normalized_municipality in folder_text:
+                return (folder_path, folder_name, folder_app_name)
+        
+        return None
 
     def _get_final_receipt_name(self, receipt_prefix, folder_path, folder_name):
         """
