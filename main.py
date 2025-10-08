@@ -2866,30 +2866,64 @@ Ctrl+2：ログウィンドウを開く
 
         self._log(f"[マッチング] 受信通知から抽出: '{application_name}' → 正規化後: '{normalized_receipt_name}'")
 
+        # マッチング候補をスコア付きで収集
+        candidates = []
+
         for folder_path, folder_name, folder_app_name in created_folders:
             normalized_folder_name = self._normalize_application_name(folder_app_name)
 
             self._log(f"[マッチング] フォルダ比較: '{folder_app_name}' → 正規化後: '{normalized_folder_name}'")
 
-            # 方法1: 完全一致
+            score = 0
+            match_type = None
+
+            # 方法1: 完全一致 (スコア: 100)
             if normalized_receipt_name == normalized_folder_name:
-                self._log(f"[マッチング成功] 完全一致: {folder_name}")
-                return (folder_path, folder_name, folder_app_name)
+                score = 100
+                match_type = "完全一致"
 
-            # 方法2: 部分一致（どちらか一方が含まれる）
-            if normalized_receipt_name in normalized_folder_name or \
-               normalized_folder_name in normalized_receipt_name:
-                self._log(f"[マッチング成功] 部分一致: {folder_name}")
-                return (folder_path, folder_name, folder_app_name)
+            # 方法2: 部分一致（どちらか一方が含まれる） (スコア: 80)
+            elif normalized_receipt_name in normalized_folder_name or \
+                 normalized_folder_name in normalized_receipt_name:
+                score = 80
+                match_type = "部分一致"
 
-            # 方法3: キーワード一致（長い名前の場合、先頭N文字で判定）
-            min_len = min(len(normalized_receipt_name), len(normalized_folder_name))
-            if min_len >= 4:  # 最低4文字以上
-                # 先頭から60%以上一致すれば同じと判定
-                match_len = int(min_len * 0.6)
-                if normalized_receipt_name[:match_len] == normalized_folder_name[:match_len]:
-                    self._log(f"[マッチング成功] キーワード一致: {folder_name}")
-                    return (folder_path, folder_name, folder_app_name)
+            # 方法3: キーワード一致（先頭N文字で判定） (スコア: 60)
+            else:
+                min_len = min(len(normalized_receipt_name), len(normalized_folder_name))
+                if min_len >= 4:
+                    match_len = int(min_len * 0.6)
+                    if normalized_receipt_name[:match_len] == normalized_folder_name[:match_len]:
+                        score = 60
+                        match_type = "キーワード一致"
+
+            # 方法4: 共通キーワード検索（重要なキーワードが含まれるか） (スコア: 40)
+            if score == 0:
+                # 重要キーワードリスト（3文字以上の意味のある単語）
+                important_keywords = ['申告期限', '延長', '法人設立', '給与支払', '源泉所得', '青色申告',
+                                     '納期', '特例', '承認', '開設', '届出']
+
+                receipt_keywords = [kw for kw in important_keywords if kw in normalized_receipt_name]
+                folder_keywords = [kw for kw in important_keywords if kw in normalized_folder_name]
+
+                # 共通キーワードがあればマッチ候補
+                common_keywords = set(receipt_keywords) & set(folder_keywords)
+                if common_keywords:
+                    score = 40 + len(common_keywords) * 5  # キーワード数に応じて加点
+                    match_type = f"共通キーワード一致({', '.join(common_keywords)})"
+
+            if score > 0:
+                candidates.append((score, match_type, folder_path, folder_name, folder_app_name))
+
+        # スコアが最も高い候補を選択
+        if candidates:
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            best_score, match_type, folder_path, folder_name, folder_app_name = candidates[0]
+
+            # スコア40以上（共通キーワード一致以上）なら採用
+            if best_score >= 40:
+                self._log(f"[マッチング成功] {match_type} (スコア:{best_score}): {folder_name}")
+                return (folder_path, folder_name, folder_app_name)
 
         return None
 
