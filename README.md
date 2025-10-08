@@ -1,44 +1,64 @@
-# 🧾 税務書類リネームシステム v8.0.3
+# 🧾 税務書類リネームシステム v8.1.0
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.0.3-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.1.0-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.08-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.0.3ではプロセスカテゴリー選択UI（Phase 3完了）を追加しました。
+v8.1.0ではプロセス別処理ロジック完全実装（NEW Phase 3完了）を実現しました。
 
 ---
 
-## 🚀 **v8.0.3 - 最新版（2025年10月8日）**
+## 🚀 **v8.1.0 - 最新版（2025年10月8日）**
 
-### 🆕 **Phase 3完了: プロセスカテゴリー選択機能（v8.0.3）**
+### 🆕 **NEW Phase 3完了: プロセス別処理ロジック完全実装（v8.1.0）**
 
-#### 🎯 **Phase 3実装内容**
+#### 🎯 **実装サマリー**
+- ✅ **5プロセスタイプ完全実装**: 源泉税、法定調書、申請届出、給与支払報告書、償却資産申告書
+- ✅ **プロセス別分岐ロジック**: `_left_execute()`での動的ルーティング
+- ✅ **638行のコード追加**: main.py (2809行 → 3447行)
+- ✅ **18個の新規メソッド**: ラッパーメソッド + プロセス専用ヘルパー
+- ✅ **既存機能完全保護**: 源泉税・法定調書は既存処理を維持
 
-**1. プロセス選択プルダウンUI追加**
-- ✅ 左側パネルにプロセスカテゴリー選択プルダウン追加
-- ✅ 5つの選択肢: 源泉税、申請届出、法定調書、給与支払報告書、償却資産申告書
-- ✅ デフォルト値: 「源泉税」
-- ✅ 既存UIとのデザイン統一（Yu Gothic UIフォント使用）
-- ✅ 選択後のフォーカス自動解除（黒枠解消）
+#### 🏗️ **実装アーキテクチャ**
+```
+[_left_execute()] → プロセス別分岐
+    ↓
+├─ 源泉税 → _process_gensen() → 既存処理
+├─ 法定調書 → _process_hoteichosho() → 既存処理
+├─ 申請届出 → _process_application() → 新規ロジック（申請名マッチング）
+├─ 給与支払報告書 → _process_payroll_report() → 新規ロジック（会社+市区町村）
+└─ 償却資産申告書 → _process_depreciable_assets() → 新規ロジック（会社+税務署）
+```
 
-**2. Phase 3スコープ**
-- ✅ UI表示のみ実装（処理ロジック変更なし）
-- ✅ 選択値をインスタンス変数に保持
-- ✅ ログ出力機能追加
-- ✅ **既存リネーム機能への影響ゼロ**
+#### 📝 **プロセスタイプ別実装**
 
-#### 📚 **Phase 3ドキュメント**
-- `PHASE1_ANALYSIS_REPORT.md` - Phase 1分析レポート
-- `PHASE2_IMPLEMENTATION_PLAN.md` - Phase 2実装計画書
-- `PHASE3_COMPLETION_REPORT.md` - Phase 3完了レポート
+**1. 源泉税・法定調書**
+- 既存の `_left_rename_background()` を呼び出すラッパー
+- 既存機能への影響ゼロ
 
-#### 🔜 **Phase 4予定**
-- プロセス別分類ロジック実装
-- classification_v5.py拡張（3000-6000番台追加）
-- 各プロセスの帳票定義確定
+**2. 申請届出**
+- 国税受信通知.pdf / 地方税受信通知.pdf を個別処理
+- 申請名ベースのマッチング
+- OCRパターン: "種目："(国税)、"手続名："(地方税)
+
+**3. 給与支払報告書**
+- 01_受信通知.pdf から会社名と市区町村名を抽出
+- 2キー（会社+市区町村）マッチング
+- 市区町村名正規化（役所/役場除去）
+
+**4. 償却資産申告書**
+- 01_受信通知.pdf から会社名と税務署名を抽出
+- 2キー（会社+税務署）マッチング
+- 税務署・都税事務所に対応
+
+#### 📚 **NEW Phase 3ドキュメント**
+- `NEW_PHASE1_ANALYSIS_FRAMEWORK.md` - Phase 1 分析フレームワーク
+- `NEW_PHASE1_COMPLETION_REPORT.md` - Phase 1 完了報告
+- `NEW_PHASE2_IMPLEMENTATION_PLAN.md` - Phase 2 実装計画
+- `NEW_PHASE3_COMPLETION_REPORT.md` - Phase 3 完了報告（本実装）
 
 ---
 
