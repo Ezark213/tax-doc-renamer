@@ -2752,11 +2752,22 @@ Ctrl+2：ログウィンドウを開く
                 
                 if matched_folder:
                     folder_path, folder_name, _ = matched_folder
+
                     # 受信通知を該当フォルダにコピー
-                    receipt_filename = f"{receipt_prefix}_受信通知.pdf"
+                    # 🔧 修正: 既存ファイルがある場合は連番を追加（地方税重複対応）
+                    base_filename = f"{receipt_prefix}_受信通知"
+                    receipt_filename = f"{base_filename}.pdf"
                     dest_path = os.path.join(folder_path, receipt_filename)
+
+                    # ファイルが既に存在する場合は連番を追加
+                    counter = 2
+                    while os.path.exists(dest_path):
+                        receipt_filename = f"{base_filename}_{counter:02d}.pdf"
+                        dest_path = os.path.join(folder_path, receipt_filename)
+                        counter += 1
+
                     shutil.copy2(temp_pdf, dest_path)
-                    self._log(f"[{receipt_type}受信通知] マッチ成功: {folder_name}")
+                    self._log(f"[{receipt_type}受信通知] マッチ成功: {folder_name} → {receipt_filename}")
                 else:
                     self._log(f"[{receipt_type}受信通知] Page {page_num}: マッチするフォルダが見つかりません")
                 
