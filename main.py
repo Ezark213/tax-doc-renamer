@@ -2391,9 +2391,9 @@ Ctrl+2：ログウィンドウを開く
         """左側フォルダリネーム実行（完全独立）"""
         yymm_value = self.left_yymm_var.get()
 
-        # Phase 3: プロセスタイプ取得（ログ出力のみ）
+        # 🆕 NEW Phase 3: プロセスタイプ取得と分岐
         process_type = self.process_type_var.get()
-        self._log(f"[Phase 3] 選択されたプロセス: {process_type}")
+        self._log(f"[NEW Phase 3] 選択されたプロセス: {process_type}")
 
         # 最終バリデーション
         if not re.match(r'^\d{4}$', yymm_value):
@@ -2419,13 +2419,65 @@ Ctrl+2：ログウィンドウを開く
         receipt_prefix = self.left_receipt_prefix_var.get()
         normalize_english = self.normalize_english_var.get()
 
+        # 🆕 NEW Phase 3-2: プロセス別処理分岐
+        if process_type == "源泉税":
+            target_method = self._process_gensen
+        elif process_type == "法定調書":
+            target_method = self._process_hoteichosho
+        elif process_type == "申請届出":
+            target_method = self._process_application
+        elif process_type == "給与支払報告書":
+            target_method = self._process_payroll_report
+        elif process_type == "償却資産申告書":
+            target_method = self._process_depreciable_assets
+        else:
+            # フォールバック: 既存処理
+            target_method = self._left_rename_background
+
         # バックグラウンド処理開始
         thread = threading.Thread(
-            target=self._left_rename_background,
+            target=target_method,
             args=(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english),
             daemon=True
         )
         thread.start()
+
+    # ============================================================
+    # 🆕 NEW Phase 3-2: プロセス別処理メソッド（ラッパー方式）
+    # ============================================================
+
+    def _process_gensen(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
+        """源泉税処理（既存処理を呼び出すラッパー）"""
+        self._log("[NEW Phase 3-2] 源泉税処理を開始")
+        # 既存の _left_rename_background をそのまま呼び出す
+        self._left_rename_background(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
+
+    def _process_hoteichosho(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
+        """法定調書処理（既存処理を呼び出すラッパー）"""
+        self._log("[NEW Phase 3-2] 法定調書処理を開始")
+        # 既存の _left_rename_background をそのまま呼び出す
+        self._left_rename_background(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
+
+    def _process_application(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
+        """申請届出処理（Phase 3-3で実装予定）"""
+        self._log("[NEW Phase 3] 申請届出処理 - 未実装")
+        messagebox.showwarning("未実装", "申請届出処理はPhase 3-3で実装予定です")
+        self.left_progress_var.set("未実装")
+        self.left_execute_btn.config(state='normal')
+
+    def _process_payroll_report(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
+        """給与支払報告書処理（Phase 3-4で実装予定）"""
+        self._log("[NEW Phase 3] 給与支払報告書処理 - 未実装")
+        messagebox.showwarning("未実装", "給与支払報告書処理はPhase 3-4で実装予定です")
+        self.left_progress_var.set("未実装")
+        self.left_execute_btn.config(state='normal')
+
+    def _process_depreciable_assets(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
+        """償却資産申告書処理（Phase 3-5で実装予定）"""
+        self._log("[NEW Phase 3] 償却資産申告書処理 - 未実装")
+        messagebox.showwarning("未実装", "償却資産申告書処理はPhase 3-5で実装予定です")
+        self.left_progress_var.set("未実装")
+        self.left_execute_btn.config(state='normal')
 
     def _get_final_receipt_name(self, receipt_prefix, folder_path, folder_name):
         """
