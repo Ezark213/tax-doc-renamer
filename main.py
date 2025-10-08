@@ -2688,6 +2688,7 @@ Ctrl+2：ログウィンドウを開く
     def _process_application_receipt(self, receipt_pdf_path, created_folders, receipt_prefix, receipt_type):
         """
         申請届出の受信通知PDF処理（国税または地方税）
+        🔧 修正: まず1枚ずつ分割してからマッチング
         
         Args:
             receipt_pdf_path: 受信通知PDFのパス
@@ -2696,37 +2697,74 @@ Ctrl+2：ログウィンドウを開く
             receipt_type: "国税" or "地方税"
         """
         import fitz
+        import tempfile
+        import os
         
         try:
             doc = fitz.open(receipt_pdf_path)
             self._log(f"[{receipt_type}受信通知] ページ数: {len(doc)}")
             
+            # Step 1: まず全ページを一時ファイルとして分割
+            temp_pages = []
+            temp_dir = tempfile.mkdtemp()
+            
             for page_num in range(len(doc)):
+                # 1ページずつ一時PDFを作成
+                temp_pdf_path = os.path.join(temp_dir, f"page_{page_num + 1}.pdf")
+                single_page_doc = fitz.open()
+                single_page_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                single_page_doc.save(temp_pdf_path)
+                single_page_doc.close()
+                
+                # テキスト抽出
                 page = doc[page_num]
                 text = page.get_text()
+                
+                temp_pages.append({
+                    'page_num': page_num + 1,
+                    'pdf_path': temp_pdf_path,
+                    'text': text
+                })
+                
+                self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: 分割完了")
+            
+            doc.close()
+            
+            # Step 2: 各分割ページから申請名を抽出してマッチング
+            for page_info in temp_pages:
+                page_num = page_info['page_num']
+                temp_pdf = page_info['pdf_path']
+                text = page_info['text']
                 
                 # 申請名を抽出
                 application_name = self._extract_application_name_from_receipt(text, receipt_type)
                 
                 if not application_name:
-                    self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: 申請名抽出失敗")
+                    self._log(f"[{receipt_type}受信通知] Page {page_num}: 申請名抽出失敗")
+                    # 一時ファイル削除
+                    os.remove(temp_pdf)
                     continue
                 
-                self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: 申請名='{application_name}'")
+                self._log(f"[{receipt_type}受信通知] Page {page_num}: 申請名='{application_name}'")
                 
                 # マッチするフォルダを検索
                 matched_folder = self._match_application_folder(application_name, created_folders)
                 
                 if matched_folder:
                     folder_path, folder_name, _ = matched_folder
-                    # 受信通知ページを保存
+                    # 受信通知を該当フォルダにコピー
                     receipt_filename = f"{receipt_prefix}_受信通知.pdf"
-                    self._save_receipt_page_to_folder(doc, page_num, folder_path, receipt_filename)
+                    dest_path = os.path.join(folder_path, receipt_filename)
+                    shutil.copy2(temp_pdf, dest_path)
                     self._log(f"[{receipt_type}受信通知] マッチ成功: {folder_name}")
                 else:
-                    self._log(f"[{receipt_type}受信通知] Page {page_num + 1}: マッチするフォルダが見つかりません")
+                    self._log(f"[{receipt_type}受信通知] Page {page_num}: マッチするフォルダが見つかりません")
+                
+                # 一時ファイル削除
+                os.remove(temp_pdf)
             
-            doc.close()
+            # 一時ディレクトリ削除
+            os.rmdir(temp_dir)
             
         except Exception as e:
             self._log(f"[{receipt_type}受信通知] エラー: {str(e)}")
