@@ -1,17 +1,47 @@
-# 🧾 税務書類リネームシステム v8.0.2
+# 🧾 税務書類リネームシステム v8.0.3
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.0.2-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.0.3-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.08-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.0.2では元ファイル保持機能とシンプルなファイル名形式を実現しました。
+v8.0.3ではプロセスカテゴリー選択UI（Phase 3完了）を追加しました。
 
 ---
 
-## 🚀 **v8.0.2 - 最新版（2025年10月8日）**
+## 🚀 **v8.0.3 - 最新版（2025年10月8日）**
+
+### 🆕 **Phase 3完了: プロセスカテゴリー選択機能（v8.0.3）**
+
+#### 🎯 **Phase 3実装内容**
+
+**1. プロセス選択プルダウンUI追加**
+- ✅ 左側パネルにプロセスカテゴリー選択プルダウン追加
+- ✅ 5つの選択肢: 源泉税、法定調書、給与支払報告書、償却資産申告書、決算書・仕訳データ
+- ✅ デフォルト値: 「源泉税」
+- ✅ 既存UIとのデザイン統一（Yu Gothic UIフォント使用）
+
+**2. Phase 3スコープ**
+- ✅ UI表示のみ実装（処理ロジック変更なし）
+- ✅ 選択値をインスタンス変数に保持
+- ✅ ログ出力機能追加
+- ✅ **既存リネーム機能への影響ゼロ**
+
+#### 📚 **Phase 3ドキュメント**
+- `PHASE1_ANALYSIS_REPORT.md` - Phase 1分析レポート
+- `PHASE2_IMPLEMENTATION_PLAN.md` - Phase 2実装計画書
+- `PHASE3_COMPLETION_REPORT.md` - Phase 3完了レポート
+
+#### 🔜 **Phase 4予定**
+- プロセス別分類ロジック実装
+- classification_v5.py拡張（3000-6000番台追加）
+- 各プロセスの帳票定義確定
+
+---
+
+## 🚀 **v8.0.2 - 元ファイル保持機能（2025年10月8日）**
 
 ### 🔧 **NEW: 元ファイル保持機能とファイル名形式の改善（v8.0.2）**
 

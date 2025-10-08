@@ -178,6 +178,9 @@ class TaxDocumentRenamerV5:
         # RunConfig for UI YYMM centralization
         self.run_config = None  # 一括処理時に作成
 
+        # Phase 3: プロセスカテゴリー選択
+        self.process_type_var = None  # _create_left_rename_panel()で初期化
+
         # Phase 1: モダンUIテーマ適用
         apply_modern_theme(self.root)
 
@@ -517,6 +520,40 @@ class TaxDocumentRenamerV5:
 
         # セクション区切り線
         ttk.Separator(frame, orient='horizontal').pack(fill='x', pady=15)
+
+        # Phase 3: プロセスカテゴリー選択
+        process_frame = ttk.Frame(frame)
+        process_frame.pack(fill='x', pady=(0, 10))
+
+        ttk.Label(
+            process_frame,
+            text="処理プロセス:",
+            font=('Yu Gothic UI', 9)
+        ).pack(side='left')
+
+        self.process_type_var = tk.StringVar(value="源泉税")
+        process_combo = ttk.Combobox(
+            process_frame,
+            textvariable=self.process_type_var,
+            values=[
+                "源泉税",
+                "申請届出",
+                "法定調書",
+                "給与支払報告書",
+                "償却資産申告書"
+            ],
+            state='readonly',
+            width=20,
+            font=('Yu Gothic UI', 10)
+        )
+        process_combo.pack(side='left', padx=(10, 0))
+
+        # 選択後のフォーカス解除（選択状態の黒枠を消す）
+        def on_process_select(event):
+            process_combo.selection_clear()
+            self.root.focus()
+
+        process_combo.bind('<<ComboboxSelected>>', on_process_select)
 
         # 本表接頭辞選択
         main_prefix_frame = ttk.Frame(frame)
@@ -2353,6 +2390,10 @@ Ctrl+2：ログウィンドウを開く
     def _left_execute(self):
         """左側フォルダリネーム実行（完全独立）"""
         yymm_value = self.left_yymm_var.get()
+
+        # Phase 3: プロセスタイプ取得（ログ出力のみ）
+        process_type = self.process_type_var.get()
+        self._log(f"[Phase 3] 選択されたプロセス: {process_type}")
 
         # 最終バリデーション
         if not re.match(r'^\d{4}$', yymm_value):
