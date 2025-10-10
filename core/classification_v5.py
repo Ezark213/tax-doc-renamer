@@ -64,18 +64,20 @@ class ClassificationResult:
 class DocumentClassifierV5:
     """書類分類エンジン v5.0 - AND条件対応版"""
     
-    def __init__(self, debug_mode: bool = False, log_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self, debug_mode: bool = False, log_callback: Optional[Callable[[str], None]] = None, process_mode: str = "確定申告"):
         """初期化
-        
+
         Args:
             debug_mode: デバッグモードの有効化
             log_callback: ログ出力のコールバック関数
+            process_mode: 処理モード（"確定申告" または "予定申告"）
         """
         self.debug_mode = debug_mode
         self.log_callback = log_callback
+        self.process_mode = process_mode
         self.current_filename = ""
         self.processing_log = []
-        
+
         # v5.0 新分類ルール（AND条件対応）
         self.classification_rules_v5 = self._initialize_classification_rules_v5()
         
@@ -168,8 +170,24 @@ class DocumentClassifierV5:
                 "filename_keywords": ["納税一覧", "税額一覧"]
             },
             
+            "0001_法人税等申告書_予定申告": {
+                "priority": 250,  # 確定申告より高い優先度
+                "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
+                "code_override": "0001_法人税等申告書",  # 実際に使用するコードは0001_法人税等申告書
+                "highest_priority_conditions": [
+                    # 法人税 AND 予定申告書 AND (納付すべき法人税額 OR 納付すべき地方法人税額)
+                    AndCondition(["法人税", "予定申告書", "納付すべき法人税額"], "all"),
+                    AndCondition(["法人税", "予定申告書", "納付すべき地方法人税額"], "all")
+                ],
+                "exact_keywords": [],
+                "partial_keywords": ["法人税", "予定申告書"],
+                "exclude_keywords": ["メール詳細", "受信通知", "納付区分番号通知"],
+                "filename_keywords": []
+            },
+
             "0001_法人税等申告書": {
                 "priority": 200,  # 最高優先度に変更
+                "process_mode": "確定申告",  # 確定申告モード専用
                 "highest_priority_conditions": [
                     # 修正指示書に基づく新しい最優先条件を追加
                     AndCondition(["01_内国法人", "確定申告"], "all"),  # ファイル名パターン
@@ -336,8 +354,24 @@ class DocumentClassifierV5:
             },
             
             # ===== 3000番台 - 消費税関連 =====
+            # 予定申告モード専用ルール - 最優先度250
+            "3001_消費税等申告書_予定申告": {
+                "priority": 250,  # 確定申告より高い優先度
+                "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
+                "code_override": "3001_消費税等申告書",  # 実際に使用するコードは3001_消費税等申告書
+                "highest_priority_conditions": [
+                    # 中間申告書 AND 消費税及び地方消費税
+                    AndCondition(["中間申告書", "消費税及び地方消費税"], "all")
+                ],
+                "exact_keywords": [],
+                "partial_keywords": ["中間申告書", "消費税及び地方消費税"],
+                "exclude_keywords": ["受信通知", "納付区分番号通知"],
+                "filename_keywords": []
+            },
+
             "3001_消費税等申告書": {
                 "priority": 135,
+                "process_mode": "確定申告",  # 確定申告モード専用
                 "highest_priority_conditions": [
                     AndCondition(["課税期間分の消費税及び", "基準期間の"], "all"),
                     AndCondition(["消費税及び地方消費税申告(一般・法人)", "課税標準額"], "all"),
@@ -578,16 +612,21 @@ class DocumentClassifierV5:
     def _check_highest_priority_conditions(self, text: str, filename: str) -> Optional[ClassificationResult]:
         """最優先条件（AND条件）をチェック"""
         combined_text = f"{text} {filename}"
-        
+
         self._log("最優先AND条件判定開始")
-        
+
         # 優先度順でチェック
-        sorted_rules = sorted(self.classification_rules_v5.items(), 
+        sorted_rules = sorted(self.classification_rules_v5.items(),
                             key=lambda x: x[1].get("priority", 0), reverse=True)
-        
+
         for doc_type, rules in sorted_rules:
+            # process_modeフィルタリング：ルールにprocess_modeが設定されている場合、一致する場合のみ処理
+            rule_process_mode = rules.get("process_mode", None)
+            if rule_process_mode and rule_process_mode != self.process_mode:
+                continue  # このルールは現在のprocess_modeでは適用しない
+
             highest_priority_conditions = rules.get("highest_priority_conditions", [])
-            
+
             if not highest_priority_conditions:
                 continue
             
@@ -598,12 +637,17 @@ class DocumentClassifierV5:
                     self._log(f"最優先AND条件一致: {doc_type} (条件{i+1})")
                     self._log_debug(f"マッチしたキーワード: {matched_keywords}")
                     self._log_debug(f"マッチタイプ: {condition.match_type}")
-                    
+
                     # メタデータの取得
                     meta_data = rules.get("meta", {})
-                    
+
+                    # code_overrideがある場合は、それを使用（予定申告モード専用ルール対応）
+                    final_doc_type = rules.get("code_override", doc_type)
+                    if final_doc_type != doc_type:
+                        self._log(f"コードオーバーライド: {doc_type} → {final_doc_type}")
+
                     result = ClassificationResult(
-                        document_type=doc_type,
+                        document_type=final_doc_type,
                         confidence=1.0,  # 最優先なので信頼度100%
                         matched_keywords=matched_keywords,
                         classification_method="highest_priority_and_condition",

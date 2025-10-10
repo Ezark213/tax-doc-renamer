@@ -163,7 +163,8 @@ class TaxDocumentRenamerV5:
             self.temp_snapshots_dir = None
 
         self.pre_extract_engine = create_pre_extract_engine(logger=self.logger, snapshot_dir=snapshots_dir)
-        self.rename_engine = create_rename_engine(logger=self.logger)
+        # リネームエンジンは処理時に動的に作成する（処理モードに応じて）
+        self.rename_engine = None
         
         # UI変数
         self.files_list = []
@@ -215,6 +216,24 @@ class TaxDocumentRenamerV5:
                        background=self.colors['bg_card'],
                        foreground=self.colors['text_dark'],
                        font=('Yu Gothic UI', 12, 'bold'))
+
+        # Comboboxスタイル設定
+        style.configure('TCombobox',
+                       fieldbackground='white',
+                       background='white',
+                       foreground='black',
+                       selectbackground='white',
+                       selectforeground='black')
+        style.map('TCombobox',
+                 fieldbackground=[('readonly', 'white'), ('active', 'white')],
+                 selectbackground=[('readonly', 'white')],
+                 foreground=[('readonly', 'black'), ('active', 'black')])
+
+        # Comboboxドロップダウンリストの背景色
+        self.root.option_add('*TCombobox*Listbox*Background', 'white')
+        self.root.option_add('*TCombobox*Listbox*Foreground', 'black')
+        self.root.option_add('*TCombobox*Listbox*selectBackground', '#0078D7')
+        self.root.option_add('*TCombobox*Listbox*selectForeground', 'white')
 
         # ラベルスタイル設定
         style.configure('TLabel',
@@ -441,7 +460,7 @@ class TaxDocumentRenamerV5:
         settings_frame = ttk.LabelFrame(right_frame, text="⚙️ 設定", padding=20)
         settings_frame.pack(fill='x', pady=(0, 15), padx=20)
 
-        # 年月設定
+        # 年月設定（処理プロセスの上に移動）
         year_month_frame = ttk.Frame(settings_frame)
         year_month_frame.pack(fill='x', pady=(0, 10))
         
@@ -464,6 +483,30 @@ class TaxDocumentRenamerV5:
         # YYMMバリデーション設定（リアルタイム更新）
         self.year_month_var.trace_add('write', self._validate_yymm_input)
         self._validate_yymm_input()  # 初期バリデーション
+
+        # 処理プロセス選択（YYMMの下）
+        mode_frame = ttk.Frame(settings_frame)
+        mode_frame.pack(fill='x', pady=(15, 0))
+
+        ttk.Label(mode_frame, text="処理プロセス:", font=('Yu Gothic UI', 10)).pack(side='left')
+        self.process_mode_var = tk.StringVar(value="確定申告")
+        mode_combo = ttk.Combobox(
+            mode_frame,
+            textvariable=self.process_mode_var,
+            values=["確定申告", "予定申告"],
+            state='readonly',
+            width=15,
+            font=('Yu Gothic UI', 10)
+        )
+        mode_combo.pack(side='left', padx=(10, 5))
+
+        # 選択後にフォーカスを外して背景色をリセット
+        def on_combobox_select(event):
+            event.widget.selection_clear()
+            self.root.focus()
+
+        mode_combo.bind('<<ComboboxSelected>>', on_combobox_select)
+        create_tooltip(mode_combo, "処理モードを選択\n・確定申告: 確定申告書類の処理\n・予定申告: 予定申告書類の処理")
 
         # 自治体設定
         municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定", padding=20)
@@ -1101,16 +1144,23 @@ class TaxDocumentRenamerV5:
         """UI改善版：Bundle Auto-Split常時有効の直接処理"""
         # フォルダ選択ダイアログ
         from tkinter import filedialog
-        
+
         source_folder = filedialog.askdirectory(
             title="処理対象フォルダを選択（PDF・CSVファイルが含まれるフォルダ）"
         )
         if not source_folder:
             return
-        
+
+        # 処理モードを取得してリネームエンジンと分類エンジンを作成
+        process_mode = self.process_mode_var.get()
+        self._log(f"処理モード: {process_mode}")
+        self.rename_engine = create_rename_engine(logger=self.logger, process_mode=process_mode)
+        # 分類エンジンも処理モードで再初期化
+        self.classifier_v5 = DocumentClassifierV5(debug_mode=True, process_mode=process_mode)
+
         # Bundle Auto-Split設定を常時有効として処理開始
         self._log("UI改善版：Bundle Auto-Split常時有効で処理開始")
-        
+
         # 既存の処理メソッドを呼び出し（Bundle Auto-Split常時有効）
         self._start_folder_batch_processing(source_folder)
 
@@ -1697,12 +1747,12 @@ class TaxDocumentRenamerV5:
     def _log_detailed_classification_info(self, classification_result, text: str, filename: str):
         """詳細な分類情報をログ出力"""
         if not classification_result:
-            self._log("❌ 分類に失敗しました")
+            self._log("[ERROR] 分類に失敗しました")
             return
-            
+
         self._log("=" * 60)
-        self._log("🔍 **詳細分類結果**")
-        self._log(f"📄 ファイル名: {filename}")
+        self._log("[詳細分類結果]")
+        self._log(f"[ファイル名] {filename}")
         
         # 表示は最終使用コード（ファイル名と一致）を使用
         display_document_type = classification_result.original_doc_type_code if (
@@ -1715,27 +1765,27 @@ class TaxDocumentRenamerV5:
         self._log(f"[分類] 判定方法: {classification_result.classification_method}")
         
         # 自治体変更版がある場合のみ表示
-        if (hasattr(classification_result, 'original_doc_type_code') and 
+        if (hasattr(classification_result, 'original_doc_type_code') and
             classification_result.original_doc_type_code and
             classification_result.original_doc_type_code != classification_result.document_type):
-            self._log(f"📍 自治体変更版: {classification_result.document_type}")
-        
+            self._log(f"[自治体変更版] {classification_result.document_type}")
+
         # マッチしたキーワードの詳細
         if classification_result.matched_keywords:
-            self._log(f"🔑 マッチしたキーワード: {classification_result.matched_keywords}")
-        
+            self._log(f"[キーワード] {classification_result.matched_keywords}")
+
         # デバッグステップの詳細（利用可能な場合）
         if hasattr(classification_result, 'debug_steps') and classification_result.debug_steps:
-            self._log("📊 分類ステップ詳細:")
+            self._log("[分類ステップ詳細]")
             for i, step in enumerate(classification_result.debug_steps[:3], 1):  # 上位3件のみ表示
                 self._log(f"  {i}. {step.document_type}: スコア {step.score:.1f}, キーワード {step.matched_keywords}")
                 if step.excluded:
-                    self._log(f"     ❌ 除外理由: {step.exclude_reason}")
+                    self._log(f"     [除外] 理由: {step.exclude_reason}")
         
         # テキスト内容の一部を表示（デバッグ用）
         if text:
             preview = text[:200] + "..." if len(text) > 200 else text
-            self._log(f"📝 抽出テキスト（先頭200字）: {preview}")
+            self._log(f"[抽出テキスト（先頭200字）] {preview}")
         
         # 処理ログがある場合は重要な部分のみ表示
         if hasattr(classification_result, 'processing_log') and classification_result.processing_log:
@@ -2021,9 +2071,14 @@ class TaxDocumentRenamerV5:
         """リネーム処理完了時の処理"""
         self.rename_processing = False
         self._update_button_states()
-        
+
         # 【修正】使用済みファイル名セットの管理を削除
-        
+
+        # ログに完了メッセージを表示
+        self._log("=" * 60)
+        self._log("処理が完了しました")
+        self._log("=" * 60)
+
         self.notebook.select(1)  # 結果タブに切り替え
         messagebox.showinfo("完了", "v5.4.2リネーム処理が完了しました")
 

@@ -24,10 +24,11 @@ if TYPE_CHECKING:
 
 class RenameEngine:
     """決定論的ファイル名生成エンジン"""
-    
-    def __init__(self, logger: Optional[logging.Logger] = None):
+
+    def __init__(self, logger: Optional[logging.Logger] = None, process_mode: str = "確定申告"):
         self.logger = logger or logging.getLogger(__name__)
-        
+        self.process_mode = process_mode  # "確定申告" または "予定申告"
+
         # 書類コードと名称のマッピング（既存システムから移植）
         self.code_titles = {
             # 国税系
@@ -190,6 +191,12 @@ class RenameEngine:
         if doc_item_id.page_index < len(snapshot.pages):
             fields = snapshot.pages[doc_item_id.page_index]
             self.logger.debug(f"[rename] Using snapshot data for page {doc_item_id.page_index}")
+
+            # doc_hintsがない場合、PDFテキストから抽出してdoc_hintsとして設定
+            if not fields.doc_hints and doc_item_id.fp and doc_item_id.fp.text:
+                fields.doc_hints = doc_item_id.fp.text
+                self.logger.debug(f"[rename] Set doc_hints from PDF text")
+
             return fields
         else:
             # フォールバック：再OCR
@@ -219,7 +226,7 @@ class RenameEngine:
         """書類コードから適切なタイトルを生成"""
         # 基本タイトル
         base_title = self.code_titles.get(code, "")
-        
+
         # 書類ヒントによる調整
         if fields.doc_hints and base_title in ["受信通知", "納付情報"]:
             # ヒントがある場合はより具体的に
@@ -227,7 +234,7 @@ class RenameEngine:
                 base_title = "申告受付完了通知"
             elif "納付区分番号" in fields.doc_hints:
                 base_title = "納付区分番号通知"
-        
+
         return base_title
     
     def _format_municipality(self, muni_name: Optional[str]) -> str:
@@ -816,6 +823,6 @@ def validate_output_yymm(output_filenames: List[str], expected_yymm: str, logger
     logger.info(f"[AUDIT][YYMM-CHECK] OK: All {len(output_filenames)} files use correct YYMM={expected_yymm}")
 
 
-def create_rename_engine(logger: Optional[logging.Logger] = None) -> RenameEngine:
+def create_rename_engine(logger: Optional[logging.Logger] = None, process_mode: str = "確定申告") -> RenameEngine:
     """RenameEngineのファクトリ関数"""
-    return RenameEngine(logger=logger)
+    return RenameEngine(logger=logger, process_mode=process_mode)

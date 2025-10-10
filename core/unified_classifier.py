@@ -39,18 +39,19 @@ class DocumentContext:
 class UnifiedClassifier:
     """統合分類システム v5.3.5-assets-hotfix"""
     
-    def __init__(self, debug_mode: bool = False, allow_auto_forced_codes: bool = False):
+    def __init__(self, debug_mode: bool = False, allow_auto_forced_codes: bool = False, process_mode: str = "確定申告"):
         self.debug_mode = debug_mode
         self.allow_auto_forced_codes = allow_auto_forced_codes
+        self.process_mode = process_mode
         self.logger = logging.getLogger(__name__)
-        
-        # 既存分類器（後方互換性のため）
-        self.legacy_classifier = DocumentClassifierV5(debug_mode=debug_mode)
-        
+
+        # 既存分類器（後方互換性のため）- process_modeを渡す
+        self.legacy_classifier = DocumentClassifierV5(debug_mode=debug_mode, process_mode=process_mode)
+
         if debug_mode:
             self.logger.setLevel(logging.DEBUG)
-        
-        version_msg = "UnifiedClassifier v5.3.5-assets-hotfix initialized"
+
+        version_msg = f"UnifiedClassifier v5.3.5-assets-hotfix initialized (process_mode={process_mode})"
         if allow_auto_forced_codes:
             version_msg += " (auto_forced_codes=ENABLED)"
         self.logger.info(version_msg)
