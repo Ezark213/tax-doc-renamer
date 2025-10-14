@@ -145,9 +145,11 @@ class DocumentClassifierV5:
         return {
             # ===== 0000番台 - 国税申告書類 =====
             "0000_納付税額一覧表": {
-                "priority": 150,  # 適度な優先度
+                "priority": 150,  # 優先度維持（Phase 3-2: 条件厳格化で対応）
                 "highest_priority_conditions": [
-                    # ファイル名による確実な判定のみ（過度な条件を削除）
+                    # Phase 3-2 修正: 複数キーワードのAND条件を追加（条件厳格化）
+                    AndCondition(["納付税額一覧表", "年間税額"], "all"),
+                    # ファイル名による判定は維持
                     AndCondition(["納税一覧"], "any"),
                     AndCondition(["税額一覧表"], "any")
                 ],
@@ -158,13 +160,19 @@ class DocumentClassifierV5:
                     "税額一覧"
                 ],
                 "exclude_keywords": [
-                    # 他の書類を明確に除外（過度な適用を防止）
+                    # Phase 3-2 修正: 地方税申告書を明確に除外
+                    "市町村民税の申告書",
+                    "市町村申告書",
+                    "都道府県申告書",
+                    "法人税割額",
+                    "均等割額",
+                    # 既存の除外キーワード
                     "申告書", "確定申告", "青色申告", "内国法人の確定申告",
                     "決算書", "貸借対照表", "損益計算書",
                     "仕訳帳", "総勘定元帳", "補助元帳", "残高試算表",
                     "受信通知", "納付情報発行結果", "納付区分番号通知", "メール詳細",
                     "県税事務所", "都税事務所", "市役所",
-                    "法人都道府県民税", "市町村申告書", "消費税申告書",
+                    "法人都道府県民税", "消費税申告書",
                     "一括償却", "少額減価償却", "固定資産台帳", "勘定科目別"
                 ],
                 "filename_keywords": ["納税一覧", "税額一覧"]
@@ -307,17 +315,23 @@ class DocumentClassifierV5:
             
             # ===== 2000番台 - 市町村税関連 =====
             "2001_市町村_市町村申告書": {
-                "priority": 180,  # バグ修正依頼書: C-2 優先度を高く設定
+                "priority": 180,  # 優先度維持（Phase 3-2: 条件強化で対応）
                 "highest_priority_conditions": [
-                    # 指定された2つのAND条件のみ（最優先）
+                    # Phase 3-2 修正: タイトルキーワードを必須に
+                    AndCondition(["市町村民税の", "申告書"], "all"),
+                    AndCondition(["市町村申告書", "法人税割額"], "all"),
+                    # 既存条件も維持
                     AndCondition(["当該市町村内に所在"], "any"),
                     AndCondition(["市町村民税の特定寄附金"], "any")
                 ],
                 "exact_keywords": ["市町村申告書申告書", "市民税申告書"],
                 "partial_keywords": ["市町村申告書", "市町村民税", "市役所", "町役場", "村役場"],
                 "exclude_keywords": [
+                    # Phase 3-2 修正: 納付税額一覧表を明確に除外
+                    "納付税額一覧表",
+                    "納税一覧",
+                    # 既存の除外キーワード
                     "都道府県", "事業税", "県税事務所", "都税事務所", "受信通知", "納付情報",
-                    # バグ修正依頼書: C-1 除外条件の追加
                     "内国法人", "確定申告(青色)", "事業年度分", "税額控除"
                 ],
                 "filename_keywords": ["市役所", "市民税"]
@@ -514,16 +528,30 @@ class DocumentClassifierV5:
             },
             
             "6002_一括償却資産明細表": {
-                "priority": 100,  # 最高優先度（100に変更）
+                "priority": 100,  # 最高優先度
                 "highest_priority_conditions": [
+                    # タイトル完全一致（最優先）
                     AndCondition(["一括償却資産明細表"], "any"),
-                    AndCondition(["一括償却"], "any"),
-                    AndCondition(["償却資産明細"], "any")
+                    # Phase 3-3 修正: 単一キーワード条件を削除
+                    # AndCondition(["一括償却"], "any"),  # ← 削除（勘定科目名との誤判定を防止）
+                    # Phase 3-3 修正: 表構造の列名を必須化
+                    AndCondition(["一括償却資産明細表", "取得年月日"], "all"),
+                    AndCondition(["一括償却資産", "取得価額", "事業年度"], "all"),
+                    AndCondition(["償却資産明細", "供用年月日"], "all")
                 ],
                 "exact_keywords": ["一括償却資産明細表"],
                 "partial_keywords": ["一括償却", "償却資産明細", "一括償却資産", "償却明細"],
-                "exclude_keywords": ["少額"],
-                "filename_keywords": ["一括償却資産明細表", "一括償却", "償却資産明細"],
+                "exclude_keywords": [
+                    # Phase 3-3 修正: 勘定科目別集計表を明確に除外
+                    "勘定科目別税区分集計表",
+                    "勘定科目別",
+                    "税区分集計",
+                    "課税売上",
+                    "課税仕入",
+                    # 既存の除外キーワード
+                    "少額"
+                ],
+                "filename_keywords": ["一括償却資産明細表"],
                 "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
             
@@ -1895,46 +1923,70 @@ class DocumentClassifierV5:
     
     def _is_payment_info(self, text_content: str, filename: str) -> bool:
         """
-        修正指示書: 修正3 - 納付情報の判定強化
-        納付情報として必ず分類すべきキーワードをチェック
+        Phase 3 修正: 正規表現による高精度な納付情報判定
+        文脈を考慮し、PDFテキスト抽出の不確実性（スペース・改行挿入）に対応
         """
-        payment_indicators = [
-            '納付区分番号通知',
-            '納付内容を確認し',
-            '以下のボタンより納付',
-            'メール詳細（納付区分番号通知）'
-        ]
-        
-        # これらのキーワードが含まれる場合は必ず納付情報として分類
-        for indicator in payment_indicators:
-            if indicator in text_content:
-                self._log_debug(f"納付情報強制判定: {indicator}")
-                return True
-        
+        # パターン1: タイトル完全一致（最優先）
+        if 'メール詳細（納付区分番号通知）' in text_content:
+            self._log_debug("納付情報判定: タイトル完全一致（メール詳細（納付区分番号通知））")
+            return True
+
+        # パターン2: 受信通知パターンを除外（柔軟な正規表現）
+        # スペース・改行挿入に対応するため、.{0,20}で最大20文字の任意の文字を許容
+        receipt_pattern = r'送信された.{0,20}(データを|を).{0,10}受け?付けました'
+        if re.search(receipt_pattern, text_content, re.DOTALL):
+            self._log_debug("納付情報判定: 受信通知パターン検出により除外")
+            return False
+
+        # パターン3: 備考欄での言及は除外
+        # 備考欄の後100文字以内に「納付区分番号通知」が出現する場合は除外
+        remark_pattern = r'備考.{0,100}納付区分番号通知'
+        if re.search(remark_pattern, text_content):
+            self._log_debug("納付情報判定: 備考欄での言及により除外")
+            return False
+
+        # パターン4: 納付情報の複合パターン
+        # 「納付区分番号通知」の後50文字以内に特徴的なフレーズがある場合
+        payment_pattern = r'納付区分番号通知.{0,50}(納付内容を確認|以下のボタンより納付)'
+        if re.search(payment_pattern, text_content):
+            self._log_debug("納付情報判定: 複合パターンマッチ")
+            return True
+
+        # パターン5: 単独の納付キーワード（最後のフォールバック）
+        if '納付区分番号通知' in text_content:
+            self._log_debug("納付情報判定: 単独キーワードマッチ")
+            return True
+
         return False
     
     def _is_receipt_notification(self, text_content: str, filename: str) -> bool:
         """
-        修正指示書: 修正3 - 受信通知の判定強化
-        納付関連キーワードがない場合のみ受信通知とする
+        Phase 3 修正: 正規表現による高精度な受信通知判定
+        納付情報を先に除外し、受信通知の特徴的パターンで判定
         """
-        receipt_indicators = [
-            '送信されたデータを受け付けました',
-            '申告データを受付けました',
-            'メール詳細'  # 単独の場合
+        # 1. 納付情報を先に除外
+        if self._is_payment_info(text_content, filename):
+            self._log_debug("受信通知判定: 納付情報により除外")
+            return False
+
+        # 2. 受信通知の特徴的パターン（正規表現で柔軟にマッチング）
+        receipt_patterns = [
+            # パターン1: 「送信された」+「データを」+「受け付けました」（スペース・改行対応）
+            r'送信された.{0,20}データを.{0,10}受け?付けました',
+            # パターン2: 「申告データを」+「受付けました」
+            r'申告データを.{0,10}受付けました',
+            # パターン3: 「メール詳細」+「受付番号」または「受付日時」
+            r'メール詳細.{0,100}(受付番号|受付日時)',
+            # パターン4: 「受付番号」+「税目」+「法人税」
+            r'受付番号.{0,50}税目.{0,50}法人税',
         ]
-        
-        # 納付関連キーワードがある場合は受信通知から除外
-        exclusion_keywords = ['納付区分番号通知', '納付内容を確認し', 'メール詳細（納付区分番号通知）']
-        
-        has_receipt = any(indicator in text_content for indicator in receipt_indicators)
-        has_payment = any(keyword in text_content for keyword in exclusion_keywords)
-        
-        result = has_receipt and not has_payment
-        if result:
-            self._log_debug(f"受信通知強制判定: 受信={has_receipt}, 納付除外={has_payment}")
-        
-        return result
+
+        for pattern in receipt_patterns:
+            if re.search(pattern, text_content, re.DOTALL):
+                self._log_debug(f"受信通知判定: パターンマッチ ({pattern[:50]}...)")
+                return True
+
+        return False
     
     def _classify_local_tax_receipt(self, text: str, filename: str, prefecture_code: Optional[int], municipality_code: Optional[int]) -> Optional[ClassificationResult]:
         """
