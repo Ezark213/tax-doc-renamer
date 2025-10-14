@@ -374,10 +374,18 @@ class TaxDocumentRenamerV5:
                         "prefecture": prefecture_var.get(),
                         "city": city_var.get()
                     })
-            
+
             self.user_settings.save_municipalities(municipalities)
         except Exception as save_error:
             self.logger.warning(f"市町村設定保存エラー: {save_error}")
+
+    def _save_process_mode(self, *args):
+        """プロセスモード設定の変更を自動保存"""
+        try:
+            process_mode = self.process_mode_var.get()
+            self.user_settings.save_setting("process_mode", process_mode)
+        except Exception as save_error:
+            self.logger.warning(f"プロセスモード保存エラー: {save_error}")
 
     def _cleanup_temp_snapshots(self):
         """一時snapshotsディレクトリのクリーンアップ"""
@@ -489,11 +497,13 @@ class TaxDocumentRenamerV5:
         mode_frame.pack(fill='x', pady=(15, 0))
 
         ttk.Label(mode_frame, text="処理プロセス:", font=('Yu Gothic UI', 10)).pack(side='left')
-        self.process_mode_var = tk.StringVar(value="確定申告")
+        # 保存されたプロセスモードを読み込み
+        saved_process_mode = self.user_settings.get_setting("process_mode", "確定申告")
+        self.process_mode_var = tk.StringVar(value=saved_process_mode)
         mode_combo = ttk.Combobox(
             mode_frame,
             textvariable=self.process_mode_var,
-            values=["確定申告", "予定申告"],
+            values=["確定申告", "中間申告"],
             state='readonly',
             width=15,
             font=('Yu Gothic UI', 10)
@@ -506,7 +516,10 @@ class TaxDocumentRenamerV5:
             self.root.focus()
 
         mode_combo.bind('<<ComboboxSelected>>', on_combobox_select)
-        create_tooltip(mode_combo, "処理モードを選択\n・確定申告: 確定申告書類の処理\n・予定申告: 予定申告書類の処理")
+        create_tooltip(mode_combo, "処理モードを選択\n・確定申告: 確定申告書類の処理\n・中間申告: 中間申告書類の処理")
+
+        # プロセスモード変更時に自動保存
+        self.process_mode_var.trace_add('write', self._save_process_mode)
 
         # 自治体設定
         municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定", padding=20)
@@ -852,9 +865,9 @@ class TaxDocumentRenamerV5:
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
 
-            # セット1のみ「（東京都優先）」の注釈を右側に表示
+            # セット1のみ「（東京都特別区優先）」の注釈を右側に表示
             if i == 1:
-                ttk.Label(set_frame, text="（東京都優先）", foreground='gray').pack(side='left', padx=(5, 0))
+                ttk.Label(set_frame, text="（東京都特別区優先）", foreground='gray').pack(side='left', padx=(5, 0))
 
             # セット1のみ動的制御：東京都の場合は無効化
             if i == 1:
@@ -1091,17 +1104,20 @@ class TaxDocumentRenamerV5:
         self.municipality_sets = self._get_municipality_sets()
         
         # YYMMフォルダを作成（重複時は_2, _3と連番で作成）
+        # プロセスモードを取得して、フォルダ名に含める
         yymm = self.year_month_var.get()
-        base_output_folder = os.path.join(source_folder, yymm)
-        
+        process_mode = self.process_mode_var.get()
+        folder_name = f"{yymm}_{process_mode}"
+        base_output_folder = os.path.join(source_folder, folder_name)
+
         # 既存フォルダがある場合は連番を追加
         counter = 1
         output_folder = base_output_folder
-        
+
         while os.path.exists(output_folder):
             counter += 1
             output_folder = f"{base_output_folder}_{counter}"
-        
+
         try:
             os.makedirs(output_folder, exist_ok=True)
             if counter > 1:
@@ -2348,7 +2364,7 @@ class TaxDocumentRenamerV5:
 　→ 4桁の数字で入力（例：2025年1月 → 2501）
 
 ステップ2: 市区町村を設定（該当する場合のみ）
-　→ セット1: 東京都優先（あれば）
+　→ セット1: 東京都特別区優先（あれば）
 　→ セット2～5: その他の市区町村
 
 ステップ3: 実行ボタンをクリック
@@ -4456,8 +4472,8 @@ Ctrl+2：ログウィンドウを開く
     def _is_receipt_pdf(self, file_path):
         """
         PDFファイルが受信通知かどうかをテキスト抽出で判定
-        
-        判定条件: 「申告受付完了通知」かつ「送信された申告データを受付けました」の両方が含まれる
+
+        判定条件: 受信通知関連の複数キーワードパターンで判定（いずれか1つでも該当すればOK）
         """
         import fitz
         try:
@@ -4466,9 +4482,23 @@ Ctrl+2：ログウィンドウを開く
                 first_page_text = doc[0].get_text()
                 doc.close()
 
-                # 両方のキーワードが含まれる場合のみ受信通知と判定
-                if "申告受付完了通知" in first_page_text and "送信された申告データを受付けました" in first_page_text:
-                    return True
+                # 受信通知のキーワードパターン（いずれか1つ該当すれば受信通知と判定）
+                receipt_keywords = [
+                    "申告受付完了通知",
+                    "受付結果",
+                    "送信結果",
+                    "受信通知",
+                    "受付通知",
+                    "e-Tax",
+                    "eLTAX",
+                    "受付番号",
+                    "受理番号",
+                    "送信された申告データ"
+                ]
+
+                for keyword in receipt_keywords:
+                    if keyword in first_page_text:
+                        return True
             else:
                 doc.close()
             return False

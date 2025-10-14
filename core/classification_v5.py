@@ -374,11 +374,11 @@ class DocumentClassifierV5:
                 "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
                 "code_override": "3001_消費税等申告書",  # 実際に使用するコードは3001_消費税等申告書
                 "highest_priority_conditions": [
-                    # 中間申告書 AND 消費税及び地方消費税
-                    AndCondition(["中間申告書", "消費税及び地方消費税"], "all")
+                    # 予定申告書 AND 消費税及び地方消費税
+                    AndCondition(["予定申告書", "消費税及び地方消費税"], "all")
                 ],
                 "exact_keywords": [],
-                "partial_keywords": ["中間申告書", "消費税及び地方消費税"],
+                "partial_keywords": ["予定申告書", "消費税及び地方消費税"],
                 "exclude_keywords": ["受信通知", "納付区分番号通知"],
                 "filename_keywords": []
             },
