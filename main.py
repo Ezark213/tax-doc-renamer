@@ -1492,13 +1492,13 @@ class TaxDocumentRenamerV5:
         """v5.2 通常PDFの処理 (高精度分類エンジン)"""
         filename = os.path.basename(file_path)
         
-        # OCR・テキスト抽出
+        # OCR・テキスト抽出（1ページ目のみ）
         try:
             import fitz
             doc = fitz.open(file_path)
             text = ""
-            for page in doc:
-                text += page.get_text()
+            if len(doc) > 0:
+                text = doc[0].get_text()  # 1ページ目のみ
             doc.close()
         except Exception as e:
             self._log(f"PDF読み取りエラー: {e}")
@@ -1589,13 +1589,13 @@ class TaxDocumentRenamerV5:
             if job_context:
                 print(f"[DEBUG_TEST] job_context.current_municipality_sets: {getattr(job_context, 'current_municipality_sets', None)}")
         
-        # 分類実行（従来通り）
+        # 分類実行（1ページ目のみ）
         try:
             import fitz
             doc = fitz.open(file_path)
             text = ""
-            for page in doc:
-                text += page.get_text()
+            if len(doc) > 0:
+                text = doc[0].get_text()  # 1ページ目のみ
             doc.close()
         except Exception as e:
             self._log(f"PDF読み取りエラー: {e}")
@@ -1984,12 +1984,12 @@ class TaxDocumentRenamerV5:
             if not file_path.lower().endswith('.pdf'):
                 return False
             
-            # ファイルのテキストを抽出
+            # ファイルのテキストを抽出（1ページ目のみ）
             import fitz
             doc = fitz.open(file_path)
             text = ""
-            for page in doc:
-                text += page.get_text()
+            if len(doc) > 0:
+                text = doc[0].get_text()  # 1ページ目のみ
             doc.close()
             
             # 分割対象キーワードの定義
