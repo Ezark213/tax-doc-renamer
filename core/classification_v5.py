@@ -235,7 +235,7 @@ class DocumentClassifierV5:
                 ],
                 "partial_keywords": ["添付資料", "法人税 資料", "イメージ添付", "添付書類"],
                 "exclude_keywords": ["消費税申告", "法人消費税", "消費税", "受信通知", "納付区分番号通知"],
-                "filename_keywords": ["法人税申告", "法人税", "内国法人"]
+                "filename_keywords": []  # ファイル名での判定を無効化
             },
             
             "0003_受信通知": {
