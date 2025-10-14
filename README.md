@@ -1,17 +1,63 @@
-# 🧾 税務書類リネームシステム v8.4.0
+# 🧾 税務書類リネームシステム v8.5.0
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.4.0-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.0-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.14-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.4.0ではUI改善とPhase 3の分類精度向上を実装しました。
+v8.5.0ではPDF処理のパフォーマンス最適化と分類精度の改善を実装しました。
 
 ---
 
-## 🚀 **v8.4.0 - 最新版（2025年10月14日）**
+## 🚀 **v8.5.0 - 最新版（2025年10月14日）**
+
+### 🆕 **パフォーマンス最適化と分類精度改善（v8.5.0）**
+
+#### 🎯 **実装内容**
+
+**1. PDFテキスト抽出の最適化**
+- ✅ **1ページ目のみ処理**: 全ページスキャンから1ページ目のみに変更
+- ✅ **処理速度向上**: 大幅なパフォーマンス改善
+- ✅ **3箇所最適化**:
+  - `_process_regular_pdf_v5()` - 通常PDFの処理
+  - `_process_pdf_file_v5_with_snapshot()` - スナップショット処理
+  - `_should_split_file()` - 分割判定処理
+- ✅ **分類精度維持**: 1ページ目に必要な分類情報が含まれている
+
+**2. 分類ロジックの改善**
+- ✅ **0002ファイル名判定削除**: ファイル名に"法人税"がある場合の誤判定を解消
+- ✅ **コンテンツベース分類**: ファイル名ではなくPDF内容で判定
+
+#### 📊 **最適化詳細**
+
+**変更前（v8.4.0）:**
+```python
+# 全ページを処理（遅い）
+for page in doc:
+    text += page.get_text()
+```
+
+**変更後（v8.5.0）:**
+```python
+# 1ページ目のみ処理（高速）
+if len(doc) > 0:
+    text = doc[0].get_text()  # 1ページ目のみ
+```
+
+#### 📈 **改善結果**
+
+| 項目 | v8.4.0 | v8.5.0 | 改善点 |
+|------|--------|--------|--------|
+| **処理速度** | 全ページスキャン | 1ページ目のみ | 大幅に高速化 |
+| **分類精度** | 高精度 | 高精度維持 | 1ページ目で十分 |
+| **0002分類** | ファイル名でも判定 | コンテンツのみ判定 | 誤判定削減 |
+| **大容量PDF** | 遅い | 高速 | ページ数の影響なし |
+
+---
+
+## 🚀 **v8.4.0 - UI改善とPhase 3分類精度向上（2025年10月14日）**
 
 ### 🆕 **UI改善とPhase 3分類精度向上（v8.4.0）**
 
@@ -403,6 +449,18 @@ tax-doc-renamer/
 
 ## 📝 変更履歴
 
+### v8.5.0 (2025-10-14)
+- ✅ **OPTIMIZE**: PDFテキスト抽出を1ページ目のみに最適化
+  - 全ページスキャンから1ページ目のみに変更（大幅な速度向上）
+  - `_process_regular_pdf_v5()` - 通常PDFの処理を最適化
+  - `_process_pdf_file_v5_with_snapshot()` - スナップショット処理を最適化
+  - `_should_split_file()` - 分割判定処理を最適化
+- ✅ **FIX**: 0002分類ロジックの改善
+  - ファイル名"法人税"での誤判定を削除
+  - コンテンツベースの分類に統一（`filename_keywords: []`）
+- ✅ **IMPROVE**: 大容量PDFファイルの処理速度が大幅に向上
+- ✅ **MAINTAIN**: 分類精度を維持（1ページ目に必要な情報が含まれている）
+
 ### v8.4.0 (2025-10-14)
 - ✅ **NEW**: Phase 3分類精度向上（3つの問題を解決）
   - 納付情報と受信通知の誤判定を解消（正規表現による高精度判定）
@@ -477,13 +535,13 @@ tax-doc-renamer/
 
 ---
 
-**🎯 税務書類リネームシステム v8.4.0**
-**Phase 3分類精度向上・UI改善・プロセスモード永続化**
+**🎯 税務書類リネームシステム v8.5.0**
+**パフォーマンス最適化・分類精度改善**
 
-🚀 **Latest Version!** Phase 3分類精度向上とUI改善の実装
+🚀 **Latest Version!** PDF処理の大幅な高速化と分類精度の改善
 
 **📅 最終更新: 2025年10月14日**
-**🚀 v8.4.0: Phase 3分類精度向上+UI改善+プロセスモード永続化**
+**🚀 v8.5.0: PDFテキスト抽出最適化+0002分類改善**
 
 ---
 
