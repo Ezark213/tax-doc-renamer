@@ -602,20 +602,15 @@ class DocumentClassifierV5:
             },
             
             "6003_少額減価償却資産明細表": {
-                "priority": 140,  # 最高優先度
+                "priority": 300,  # 最高優先度に引き上げ
                 "highest_priority_conditions": [
                     AndCondition(["少額減価償却資産明細表"], "any"),
-                    # 【修正】広すぎるルールを削除 - 帳票類への誤マッチを防止
-                    # AndCondition(["少額減価"], "any"),  # ← 削除
-                    # AndCondition(["少額"], "any")  # ← 削除
+                    # 空白がある場合にも対応（AND条件で柔軟にマッチング）
+                    AndCondition(["少額", "減価償却資産", "明細表"], "all"),
                 ],
                 "exact_keywords": ["少額減価償却資産明細表"],
-                "partial_keywords": [
-                    "少額減価償却", "少額償却", "少額減価償却資産", "少額資産",
-                    "取得価額", "損金算入", "30万円未満", "減価償却資産", "明細表",
-                    "少額固定資産", "償却資産明細", "一時損金算入"
-                ],
-                "exclude_keywords": ["一括", "補助元帳", "仕訳帳", "総勘定元帳", "勘定科目別", "税区分集計"],  # 【追加】帳票類を除外
+                "partial_keywords": [],  # 部分一致キーワードを全て削除
+                "exclude_keywords": ["一括", "補助元帳", "仕訳帳", "総勘定元帳", "勘定科目別", "税区分集計"],
                 "filename_keywords": [],  # ファイル名判定を削除してOCR内容ベースに統一
                 "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
