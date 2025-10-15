@@ -13,6 +13,62 @@ v8.5.0+では左側UI自動接頭辞判定機能とPDF処理のパフォーマ�
 
 ## 🚀 **v8.5.0+ - 最新版（2025年10月15日）**
 
+### 🆕 **Tesseract/OCR依存削除とアーキテクチャ改善（v8.5.0+）**
+
+#### 🎯 **実装内容**
+
+**1. Tesseract/OCR依存の完全削除**
+- ✅ **不要な依存削除**: Tesseract OCRエンジンを完全削除（未使用のため）
+- ✅ **CompanyNameMatcher分離**: `helpers/company_matcher.py` に独立モジュール化
+- ✅ **PyMuPDFのみ使用**: OCRを使わずPyMuPDFの `get_text()` のみで処理
+- ✅ **アプリサイズ削減**: 不要なバイナリ・ライブラリ依存を削除
+- ✅ **メンテナンス性向上**: シンプルなアーキテクチャで保守が容易に
+
+**2. 少額減価償却資産明細表の判定精度向上**
+- ✅ **優先度最高化**: 優先度140 → 300に引き上げ
+- ✅ **空白対応**: AND条件 `["少額", "減価償却資産", "明細表"]` でスペース・改行に対応
+- ✅ **部分一致削除**: 12個の partial_keywords を削除し厳格化
+- ✅ **誤判定排除**: 正確なキーワードマッチングのみで判定
+
+#### 📊 **削除内容詳細**
+
+**削除されたコンポーネント:**
+```python
+# REMOVED:
+import pytesseract
+from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet
+from core.runtime_paths import get_tesseract_executable_path, ...
+self._init_tesseract()  # ~60行の初期化コード
+self.ocr_engine = OCREngine()
+
+# FILES REMOVED:
+core/ocr_engine.py  # OCREngine, MunicipalityMatcher, MunicipalitySet
+```
+
+**新規モジュール:**
+```python
+# NEW:
+helpers/company_matcher.py  # CompanyNameMatcherのみを含む独立モジュール
+from helpers.company_matcher import CompanyNameMatcher
+
+# PyMuPDFのみを使用（OCR不要）
+text = page.get_text()  # Direct text extraction
+```
+
+#### 📈 **改善結果**
+
+| 項目 | v8.5.0 | v8.5.0+ | 改善点 |
+|------|--------|---------|--------|
+| **Tesseract依存** | あり | なし | 不要な依存削除 |
+| **OCREngine** | 未使用で残存 | 完全削除 | コード整理 |
+| **CompanyNameMatcher** | core/に混在 | helpers/に分離 | モジュール化 |
+| **テキスト抽出** | PyMuPDF | PyMuPDFのみ | シンプル化 |
+| **初期化コード** | 60+行 | 削除 | コード削減 |
+| **少額減価償却資産** | 優先度140 | 優先度300 | 判定精度向上 |
+| **空白対応** | なし | AND条件対応 | 柔軟性向上 |
+
+---
+
 ### 🆕 **左側UI自動接頭辞判定機能の実装（v8.5.0+）**
 
 #### 🎯 **実装内容**
@@ -475,13 +531,19 @@ python main.py
 
 ```
 tax-doc-renamer/
-├── 🎯 main.py                    # メインアプリケーション（v8.2.0完全版）
+├── 🎯 main.py                    # メインアプリケーション（v8.5.0+完全版）
 ├── 🏗️ core/                     # コアモジュール
-│   ├── classification_v5.py      # AI分類エンジン
+│   ├── classification_v5.py      # AI分類エンジン（v5.1バグ修正版）
 │   ├── rename_engine.py          # リネーム処理
-│   └── ocr_engine.py             # OCR処理エンジン
+│   ├── app_orchestrator.py       # アプリケーションオーケストレーター
+│   └── thread_manager.py         # スレッド管理
 ├── 🛠️ helpers/                   # ヘルパーモジュール
-│   └── user_settings.py          # 設定永続化システム
+│   ├── user_settings.py          # 設定永続化システム
+│   └── company_matcher.py        # 会社名マッチング（PyMuPDFのみ使用）
+├── 🔄 processors/                # 処理モジュール
+│   ├── receipt_detector.py       # 受信通知検出器
+│   ├── left_processor.py         # 左側処理ロジック
+│   └── right_processor.py        # 右側処理ロジック
 ├── ⚙️ config/                    # 設定ファイル
 │   ├── ui_config.yaml            # UI設定
 │   └── user_settings.json        # ユーザー設定（自動生成）
@@ -517,6 +579,20 @@ tax-doc-renamer/
 ## 📝 変更履歴
 
 ### v8.5.0+ (2025-10-15)
+- ✅ **REMOVE**: Tesseract/OCR依存の完全削除
+  - pytesseract import削除（未使用のため）
+  - core/ocr_engine.py ファイル削除（OCREngine, MunicipalityMatcher, MunicipalitySet）
+  - _init_tesseract() 関数削除（~60行の初期化コード）
+  - runtime_paths import削除（Tesseract関連）
+  - アプリケーションサイズ削減、依存関係シンプル化
+- ✅ **NEW**: CompanyNameMatcher モジュール化
+  - helpers/company_matcher.py に独立モジュールとして分離
+  - PyMuPDFの get_text() のみ使用（OCR不要）
+  - シンプルで保守しやすいアーキテクチャに改善
+- ✅ **ENHANCE**: 少額減価償却資産明細表の判定精度向上
+  - 優先度: 140 → 300（最高優先度）
+  - AND条件追加: ["少額", "減価償却資産", "明細表"] でスペース・改行に対応
+  - partial_keywords 12項目を完全削除（厳格化）
 - ✅ **NEW**: 左側UI自動接頭辞判定機能の実装
   - ラジオボタン完全削除（01/02、0001/9001 選択）
   - 処理プロセスに応じて接頭辞を自動設定
@@ -532,6 +608,7 @@ tax-doc-renamer/
 - ✅ **IMPROVE**: モジュール構成の改善
   - processors/ ディレクトリ追加（receipt_detector, left_processor, right_processor）
   - core/ ディレクトリ拡張（app_orchestrator, thread_manager）
+  - helpers/ ディレクトリ拡張（company_matcher）
 - ✅ **IMPROVE**: ユーザビリティ向上
   - 接頭辞選択の自動化により操作が簡単に
   - 選択ミスが発生しない確実な処理
