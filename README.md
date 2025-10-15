@@ -1,17 +1,75 @@
-# 🧾 税務書類リネームシステム v8.5.0
+# 🧾 税務書類リネームシステム v8.5.0+
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.0-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.0+-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
-[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.14-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.15-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.0ではPDF処理のパフォーマンス最適化と分類精度の改善を実装しました。
+v8.5.0+では左側UI自動接頭辞判定機能とPDF処理のパフォーマンス最適化を実装しました。
 
 ---
 
-## 🚀 **v8.5.0 - 最新版（2025年10月14日）**
+## 🚀 **v8.5.0+ - 最新版（2025年10月15日）**
+
+### 🆕 **左側UI自動接頭辞判定機能の実装（v8.5.0+）**
+
+#### 🎯 **実装内容**
+
+**1. 接頭辞自動判定システム**
+- ✅ **ラジオボタン完全削除**: 01/02、0001/9001 選択の手動UIを削除
+- ✅ **プロセスタイプ連動**: 処理プロセスに応じて接頭辞を自動設定
+  - **源泉税、申請届出（国税のみ）、法定調書** → 01/02
+  - **給与支払報告書、償却資産申告書** → 0001/9001
+- ✅ **ユーザビリティ向上**: 選択ミスが発生せず、操作が簡単に
+
+**2. 左側処理の完全リファクタリング (Phase D系統)**
+- ✅ **受信通知検出分離** (Phase D-1): ReceiptDetector モジュール
+- ✅ **左側・右側処理分離** (Phase D-2, D-3): LeftProcessor, RightProcessor
+- ✅ **アーキテクチャ改善** (Phase D-5): AppOrchestrator, ThreadManager
+- ✅ **モジュール化**: processors/ ディレクトリにロジックを分離
+
+**3. バグ修正**
+- ✅ **申請届出処理の引数エラー修正**: process_type 引数を正しく渡すように修正
+- ✅ **_left_rename_unified エラー解消**: 引数不足エラーを完全修正
+
+#### 📊 **自動判定ロジック詳細**
+
+**変更前（v8.5.0）:**
+```python
+# ラジオボタンでユーザーが手動選択
+prefix_frame = ttk.LabelFrame(...)
+ttk.Radiobutton(..., text="01/02", ...)
+ttk.Radiobutton(..., text="0001/9001", ...)
+```
+
+**変更後（v8.5.0+）:**
+```python
+# 処理プロセスに応じて自動設定（UIには表示しない）
+def update_prefixes_based_on_process():
+    process = self.process_type_var.get()
+    if process in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+        self.left_main_prefix_var.set("01")
+        self.left_receipt_prefix_var.set("02")
+    elif process in ["給与支払報告書", "償却資産申告書"]:
+        self.left_main_prefix_var.set("0001")
+        self.left_receipt_prefix_var.set("9001")
+```
+
+#### 📈 **改善結果**
+
+| 項目 | v8.5.0 | v8.5.0+ | 改善点 |
+|------|--------|---------|--------|
+| **接頭辞設定** | 手動選択（ラジオボタン） | 自動判定 | ユーザビリティ向上 |
+| **選択ミス** | 発生可能 | 発生しない | 確実性向上 |
+| **UI複雑性** | 高い | 低い | シンプル化 |
+| **処理の確実性** | 手動依存 | 自動化 | ヒューマンエラー排除 |
+| **申請届出処理** | エラー発生 | 正常動作 | バグ修正完了 |
+
+---
+
+## 🚀 **v8.5.0 - パフォーマンス最適化（2025年10月14日）**
 
 ### 🆕 **パフォーマンス最適化と分類精度改善（v8.5.0）**
 
@@ -393,15 +451,16 @@ python main.py
 
 ### ⚡ 使用方法
 
-#### 左側機能（源泉税/給与支払/償却資産処理）
+#### 左側機能（源泉税/給与支払/償却資産処理）- v8.5.0+自動接頭辞判定対応
 
 1. **プロセスタイプ選択**: 源泉税/法定調書/申請届出/給与支払報告書/償却資産申告書を選択
 2. **YYMM入力**: `2505` と入力
-3. **本表接頭辞選択**: `01` または `0001` を選択
-4. **受信通知接頭辞選択**: `02` または `9999` を選択
-5. **全角英字→半角英字変換**: チェックボックスで有効化（任意）
-6. **実行**: `🔄 リネーム実行` ボタンをクリック
-7. **フォルダ選択**: 処理対象フォルダを選択
+3. **接頭辞自動判定**: プロセスタイプに応じて自動設定（手動選択不要）
+   - 源泉税、申請届出（国税のみ）、法定調書 → 01/02
+   - 給与支払報告書、償却資産申告書 → 0001/9001
+4. **全角英字→半角英字変換**: チェックボックスで有効化（任意）
+5. **実行**: `🔄 リネーム実行` ボタンをクリック
+6. **フォルダ選択**: 処理対象フォルダを選択
 
 #### 右側機能（AI分類）
 
@@ -456,6 +515,26 @@ tax-doc-renamer/
 ---
 
 ## 📝 変更履歴
+
+### v8.5.0+ (2025-10-15)
+- ✅ **NEW**: 左側UI自動接頭辞判定機能の実装
+  - ラジオボタン完全削除（01/02、0001/9001 選択）
+  - 処理プロセスに応じて接頭辞を自動設定
+  - 源泉税、申請届出（国税のみ）、法定調書 → 01/02
+  - 給与支払報告書、償却資産申告書 → 0001/9001
+- ✅ **NEW**: Phase D系統アーキテクチャ改善
+  - ReceiptDetector モジュール分離（Phase D-1）
+  - LeftProcessor, RightProcessor 分離（Phase D-2, D-3）
+  - AppOrchestrator, ThreadManager 実装（Phase D-5）
+- ✅ **FIX**: 申請届出処理の引数エラー修正
+  - _left_execute メソッドで process_type 引数を正しく渡すように修正
+  - _left_rename_unified への引数不足エラーを解消
+- ✅ **IMPROVE**: モジュール構成の改善
+  - processors/ ディレクトリ追加（receipt_detector, left_processor, right_processor）
+  - core/ ディレクトリ拡張（app_orchestrator, thread_manager）
+- ✅ **IMPROVE**: ユーザビリティ向上
+  - 接頭辞選択の自動化により操作が簡単に
+  - 選択ミスが発生しない確実な処理
 
 ### v8.5.0 (2025-10-14)
 - ✅ **OPTIMIZE**: PDFテキスト抽出を1ページ目のみに最適化
@@ -554,13 +633,13 @@ tax-doc-renamer/
 
 ---
 
-**🎯 税務書類リネームシステム v8.5.0**
-**パフォーマンス最適化・分類精度改善**
+**🎯 税務書類リネームシステム v8.5.0+**
+**左側UI自動接頭辞判定機能・パフォーマンス最適化・分類精度改善**
 
-🚀 **Latest Version!** PDF処理の大幅な高速化と分類精度の改善
+🚀 **Latest Version!** 接頭辞自動判定によるユーザビリティ向上とPDF処理の大幅な高速化
 
-**📅 最終更新: 2025年10月14日**
-**🚀 v8.5.0: PDFテキスト抽出最適化+0002分類改善**
+**📅 最終更新: 2025年10月15日**
+**🚀 v8.5.0+: 左側UI自動接頭辞判定機能+PDFテキスト抽出最適化+申請届出バグ修正**
 
 ---
 
