@@ -15,7 +15,6 @@ import threading
 from pathlib import Path
 from typing import List, Dict, Optional
 import sys
-import pytesseract
 import shutil
 import datetime
 import tempfile
@@ -25,14 +24,13 @@ import atexit
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.pdf_processor import PDFProcessor
-from core.ocr_engine import OCREngine, MunicipalityMatcher, MunicipalitySet, CompanyNameMatcher
+from helpers.company_matcher import CompanyNameMatcher
 from helpers.yymm_policy import resolve_yymm_by_policy, log_yymm_decision, validate_policy_result
 from helpers.settings_context import UIContext, create_ui_context_from_gui, normalize_settings_input
 from helpers.run_config import RunConfig, create_run_config_from_gui
 from helpers.user_settings import get_user_settings_manager
 from core.csv_processor import CSVProcessor
 from core.classification_v5 import DocumentClassifierV5  # v5.1バグ修正版エンジンを使用
-from core.runtime_paths import get_tesseract_executable_path, get_tessdata_dir_path, validate_tesseract_resources
 # v5.4.2: Deterministic renaming system
 from core.pre_extract import create_pre_extract_engine
 from core.rename_engine import create_rename_engine
@@ -52,69 +50,8 @@ from core.app_orchestrator import AppOrchestrator
 from core.thread_manager import ThreadManager
 
 
-def _init_tesseract():
-    """同梱Tesseractの初期化"""
-    try:
-        # 同梱tesseract.exe と tessdata を優先使用
-        tesseract_bin = get_tesseract_executable_path()
-        tessdata_dir = get_tessdata_dir_path()
-        
-        # リソースが存在するかチェック
-        if not validate_tesseract_resources():
-            # プレースホルダーファイルが存在する場合はヒント表示
-            import glob
-            placeholder_files = glob.glob(os.path.join(tessdata_dir, "*.placeholder"))
-            if placeholder_files:
-                raise RuntimeError(
-                    "Tesseractリソースファイルが配置されていません。\n\n"
-                    f"以下の手順でファイルを配置してください：\n"
-                    f"1. tesseract.exe を {os.path.dirname(tesseract_bin)}/ に配置\n"
-                    f"2. jpn.traineddata を {tessdata_dir}/ に配置\n"
-                    f"3. eng.traineddata を {tessdata_dir}/ に配置\n\n"
-                    f"詳細は resources/tesseract/README.md を参照してください。"
-                )
-            else:
-                raise RuntimeError(f"同梱Tesseractリソースが見つかりません:\n{tesseract_bin}")
-        
-        # Tesseractの設定
-        os.environ["TESSDATA_PREFIX"] = tessdata_dir
-        pytesseract.pytesseract.tesseract_cmd = tesseract_bin
-        
-        # 動作テスト
-        try:
-            # 簡単なOCRテストを実行
-            pytesseract.get_tesseract_version()
-            print(f"[OK] 同梱Tesseract初期化成功: {tesseract_bin}")
-        except Exception as e:
-            raise RuntimeError(f"同梱Tesseractの動作テストに失敗: {e}")
-            
-    except Exception as e:
-        print(f"[WARNING] 同梱Tesseract初期化エラー: {e}")
-        print("システムにインストールされたTesseractを探します...")
-        
-        # システムのTesseractにフォールバック
-        import shutil
-        system_tesseract = shutil.which("tesseract")
-        if system_tesseract:
-            print(f"[OK] システムTesseractを使用: {system_tesseract}")
-            pytesseract.pytesseract.tesseract_cmd = system_tesseract
-        else:
-            print("[ERROR] Tesseractが見つかりません。")
-            print("")
-            print("以下のいずれかを実行してください:")
-            print("1. 同梱Tesseractリソースを正しく配置")
-            print("2. システムにTesseractをインストール")
-            print("")
-            print("詳細は resources/tesseract/README.md を参照してください。")
-            raise RuntimeError("Tesseractが利用できません。")
-
-
-# アプリ起動時に1回だけ初期化（エラー時は警告のみ）
-try:
-    _init_tesseract()
-except RuntimeError as e:
-    print(f"[WARNING] Tesseract初期化をスキップ: {e}")
-    print("[INFO] OCR機能は制限されますが、システムは起動します")
+# Tesseract/OCR機能は使用していないため削除済み
+# CompanyNameMatcherはPyMuPDFのget_text()のみを使用
 
 
 class TaxDocumentRenamerV5:
@@ -151,7 +88,6 @@ class TaxDocumentRenamerV5:
         self.user_settings = get_user_settings_manager()
 
         self.pdf_processor = PDFProcessor(logger=self.logger)
-        self.ocr_engine = OCREngine()
         self.csv_processor = CSVProcessor()
         self.classifier_v5 = DocumentClassifierV5(debug_mode=True)
         
