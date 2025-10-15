@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v8.0.0-REFACTORED メインアプリケーション
-Phase D-1〜D-5リファクタリング完了版
-- 受信通知検出分離 (Phase D-1)
-- 左側・右側処理分離 (Phase D-2, D-3)
-- アーキテクチャ改善 (Phase D-5)
+税務書類リネームシステム v7.2.2-SEQUENTIAL-MATCHING メインアプリケーション
+連番方式+金額マッチングによる完全自動配置・確実版
+YYMM Policy System・固定資産書類対応・高精度判定システム
 """
 
 import tkinter as tk
@@ -42,14 +40,6 @@ from helpers.job_context import JobContext
 from ui.theme_config import apply_modern_theme
 # Phase 2: Tooltip support
 from ui.tooltip import create_tooltip
-# Phase D-1: Receipt Detector separation
-from processors.receipt_detector import ReceiptDetector
-# Phase D-2, D-3: Left/Right Processor separation
-from processors.left_processor import LeftProcessor
-from processors.right_processor import RightProcessor
-# Phase D-5: Application Orchestrator
-from core.app_orchestrator import AppOrchestrator
-from core.thread_manager import ThreadManager
 
 
 def _init_tesseract():
@@ -118,7 +108,7 @@ except RuntimeError as e:
 
 
 class TaxDocumentRenamerV5:
-    """税務書類リネームシステム v8.0.0-REFACTORED メインクラス (Phase D-1〜D-5完了)"""
+    """税務書類リネームシステム v5.4.2 メインクラス"""
     
     def __init__(self):
         """初期化"""
@@ -200,10 +190,6 @@ class TaxDocumentRenamerV5:
 
         # UI構築
         self._create_ui()
-
-        # Phase D-5: オーケストレーターとスレッドマネージャーの初期化
-        self.orchestrator = AppOrchestrator(self)
-        self.thread_manager = ThreadManager(self.root)
 
         # メニューバー作成
         self._create_menubar()
@@ -388,10 +374,18 @@ class TaxDocumentRenamerV5:
                         "prefecture": prefecture_var.get(),
                         "city": city_var.get()
                     })
-            
+
             self.user_settings.save_municipalities(municipalities)
         except Exception as save_error:
             self.logger.warning(f"市町村設定保存エラー: {save_error}")
+
+    def _save_process_mode(self, *args):
+        """プロセスモード設定の変更を自動保存"""
+        try:
+            process_mode = self.process_mode_var.get()
+            self.user_settings.save_setting("process_mode", process_mode)
+        except Exception as save_error:
+            self.logger.warning(f"プロセスモード保存エラー: {save_error}")
 
     def _cleanup_temp_snapshots(self):
         """一時snapshotsディレクトリのクリーンアップ"""
@@ -503,11 +497,9 @@ class TaxDocumentRenamerV5:
         mode_frame.pack(fill='x', pady=(15, 0))
 
         ttk.Label(mode_frame, text="処理プロセス:", font=('Yu Gothic UI', 10)).pack(side='left')
-
-        # 前回設定を復元（デフォルトは確定申告）
-        saved_mode = self.user_settings.get_setting("process_mode", "確定申告")
-        self.process_mode_var = tk.StringVar(value=saved_mode)
-
+        # 保存されたプロセスモードを読み込み
+        saved_process_mode = self.user_settings.get_setting("process_mode", "確定申告")
+        self.process_mode_var = tk.StringVar(value=saved_process_mode)
         mode_combo = ttk.Combobox(
             mode_frame,
             textvariable=self.process_mode_var,
@@ -518,15 +510,16 @@ class TaxDocumentRenamerV5:
         )
         mode_combo.pack(side='left', padx=(10, 5))
 
-        # 選択後にフォーカスを外して背景色をリセット & 設定を保存
+        # 選択後にフォーカスを外して背景色をリセット
         def on_combobox_select(event):
             event.widget.selection_clear()
             self.root.focus()
-            # 設定を保存
-            self.user_settings.save_setting("process_mode", self.process_mode_var.get())
 
         mode_combo.bind('<<ComboboxSelected>>', on_combobox_select)
         create_tooltip(mode_combo, "処理モードを選択\n・確定申告: 確定申告書類の処理\n・中間申告: 中間申告書類の処理")
+
+        # プロセスモード変更時に自動保存
+        self.process_mode_var.trace_add('write', self._save_process_mode)
 
         # 自治体設定
         municipality_frame = ttk.LabelFrame(right_frame, text="🏢 自治体設定", padding=20)
@@ -567,17 +560,11 @@ class TaxDocumentRenamerV5:
 
         ttk.Label(yymm_frame, text="年月 (YYMM):", font=('Yu Gothic UI', 9)).pack(side='left')
         self.left_yymm_var = tk.StringVar()
-        
-        # 前回設定を復元
-        saved_yymm = self.user_settings.get_setting("left_yymm_value", "")
-        if saved_yymm:
-            self.left_yymm_var.set(saved_yymm)
-        
         entry = ttk.Entry(yymm_frame, textvariable=self.left_yymm_var, width=10, font=('Yu Gothic UI', 10))
         entry.pack(side='left', padx=(10, 5))
 
         # ステータス表示
-        self.left_yymm_status_var = tk.StringVar(value="未入力" if not saved_yymm else "")
+        self.left_yymm_status_var = tk.StringVar(value="未入力")
         ttk.Label(
             yymm_frame,
             textvariable=self.left_yymm_status_var,
@@ -600,18 +587,13 @@ class TaxDocumentRenamerV5:
             font=('Yu Gothic UI', 9)
         ).pack(side='left')
 
-        self.process_type_var = tk.StringVar()
-        
-        # 前回設定を復元（デフォルトは源泉税）
-        saved_process = self.user_settings.get_setting("process_type", "源泉税")
-        self.process_type_var.set(saved_process)
-        
+        self.process_type_var = tk.StringVar(value="源泉税")
         process_combo = ttk.Combobox(
             process_frame,
             textvariable=self.process_type_var,
             values=[
                 "源泉税",
-                "申請届出（国税のみ）",
+                "申請届出",
                 "法定調書",
                 "給与支払報告書",
                 "償却資産申告書"
@@ -625,11 +607,11 @@ class TaxDocumentRenamerV5:
         # 接頭辞を内部変数として初期化（UIには表示しない）
         self.left_main_prefix_var = tk.StringVar()
         self.left_receipt_prefix_var = tk.StringVar()
-        
+
         # 処理プロセスに応じて接頭辞を自動設定する関数
         def update_prefixes_based_on_process():
             process = self.process_type_var.get()
-            
+
             # 処理プロセスに応じて接頭辞を自動設定
             if process in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
                 self.left_main_prefix_var.set("01")
@@ -637,24 +619,17 @@ class TaxDocumentRenamerV5:
             elif process in ["給与支払報告書", "償却資産申告書"]:
                 self.left_main_prefix_var.set("0001")
                 self.left_receipt_prefix_var.set("9001")
-            
-            # 設定を保存
-            self.user_settings.save_setting("process_type", process)
-            self.user_settings.save_setting("main_prefix", self.left_main_prefix_var.get())
-            self.user_settings.save_setting("receipt_prefix", self.left_receipt_prefix_var.get())
-        
+
         # 初期化時に接頭辞を設定
         update_prefixes_based_on_process()
 
-        # プロセス変更時に接頭辞を自動設定
-        def on_process_change(event):
+        # 選択後のフォーカス解除と接頭辞自動設定
+        def on_process_select(event):
             update_prefixes_based_on_process()
-            
-            # 選択後のフォーカス解除（選択状態の黒枠を消す）
             process_combo.selection_clear()
             self.root.focus()
 
-        process_combo.bind('<<ComboboxSelected>>', on_process_change)
+        process_combo.bind('<<ComboboxSelected>>', on_process_select)
 
         # 英語半角変換オプション
         normalize_frame = ttk.Frame(frame)
@@ -684,15 +659,10 @@ class TaxDocumentRenamerV5:
             activeforeground='white'
         )
         self.left_execute_btn.pack(pady=(15, 10), fill='x')
-        
-        # YYMMが保存されていて有効な場合はボタンを有効化
-        if saved_yymm:
-            self._left_validate_yymm()
-        else:
-            self.left_execute_btn.config(state='disabled')  # 初期状態は無効化
+        self.left_execute_btn.config(state='disabled')  # 初期状態は無効化
 
         # 進捗表示
-        self.left_progress_var = tk.StringVar(value="YYMMを入力してください" if not saved_yymm else "")
+        self.left_progress_var = tk.StringVar(value="YYMMを入力してください")
         ttk.Label(
             frame,
             textvariable=self.left_progress_var,
@@ -873,9 +843,9 @@ class TaxDocumentRenamerV5:
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
 
-            # セット1のみ「（東京都優先）」の注釈を右側に表示
+            # セット1のみ「（東京都特別区優先）」の注釈を右側に表示
             if i == 1:
-                ttk.Label(set_frame, text="（東京都優先）", foreground='gray').pack(side='left', padx=(5, 0))
+                ttk.Label(set_frame, text="（東京都特別区優先）", foreground='gray').pack(side='left', padx=(5, 0))
 
             # セット1のみ動的制御：東京都の場合は無効化
             if i == 1:
@@ -1111,18 +1081,11 @@ class TaxDocumentRenamerV5:
         self._cached_municipality_sets = None  # 前回のキャッシュをクリア
         self.municipality_sets = self._get_municipality_sets()
         
-        # YYMMフォルダを作成（処理モードに応じてフォルダ名を生成）
+        # YYMMフォルダを作成（重複時は_2, _3と連番で作成）
+        # プロセスモードを取得して、フォルダ名に含める
         yymm = self.year_month_var.get()
         process_mode = self.process_mode_var.get()
-
-        # 処理モードに応じてフォルダ名を生成
-        if process_mode == "確定申告":
-            folder_name = f"{yymm}_確定申告"
-        elif process_mode == "中間申告":
-            folder_name = f"{yymm}_中間申告"
-        else:
-            folder_name = yymm
-
+        folder_name = f"{yymm}_{process_mode}"
         base_output_folder = os.path.join(source_folder, folder_name)
 
         # 既存フォルダがある場合は連番を追加
@@ -1132,7 +1095,7 @@ class TaxDocumentRenamerV5:
         while os.path.exists(output_folder):
             counter += 1
             output_folder = f"{base_output_folder}_{counter}"
-        
+
         try:
             os.makedirs(output_folder, exist_ok=True)
             if counter > 1:
@@ -1200,25 +1163,20 @@ class TaxDocumentRenamerV5:
         try:
             total_files = len(target_files)
             processed_files = 0
-            success_count = 0  # 【追加】成功カウント
-            error_count = 0    # 【追加】エラーカウント
-            skip_count = 0     # 【追加】スキップカウント
-
+            
             for i, file_path in enumerate(target_files, 1):
                 filename = os.path.basename(file_path)
-
+                
                 # 【REQ-001】処理済みファイル追跡による重複処理完全排除
                 if file_path in self._processed_files_this_session:
                     self.root.after(0, lambda f=filename: self._log(f"[REQ-001] 既処理済みスキップ: {f}"))
-                    skip_count += 1
                     continue
-
+                
                 # 処理済みファイルとして記録
                 self._processed_files_this_session.add(file_path)
-                processed_files += 1  # 【修正】処理試行カウント
-
+                
                 self.root.after(0, lambda f=filename, i=i, total=total_files: self._log(f"処理中 ({i}/{total}): {f}"))
-
+                
                 try:
                     # ファイル拡張子による処理分岐
                     if file_path.lower().endswith('.pdf'):
@@ -1229,27 +1187,17 @@ class TaxDocumentRenamerV5:
                         success = self._process_csv_file(file_path, output_folder)
                     else:
                         self.root.after(0, lambda f=filename: self._log(f"未対応ファイル形式: {f}"))
-                        skip_count += 1
                         continue
-
+                    
                     if success:
-                        success_count += 1
-                    else:
-                        error_count += 1
-
+                        processed_files += 1
+                        
                 except Exception as e:
                     self.root.after(0, lambda err=str(e), f=filename: self._log(f"ファイル処理エラー {f}: {err}"))
-                    error_count += 1
                     continue
-
-            # 【修正】処理統計を保存（ログ表示なし）
-            self._last_processing_stats = {
-                'total': total_files,
-                'success': success_count,
-                'error': error_count,
-                'skip': skip_count
-            }
-
+            
+            self.root.after(0, lambda: self._log(f"フォルダ一括処理完了: {processed_files}/{total_files}件処理"))
+            
         except Exception as e:
             self._log(f"v5.4.5リネーム処理エラー: {str(e)}")
         finally:
@@ -1353,9 +1301,7 @@ class TaxDocumentRenamerV5:
                 
                 # ファイルコピー
                 import shutil
-                # 【修正】shutil.copy()を使用して新しいファイルとして作成（タイムスタンプを現在時刻に）
-                # copy2はメタデータ（タイムスタンプ）を保持するが、copyは保持しない
-                shutil.copy(file_path, output_path)
+                shutil.copy2(file_path, output_path)
                 
                 self.root.after(0, lambda f=filename, nf=os.path.basename(output_path): 
                                self._log(f"[REQ-002] CSV仕訳帳処理完了: {f} → {nf}"))
@@ -1451,53 +1397,54 @@ class TaxDocumentRenamerV5:
     def _resolve_yymm_with_policy(self, file_path: str, classification_code: Optional[str]) -> str:
         """
         RunConfig中心のポリシーシステムでYYMM値を決定する
-
+        
         Args:
             file_path: 処理対象PDFファイルパス
             classification_code: 分類コード（分かっている場合）
-
+            
         Returns:
             str: ポリシーで決定されたYYMM値
-
+            
         Raises:
             ValueError: ポリシーによる決定に失敗した場合
         """
         try:
-            # 【修正】毎回UIから最新のYYMM値を取得してRunConfigを更新
-            gui_yymm = self.year_month_var.get()
-            self.run_config = create_run_config_from_gui(
-                yymm_var_value=gui_yymm,
-                batch_mode=False,  # 単発処理
-                debug_mode=getattr(self, 'debug_mode', False)
-            )
-
+            # RunConfigを作成または取得
+            if self.run_config is None:
+                gui_yymm = self.year_month_var.get()
+                self.run_config = create_run_config_from_gui(
+                    yymm_var_value=gui_yymm,
+                    batch_mode=False,  # 単発処理
+                    debug_mode=getattr(self, 'debug_mode', False)
+                )
+            
             # 新しいRunConfig中心のポリシーシステムを使用
             ctx = {
                 'log': self.logger,
                 'run_config': self.run_config
             }
-
+            
             final_yymm, yymm_source = resolve_yymm_by_policy(
                 class_code=classification_code,
                 ctx=ctx,
                 settings=self.run_config,
                 detected=None
             )
-
+            
             # 結果検証
             if final_yymm:
                 if not validate_policy_result(final_yymm, yymm_source, classification_code):
                     raise ValueError(f"Policy validation failed: yymm={final_yymm}, source={yymm_source}, code={classification_code}")
-
+                
                 # 監査ログ
                 self.logger.info(f"[AUDIT][YYMM] source={yymm_source} value={final_yymm} validation=PASSED")
                 self.logger.info(f"[v5.4.2] YYMM source validation passed: {final_yymm} ({yymm_source} mandatory)")
-
+                
                 return final_yymm
             else:
                 # YYMMが取得できない場合のエラーハンドリング
                 raise ValueError(f"[FATAL][YYMM] Failed to resolve YYMM for {classification_code or 'UNKNOWN'}. source={yymm_source}")
-
+            
         except Exception as e:
             self.logger.error(f"[YYMM][POLICY] Failed to resolve YYMM: {e}")
             raise  # エラーを再提出して呼び出し元に処理を任せる
@@ -1523,14 +1470,13 @@ class TaxDocumentRenamerV5:
         """v5.2 通常PDFの処理 (高精度分類エンジン)"""
         filename = os.path.basename(file_path)
         
-        # テキスト抽出（1ページ目のみ - 分類には十分）
+        # OCR・テキスト抽出（1ページ目のみ）
         try:
             import fitz
             doc = fitz.open(file_path)
             text = ""
-            # 【修正】1ページ目のみ抽出して処理速度を改善
             if len(doc) > 0:
-                text = doc[0].get_text()
+                text = doc[0].get_text()  # 1ページ目のみ
             doc.close()
         except Exception as e:
             self._log(f"PDF読み取りエラー: {e}")
@@ -1586,9 +1532,7 @@ class TaxDocumentRenamerV5:
         
         self._log(f"[DEBUG] ファイルコピー開始: {file_path} -> {output_path}")
         try:
-            # 【修正】shutil.copy()を使用して新しいファイルとして作成（タイムスタンプを現在時刻に）
-            # copy2はメタデータ（タイムスタンプ）を保持するが、copyは保持しない
-            shutil.copy(file_path, output_path)
+            shutil.copy2(file_path, output_path)
             # コピー結果を確認
             if os.path.exists(output_path):
                 file_size = os.path.getsize(output_path)
@@ -1623,14 +1567,13 @@ class TaxDocumentRenamerV5:
             if job_context:
                 print(f"[DEBUG_TEST] job_context.current_municipality_sets: {getattr(job_context, 'current_municipality_sets', None)}")
         
-        # 分類実行（1ページ目のみ抽出）
+        # 分類実行（1ページ目のみ）
         try:
             import fitz
             doc = fitz.open(file_path)
             text = ""
-            # 【修正】1ページ目のみ抽出して処理速度を改善
             if len(doc) > 0:
-                text = doc[0].get_text()
+                text = doc[0].get_text()  # 1ページ目のみ
             doc.close()
         except Exception as e:
             self._log(f"PDF読み取りエラー: {e}")
@@ -1711,9 +1654,7 @@ class TaxDocumentRenamerV5:
         import shutil
         self._log(f"[DEBUG] ファイルコピー開始: {file_path} -> {output_path}")
         try:
-            # 【修正】shutil.copy()を使用して新しいファイルとして作成（タイムスタンプを現在時刻に）
-            # copy2はメタデータ（タイムスタンプ）を保持するが、copyは保持しない
-            shutil.copy(file_path, output_path)
+            shutil.copy2(file_path, output_path)
             # コピー結果を確認
             if os.path.exists(output_path):
                 file_size = os.path.getsize(output_path)
@@ -1842,13 +1783,13 @@ class TaxDocumentRenamerV5:
         
         # 処理ログがある場合は重要な部分のみ表示
         if hasattr(classification_result, 'processing_log') and classification_result.processing_log:
-            important_logs = [log for log in classification_result.processing_log if
+            important_logs = [log for log in classification_result.processing_log if 
                             "最優先AND条件一致" in log or "自治体連番適用" in log or "強制判定" in log]
             if important_logs:
-                self._log("[重要な処理ログ]")  # 【修正】絵文字を削除してエンコーディングエラーを回避
+                self._log("🔧 重要な処理ログ:")
                 for log in important_logs[-3:]:  # 最新の3件のみ
                     self._log(f"  {log}")
-
+                    
         self._log("=" * 60)
 
     def _process_single_file_legacy(self, file_path: str, output_folder: str):
@@ -2021,12 +1962,12 @@ class TaxDocumentRenamerV5:
             if not file_path.lower().endswith('.pdf'):
                 return False
             
-            # ファイルのテキストを抽出
+            # ファイルのテキストを抽出（1ページ目のみ）
             import fitz
             doc = fitz.open(file_path)
             text = ""
-            for page in doc:
-                text += page.get_text()
+            if len(doc) > 0:
+                text = doc[0].get_text()  # 1ページ目のみ
             doc.close()
             
             # 分割対象キーワードの定義
@@ -2127,17 +2068,13 @@ class TaxDocumentRenamerV5:
 
         # 【修正】使用済みファイル名セットの管理を削除
 
-        # 保存された処理統計を取得
-        stats = getattr(self, '_last_processing_stats', None)
-
-        # 【修正】画面に完了メッセージをポップアップ表示（件数表示なし）
-        if stats:
-            message = "処理が完了しました"
-        else:
-            message = "処理が完了しました"
+        # ログに完了メッセージを表示
+        self._log("=" * 60)
+        self._log("処理が完了しました")
+        self._log("=" * 60)
 
         self.notebook.select(1)  # 結果タブに切り替え
-        messagebox.showinfo("完了", message)
+        messagebox.showinfo("完了", "v5.4.2リネーム処理が完了しました")
 
     def _is_already_renamed(self, filename):
         """ファイルが既にリネーム済みかチェック（無限リネーム防止）"""
@@ -2405,7 +2342,7 @@ class TaxDocumentRenamerV5:
 　→ 4桁の数字で入力（例：2025年1月 → 2501）
 
 ステップ2: 市区町村を設定（該当する場合のみ）
-　→ セット1: 東京都優先（あれば）
+　→ セット1: 東京都特別区優先（あれば）
 　→ セット2～5: その他の市区町村
 
 ステップ3: 実行ボタンをクリック
@@ -2449,7 +2386,7 @@ Ctrl+2：ログウィンドウを開く
         """バージョン情報ダイアログ表示"""
         about_window = tk.Toplevel(self.root)
         about_window.title("バージョン情報")
-        about_window.geometry("550x450")
+        about_window.geometry("400x300")
         about_window.resizable(False, False)
 
         content_frame = ttk.Frame(about_window, padding=20)
@@ -2458,39 +2395,17 @@ Ctrl+2：ログウィンドウを開く
         ttk.Label(content_frame, text="📄", font=('Arial', 48)).pack()
         ttk.Label(content_frame, text="税務書類リネームシステム",
                  font=('Yu Gothic UI', 14, 'bold')).pack(pady=5)
-        ttk.Label(content_frame, text="Version 8.1.0-ENHANCED",
-                 font=('Yu Gothic UI', 10, 'bold')).pack()
-
-        # 更新内容
-        update_info = ttk.LabelFrame(content_frame, text="v8.1.0の更新内容", padding=10)
-        update_info.pack(pady=10, fill='both', expand=True)
-        
-        updates = [
-            "【v8.1.0: UI改善とユーザビリティ向上】",
-            "• 設定の自動保存機能(YYMM/処理種別/接尾辞/処理モード)",
-            "• 処理種別による接尾辞の自動選択",
-            "• 給与支払報告書/償却資産の受信通知を9001に変更",
-            "• 「申請届出」→「申請届出(国税のみ)」に変更",
-            "• 「予定申告」→「中間申告」に用語変更",
-            "• 処理モードによるフォルダ名自動生成",
-            "",
-            "【v8.0.0: アーキテクチャリファクタリング】",
-            "• プロセッサの分離とモジュール化",
-            "• 受信通知検出の独立モジュール化",
-            "• テストカバレッジの向上"
-        ]
-        
-        for update in updates:
-            ttk.Label(update_info, text=update, font=('Yu Gothic UI', 8)).pack(anchor='w', pady=1)
+        ttk.Label(content_frame, text="Version 5.5.0-LATEST",
+                 font=('Yu Gothic UI', 10)).pack()
 
         import sys
         ttk.Label(content_frame, text=f"Python {sys.version.split()[0]}",
-                 font=('Yu Gothic UI', 9)).pack(pady=5)
+                 font=('Yu Gothic UI', 9)).pack(pady=10)
 
         ttk.Label(content_frame, text="© 2025 税務書類リネームシステム",
                  font=('Yu Gothic UI', 9)).pack()
 
-        ttk.Button(content_frame, text="閉じる", command=about_window.destroy).pack(pady=10)
+        ttk.Button(content_frame, text="閉じる", command=about_window.destroy).pack(pady=15)
 
     # ==================== 左側フォルダリネーム機能メソッド ====================
 
@@ -2556,28 +2471,22 @@ Ctrl+2：ログウィンドウを開く
         # 🆕 各機能の個別処理を呼び出し（統一パラメータを渡す）
         if process_type == "源泉税":
             target_method = self._process_gensen
-            args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
         elif process_type == "法定調書":
             target_method = self._process_hoteichosho
-            args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
-        elif process_type == "申請届出（国税のみ）":
+        elif process_type == "申請届出":
             target_method = self._process_application
-            args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
         elif process_type == "給与支払報告書":
             target_method = self._process_payroll_report
-            args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
         elif process_type == "償却資産申告書":
             target_method = self._process_depreciable_assets
-            args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
         else:
             # フォールバック
             target_method = self._left_rename_unified
-            args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english, process_type)
 
         # バックグラウンド処理開始（統一パラメータを渡す）
         thread = threading.Thread(
             target=target_method,
-            args=args,
+            args=(folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english),
             daemon=True
         )
         thread.start()
@@ -2628,7 +2537,7 @@ Ctrl+2：ログウィンドウを開く
                 if match:
                     main_files.append((filename, file_path, match))
                 # 受信通知ファイル（テキスト抽出で判定）
-                elif filename.endswith('.pdf') and ReceiptDetector.is_receipt_pdf(file_path):
+                elif filename.endswith('.pdf') and self._is_receipt_pdf(file_path):
                     receipt_pdf_path = file_path
                     self._log(f"[統一処理] 受信通知検出: {filename}")
 
@@ -2900,6 +2809,95 @@ Ctrl+2：ログウィンドウを開く
 
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("処理エラー", f"予期しないエラーが発生しました:\n{str(e)}"))
+            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+
+
+    def _process_application(self, folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english):
+        """
+        申請届出処理（専用実装）
+        
+        処理フロー:
+        1. 本表ファイルのリネーム・フォルダ作成
+        2. 国税受信通知.pdfと地方税受信通知.pdfを別々に処理
+        3. 各ページから申請名を抽出してマッチング
+        """
+        self._log("[申請届出] 処理を開始")
+        
+        try:
+            import fitz  # PyMuPDF
+            
+            # Step 1: 本表ファイルを処理してフォルダ作成
+            self._log("[申請届出] Step 1: 本表ファイル処理開始")
+            created_folders = self._process_main_files_without_receipt(
+                folder_path, yymm_value, main_prefix, normalize_english
+            )
+            
+            if not created_folders:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "エラー", "本表ファイルが見つからないか、フォルダ作成に失敗しました"
+                ))
+                self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+                return
+            
+            self._log(f"[申請届出] 作成されたフォルダ数: {len(created_folders)}")
+
+            # Step 2: 受信通知ファイルを検索（テキスト抽出で判定）
+            kokuzei_receipt = None
+            chihou_receipt = None
+            # 本表ファイルパターン（除外用）
+            main_file_pattern = re.compile(r'^\d{2,4}_')
+
+            for filename in os.listdir(folder_path):
+                file_path = os.path.join(folder_path, filename)
+                # 本表ファイル（数字_で始まる）は除外
+                if main_file_pattern.match(filename):
+                    continue
+                if os.path.isfile(file_path) and filename.endswith('.pdf') and self._is_receipt_pdf(file_path):
+                    # PDFのテキストを抽出して国税/地方税を判定
+                    import fitz
+                    try:
+                        doc = fitz.open(file_path)
+                        first_page_text = doc[0].get_text() if len(doc) > 0 else ""
+                        doc.close()
+
+                        # テキスト内容で判定（e-Tax関連キーワードで国税、eLTAX関連で地方税）
+                        if "e-Tax" in first_page_text or "国税庁" in first_page_text or "税務署" in first_page_text:
+                            kokuzei_receipt = file_path
+                            self._log(f"[申請届出] 国税受信通知検出: {filename}")
+                        elif "eLTAX" in first_page_text or "都税" in first_page_text or "市区町村" in first_page_text or "市役所" in first_page_text or "区役所" in first_page_text:
+                            chihou_receipt = file_path
+                            self._log(f"[申請届出] 地方税受信通知検出: {filename}")
+                    except Exception as e:
+                        self._log(f"[申請届出] PDF読み取りエラー ({filename}): {str(e)}")
+
+            # 国税受信通知を処理
+            if kokuzei_receipt:
+                self._log("[申請届出] Step 2: 国税受信通知処理開始")
+                self._process_application_receipt(
+                    kokuzei_receipt, created_folders, receipt_prefix, "国税"
+                )
+            else:
+                self._log("[申請届出] 国税受信通知が見つかりません（スキップ）")
+
+            # 地方税受信通知を処理
+            if chihou_receipt:
+                self._log("[申請届出] Step 3: 地方税受信通知処理開始")
+                self._process_application_receipt(
+                    chihou_receipt, created_folders, receipt_prefix, "地方税"
+                )
+            else:
+                self._log("[申請届出] 地方税受信通知が見つかりません（スキップ）")
+            
+            # 完了
+            self.root.after(0, lambda: self.left_progress_var.set("完了"))
+            self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
+            self._log("[申請届出] 処理完了")
+            
+        except Exception as e:
+            self._log(f"[申請届出] エラー: {str(e)}")
+            import traceback
+            self._log(traceback.format_exc())
+            self.root.after(0, lambda: messagebox.showerror("エラー", f"申請届出処理中にエラーが発生しました:\n{str(e)}"))
             self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
 
     def _process_main_files_without_receipt(self, folder_path, yymm, main_prefix, normalize_english=False):
@@ -3296,7 +3294,7 @@ Ctrl+2：ログウィンドウを開く
                 # 本表ファイル（数字_で始まる）は除外
                 if main_file_pattern.match(filename):
                     continue
-                if os.path.isfile(file_path) and filename.endswith('.pdf') and ReceiptDetector.is_receipt_pdf(file_path):
+                if os.path.isfile(file_path) and filename.endswith('.pdf') and self._is_receipt_pdf(file_path):
                     # PDFのテキストを抽出して国税/地方税を判定
                     import fitz
                     try:
@@ -3336,10 +3334,7 @@ Ctrl+2：ログウィンドウを開く
             self.root.after(0, lambda: self.left_progress_var.set("完了"))
             self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
             self._log("[申請届出] 処理完了")
-
-            # 完了メッセージ表示
-            self.root.after(0, lambda: messagebox.showinfo("完了", "申請届出の処理が完了しました"))
-
+            
         except Exception as e:
             self._log(f"[申請届出] エラー: {str(e)}")
             import traceback
@@ -3381,7 +3376,7 @@ Ctrl+2：ログウィンドウを開く
 
             for filename in os.listdir(folder_path):
                 file_path = os.path.join(folder_path, filename)
-                if os.path.isfile(file_path) and filename.endswith('.pdf') and ReceiptDetector.is_receipt_pdf(file_path):
+                if os.path.isfile(file_path) and filename.endswith('.pdf') and self._is_receipt_pdf(file_path):
                     receipt_pdf = file_path
                     self._log(f"[給与支払報告書] 受信通知検出: {filename}")
                     break  # 最初に見つかった受信通知を使用
@@ -3463,9 +3458,6 @@ Ctrl+2：ログウィンドウを開く
             self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
             self._log("[給与支払報告書] 処理完了")
 
-            # 完了メッセージ表示
-            self.root.after(0, lambda: messagebox.showinfo("完了", "給与支払報告書の処理が完了しました"))
-
         except Exception as e:
             self._log(f"[給与支払報告書] エラー: {str(e)}")
             import traceback
@@ -3507,7 +3499,7 @@ Ctrl+2：ログウィンドウを開く
 
             for filename in os.listdir(folder_path):
                 file_path = os.path.join(folder_path, filename)
-                if os.path.isfile(file_path) and filename.endswith('.pdf') and ReceiptDetector.is_receipt_pdf(file_path):
+                if os.path.isfile(file_path) and filename.endswith('.pdf') and self._is_receipt_pdf(file_path):
                     receipt_pdf = file_path
                     self._log(f"[償却資産申告書] 受信通知検出: {filename}")
                     break  # 最初に見つかった受信通知を使用
@@ -3522,10 +3514,7 @@ Ctrl+2：ログウィンドウを開く
             self.root.after(0, lambda: self.left_progress_var.set("完了"))
             self.root.after(0, lambda: self.left_execute_btn.config(state='normal'))
             self._log("[償却資産申告書] 処理完了")
-
-            # 完了メッセージ表示
-            self.root.after(0, lambda: messagebox.showinfo("完了", "償却資産申告書の処理が完了しました"))
-
+            
         except Exception as e:
             self._log(f"[償却資産申告書] エラー: {str(e)}")
             import traceback
@@ -3572,7 +3561,7 @@ Ctrl+2：ログウィンドウを開く
                 continue
 
             # テキスト抽出で受信通知かどうか判定（AND条件）
-            if ReceiptDetector.is_receipt_pdf(file_path):
+            if self._is_receipt_pdf(file_path):
                 self._log(f"[本表処理] 受信通知ファイルをスキップ: {filename}")
                 continue
 
@@ -4458,7 +4447,42 @@ Ctrl+2：ログウィンドウを開く
         # UIで選択されたプレフィックスを使用
         return f"{receipt_prefix}_受信通知.pdf"
 
-    # _is_receipt_pdf メソッドは processors/receipt_detector.py に移動されました (Phase D-1)
+    def _is_receipt_pdf(self, file_path):
+        """
+        PDFファイルが受信通知かどうかをテキスト抽出で判定
+
+        判定条件: 受信通知関連の複数キーワードパターンで判定（いずれか1つでも該当すればOK）
+        """
+        import fitz
+        try:
+            doc = fitz.open(file_path)
+            if len(doc) > 0:
+                first_page_text = doc[0].get_text()
+                doc.close()
+
+                # 受信通知のキーワードパターン（いずれか1つ該当すれば受信通知と判定）
+                receipt_keywords = [
+                    "申告受付完了通知",
+                    "受付結果",
+                    "送信結果",
+                    "受信通知",
+                    "受付通知",
+                    "e-Tax",
+                    "eLTAX",
+                    "受付番号",
+                    "受理番号",
+                    "送信された申告データ"
+                ]
+
+                for keyword in receipt_keywords:
+                    if keyword in first_page_text:
+                        return True
+            else:
+                doc.close()
+            return False
+        except Exception as e:
+            self._log(f"[受信通知判定] エラー: {file_path} - {str(e)}")
+            return False
 
     def _normalize_fullwidth_english(self, text):
         """全角英字を半角英字に変換"""
@@ -4507,7 +4531,7 @@ Ctrl+2：ログウィンドウを開く
                 if match:
                     main_files.append((filename, file_path, match))
                 # 受信通知ファイル（テキスト抽出で判定）
-                elif filename.endswith('.pdf') and ReceiptDetector.is_receipt_pdf(file_path):
+                elif filename.endswith('.pdf') and self._is_receipt_pdf(file_path):
                     receipt_pdf_path = file_path
                     self._log(f"[統一処理] 受信通知検出: {filename}")
 
@@ -4591,7 +4615,7 @@ Ctrl+2：ログウィンドウを開く
                     doc = fitz.open(receipt_pdf_path)
                     total_pages = len(doc)
 
-                    # マルチパターン受信通知検出による配置（v7.2.3-MULTI-PATTERN-RECEIPT）
+                    # 連番方式による受信通知配置（v7.2.2-SEQUENTIAL-MATCHING）
                     matcher = CompanyNameMatcher()
                     folder_names = [f['folder_name'] for f in created_folders]
                     matched_count = 0
@@ -4824,7 +4848,7 @@ Ctrl+2：ログウィンドウを開く
 
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v7.2.3-MULTI-PATTERN-RECEIPT 起動 (マルチパターン受信通知検出版)")
+        self._log("税務書類リネームシステム v7.2.2-SEQUENTIAL-MATCHING 起動 (連番方式+金額マッチング実装版)")
         self.root.mainloop()
 
 if __name__ == "__main__":

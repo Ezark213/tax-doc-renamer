@@ -46,6 +46,10 @@ class UserSettingsManager:
             "version": "1.0.0",
             "yymm_value": "2508",
             "left_yymm_value": "2508",  # 左側機能用
+            "process_type": "源泉税",  # v5.6.0: 処理種別の自動保存
+            "main_prefix": "01",  # v5.6.0: 本票接尾辞の自動保存
+            "receipt_prefix": "02",  # v5.6.0: 受信通知接尾辞の自動保存
+            "process_mode": "確定申告",  # v5.6.0: 処理モードの自動保存
             "municipalities": [
                 {"prefecture": "東京都", "city": ""},
                 {"prefecture": "愛知県", "city": "蒲郡市"},

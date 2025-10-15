@@ -8,7 +8,6 @@ import re
 import logging
 import json
 import os
-import unicodedata
 from typing import Dict, List, Optional, Tuple, Callable, Union, Any
 from dataclasses import dataclass, field
 import datetime
@@ -20,75 +19,19 @@ from helpers.seq_policy import (
     generate_receipt_number_generic
 )
 
-# ============================================================
-# テキスト正規化関数（レイアウト起因の空白・改行対応）
-# ============================================================
-
-def normalize_text_for_matching(text: str) -> str:
-    """
-    PDFテキスト抽出時のレイアウト起因のノイズを除去
-
-    処理内容:
-    1. Unicode正規化（NFKC）
-    2. NBSP等を通常スペースに変換
-    3. 行末空白除去
-    4. CJK文字間のスペース除去（漢字・ひらがな・カタカナの間のみ）
-
-    Args:
-        text: 正規化対象のテキスト
-
-    Returns:
-        正規化されたテキスト
-    """
-    if not text:
-        return ""
-
-    # 1. Unicode正規化（NFKC: 互換文字を標準形に統一）
-    s = unicodedata.normalize('NFKC', text)
-
-    # 2. NBSP（\u00A0）等を通常スペースに変換
-    s = s.replace('\u00A0', ' ')
-    s = s.replace('\u3000', ' ')  # 全角スペース
-
-    # 3. 行末空白除去
-    s = re.sub(r'[ \t]*\n[ \t]*', '\n', s)
-
-    # 4. CJK文字間のスペース除去
-    # 漢字: \u4E00-\u9FFF, \u3400-\u4DBF
-    # ひらがな: \u3040-\u309F
-    # カタカナ: \u30A0-\u30FF
-    cjk_pattern = r'([\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF])\s+([\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF])'
-
-    # 複数回適用（連続する場合に対応）
-    for _ in range(5):  # 最大5回繰り返し
-        prev = s
-        s = re.sub(cjk_pattern, r'\1\2', s)
-        if s == prev:  # 変化がなくなったら終了
-            break
-
-    return s
-
 @dataclass
 class AndCondition:
     """AND条件を表すデータクラス"""
     keywords: List[str]
     match_type: str = "all"  # "all" (すべて必要) or "any" (いずれか必要)
-    use_regex: bool = False  # 正規表現モード（空白許容マッチング用）
-
+    
     def check_match(self, text: str) -> Tuple[bool, List[str]]:
         """AND条件のマッチングチェック"""
         matched = []
-
         for keyword in self.keywords:
-            if self.use_regex:
-                # 正規表現モード：パターンとしてマッチング
-                if re.search(keyword, text, re.IGNORECASE):
-                    matched.append(keyword)
-            else:
-                # 通常モード：部分文字列として検索
-                if keyword in text:
-                    matched.append(keyword)
-
+            if keyword in text:
+                matched.append(keyword)
+        
         if self.match_type == "all":
             return len(matched) == len(self.keywords), matched
         else:  # "any"
@@ -121,20 +64,18 @@ class ClassificationResult:
 class DocumentClassifierV5:
     """書類分類エンジン v5.0 - AND条件対応版"""
     
-    def __init__(self, debug_mode: bool = False, log_callback: Optional[Callable[[str], None]] = None, process_mode: str = "確定申告"):
+    def __init__(self, debug_mode: bool = False, log_callback: Optional[Callable[[str], None]] = None):
         """初期化
-
+        
         Args:
             debug_mode: デバッグモードの有効化
             log_callback: ログ出力のコールバック関数
-            process_mode: 処理モード（"確定申告" または "予定申告"）
         """
         self.debug_mode = debug_mode
         self.log_callback = log_callback
-        self.process_mode = process_mode
         self.current_filename = ""
         self.processing_log = []
-
+        
         # v5.0 新分類ルール（AND条件対応）
         self.classification_rules_v5 = self._initialize_classification_rules_v5()
         
@@ -202,57 +143,33 @@ class DocumentClassifierV5:
         return {
             # ===== 0000番台 - 国税申告書類 =====
             "0000_納付税額一覧表": {
-                "priority": 300,  # 【修正案2】最高優先度に設定して確実に判定（0002_添付資料より優先）
+                "priority": 150,  # 適度な優先度
                 "highest_priority_conditions": [
-                    # 【正規表現モード】見出し直マッチ（空白・改行許容）
-                    AndCondition([r'納\s*付\s*税\s*額\s*一\s*覧\s*表'], "any", use_regex=True),
-                    AndCondition([r'納\s*税\s*一\s*覧'], "any", use_regex=True),
-                    AndCondition([r'税\s*額\s*一\s*覧\s*表'], "any", use_regex=True),
-
-                    # 【通常モード】欄名セット（正規化後のテキストで判定）
-                    # 課税標準額 + 年間税額 + 既納付額 + 申告納付額の4つ
-                    AndCondition(["課税標準額", "年間税額", "既納付額", "申告納付額"], "all"),
-                    # 課税標準額 + 見込納付額 + 差引納付額の3つ
-                    AndCondition(["課税標準額", "見込納付額", "差引納付額"], "all"),
-                    # 年間税額 + 既納付額 + 見込納付額 + 差引納付額の4つ
-                    AndCondition(["年間税額", "既納付額", "見込納付額", "差引納付額"], "all")
+                    # ファイル名による確実な判定のみ（過度な条件を削除）
+                    AndCondition(["納税一覧"], "any"),
+                    AndCondition(["税額一覧表"], "any")
                 ],
                 "exact_keywords": [
                     "納付税額一覧表", "納税一覧", "税額一覧表"
                 ],
                 "partial_keywords": [
-                    "税額一覧", "納付税額", "申告納付額", "見込納付額", "差引納付額", "翌期納付額"
+                    "税額一覧"
                 ],
                 "exclude_keywords": [
-                    # 【修正】確定申告を除外リストから削除（納付税額一覧表は確定申告時に使われるため）
-                    # 他の明確に異なる書類のみ除外
+                    # 他の書類を明確に除外（過度な適用を防止）
+                    "申告書", "確定申告", "青色申告", "内国法人の確定申告",
                     "決算書", "貸借対照表", "損益計算書",
                     "仕訳帳", "総勘定元帳", "補助元帳", "残高試算表",
                     "受信通知", "納付情報発行結果", "納付区分番号通知", "メール詳細",
                     "県税事務所", "都税事務所", "市役所",
+                    "法人都道府県民税", "市町村申告書", "消費税申告書",
                     "一括償却", "少額減価償却", "固定資産台帳", "勘定科目別"
                 ],
                 "filename_keywords": ["納税一覧", "税額一覧"]
             },
             
-            "0001_法人税等申告書_予定申告": {
-                "priority": 250,  # 確定申告より高い優先度
-                "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
-                "code_override": "0001_法人税等申告書",  # 実際に使用するコードは0001_法人税等申告書
-                "highest_priority_conditions": [
-                    # 法人税 AND 予定申告書 AND (納付すべき法人税額 OR 納付すべき地方法人税額)
-                    AndCondition(["法人税", "予定申告書", "納付すべき法人税額"], "all"),
-                    AndCondition(["法人税", "予定申告書", "納付すべき地方法人税額"], "all")
-                ],
-                "exact_keywords": [],
-                "partial_keywords": ["法人税", "予定申告書"],
-                "exclude_keywords": ["メール詳細", "受信通知", "納付区分番号通知"],
-                "filename_keywords": []
-            },
-
             "0001_法人税等申告書": {
                 "priority": 200,  # 最高優先度に変更
-                "process_mode": "確定申告",  # 確定申告モード専用
                 "highest_priority_conditions": [
                     # 修正指示書に基づく新しい最優先条件を追加
                     AndCondition(["01_内国法人", "確定申告"], "all"),  # ファイル名パターン
@@ -272,17 +189,18 @@ class DocumentClassifierV5:
             "0002_添付資料_法人税": {
                 "priority": 200,  # バグ修正依頼書: B-2 最高優先度に変更
                 "highest_priority_conditions": [
-                    # 【本文必須】添付書類送付書、添付書類名称、内国法人の確定申告の3つで確実に判定
+                    # 新しい最優先条件: 添付書類送付書、添付書類名称、内国法人の確定申告の3つで確実に判定
                     AndCondition(["添付書類送付書", "添付書類名称", "内国法人の確定申告"], "all"),
-                    # 【本文必須】添付書類名称が本文中に存在
-                    AndCondition(["添付書類名称"], "any"),
-                    # 【本文必須】イメージ添付書類の完全一致
+                    AndCondition(["添付書類名称"], "any"), 
+                    # バグ修正依頼書: B-1 完全一致キーワードの追加
+                    AndCondition(["法人税 添付資料"], "any"),
+                    AndCondition(["添付資料 法人税"], "any"), 
                     AndCondition(["イメージ添付書類(法人税申告)"], "any"),
                     AndCondition(["イメージ添付書類 法人税"], "any"),
-                    # 【本文必須】添付資料＋法人税申告＋イメージ添付の3点セット
+                    AndCondition(["添付書類 法人税"], "any"),
+                    # 既存条件も維持
                     AndCondition(["添付資料", "法人税申告", "イメージ添付"], "all"),
-                    # 【本文必須】添付書類＋法人税＋申告書の3点セット
-                    AndCondition(["添付書類", "法人税", "申告書"], "all"),
+                    AndCondition(["添付書類", "法人税", "申告書"], "all")
                 ],
                 "exact_keywords": [
                     "添付書類送付書", "添付書類名称", "内国法人の確定申告",
@@ -290,11 +208,7 @@ class DocumentClassifierV5:
                     "イメージ添付書類 法人税", "添付書類 法人税"
                 ],
                 "partial_keywords": ["添付資料", "法人税 資料", "イメージ添付", "添付書類"],
-                "exclude_keywords": [
-                    "消費税申告", "法人消費税", "消費税", "受信通知", "納付区分番号通知",
-                    # 【追加】納付税額一覧表を明確に除外
-                    "納付税額一覧表", "税額一覧表", "納税一覧", "既納付額", "申告納付額", "見込納付額", "差引納付額"
-                ],
+                "exclude_keywords": ["消費税申告", "法人消費税", "消費税", "受信通知", "納付区分番号通知"],
                 "filename_keywords": ["法人税申告", "法人税", "内国法人"]
             },
             
@@ -422,24 +336,8 @@ class DocumentClassifierV5:
             },
             
             # ===== 3000番台 - 消費税関連 =====
-            # 予定申告モード専用ルール - 最優先度250
-            "3001_消費税等申告書_予定申告": {
-                "priority": 250,  # 確定申告より高い優先度
-                "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
-                "code_override": "3001_消費税等申告書",  # 実際に使用するコードは3001_消費税等申告書
-                "highest_priority_conditions": [
-                    # 中間申告書 AND 消費税及び地方消費税
-                    AndCondition(["中間申告書", "消費税及び地方消費税"], "all")
-                ],
-                "exact_keywords": [],
-                "partial_keywords": ["中間申告書", "消費税及び地方消費税"],
-                "exclude_keywords": ["受信通知", "納付区分番号通知"],
-                "filename_keywords": []
-            },
-
             "3001_消費税等申告書": {
                 "priority": 135,
-                "process_mode": "確定申告",  # 確定申告モード専用
                 "highest_priority_conditions": [
                     AndCondition(["課税期間分の消費税及び", "基準期間の"], "all"),
                     AndCondition(["消費税及び地方消費税申告(一般・法人)", "課税標準額"], "all"),
@@ -457,18 +355,15 @@ class DocumentClassifierV5:
             },
             
             "3002_添付資料_消費税": {
-                "priority": 250,  # 【Phase 3-3 修正】220 → 250 に引き上げ（7001より確実に優先）
+                "priority": 220,  # 0002より高い優先度に設定
                 "highest_priority_conditions": [
-                    # 【Phase 3-3 修正】本文必須条件に強化
-                    # 「添付書類送付書」が本文に存在することを必須に
-                    AndCondition(["添付書類送付書", "消費税"], "all"),
-                    AndCondition(["添付書類送付書", "添付書類名称", "消費税"], "all"),
-
-                    # イメージ添付書類も本文に存在することを確認
-                    AndCondition(["イメージ添付書類", "法人消費税申告", "添付書類送付書"], "all"),
-
-                    # 元の条件も維持（互換性のため）
+                    # 新しい最優先条件: 添付書類、消費税、添付書類送付書の3つで確実に判定
                     AndCondition(["添付書類", "消費税", "添付書類送付書"], "all"),
+                    # 修正指示書に基づくファイル名最優先条件を追加
+                    AndCondition(["イメージ添付書類(法人消費税申告)"], "any"),  # 単独最優先
+                    AndCondition(["添付資料", "消費税申告", "イメージ添付"], "all"),
+                    AndCondition(["添付書類", "法人消費税申告"], "all"),
+                    AndCondition(["イメージ添付書類(法人消費税申告)", "添付資料"], "all")
                 ],
                 "exact_keywords": [
                     "添付書類送付書", "添付書類", "消費税",
@@ -477,11 +372,8 @@ class DocumentClassifierV5:
                 ],
                 "partial_keywords": ["添付資料", "消費税 資料", "イメージ添付", "添付書類"],
                 "exclude_keywords": [
-                    # 【Phase 3-2 修正】手続名を除外キーワードから削除
-                    # 「消費税及び地方消費税申告」は添付書類送付書にも記載されるため除外しない
-                    # 「消費税申告書」「申告(一般・法人)」も同様に削除
-                    "受信通知",
-                    "納付区分番号通知"
+                    "消費税及び地方消費税申告", "消費税申告書", "申告(一般・法人)", 
+                    "法人税申告", "内国法人", "確定申告", "受信通知", "納付区分番号通知"
                 ],
                 "filename_keywords": ["イメージ添付書類", "添付書類", "法人消費税"]
             },
@@ -605,9 +497,8 @@ class DocumentClassifierV5:
                 "priority": 140,  # 最高優先度
                 "highest_priority_conditions": [
                     AndCondition(["少額減価償却資産明細表"], "any"),
-                    # 【修正】広すぎるルールを削除 - 帳票類への誤マッチを防止
-                    # AndCondition(["少額減価"], "any"),  # ← 削除
-                    # AndCondition(["少額"], "any")  # ← 削除
+                    AndCondition(["少額減価"], "any"),
+                    AndCondition(["少額"], "any")
                 ],
                 "exact_keywords": ["少額減価償却資産明細表"],
                 "partial_keywords": [
@@ -615,7 +506,7 @@ class DocumentClassifierV5:
                     "取得価額", "損金算入", "30万円未満", "減価償却資産", "明細表",
                     "少額固定資産", "償却資産明細", "一時損金算入"
                 ],
-                "exclude_keywords": ["一括", "補助元帳", "仕訳帳", "総勘定元帳", "勘定科目別", "税区分集計"],  # 【追加】帳票類を除外
+                "exclude_keywords": ["一括"],
                 "filename_keywords": [],  # ファイル名判定を削除してOCR内容ベースに統一
                 "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
@@ -641,25 +532,13 @@ class DocumentClassifierV5:
             
             # ===== 7000番台 - 税区分関連（修正版） =====
             "7001_勘定科目別税区分集計表": {
-                "priority": 140,
+                "priority": 140,  # 最高優先度
                 "highest_priority_conditions": [
-                    # 【Phase 3-4 修正】タイトル + 表データの列名を必須に
-                    AndCondition(["勘定科目別税区分集計表", "課税売上", "課税仕入"], "all"),
-                    AndCondition(["勘定科目別税区分集計表", "税区分", "消費税額"], "all"),
-
-                    # 【表データのみ】タイトルなしでも表形式が明確なら判定
-                    AndCondition(["勘定科目", "税区分", "課税売上", "課税仕入", "消費税額"], "all"),
+                    AndCondition(["勘定科目別税区分集計表"], "any")
                 ],
                 "exact_keywords": ["勘定科目別税区分集計表"],
                 "partial_keywords": ["勘定科目別税区分", "科目別税区分"],
-                "exclude_keywords": [
-                    # 【Phase 3-5 修正】添付書類送付書を明確に除外
-                    "添付書類送付書",
-                    "添付書類名称",
-                    "イメージ添付書類",
-                    "添付資料",
-                    "法人消費税申告"
-                ],
+                "exclude_keywords": ["イメージ添付書類", "添付資料", "法人消費税申告"],  # 添付資料系を除外
                 "filename_keywords": ["勘定科目別税区分集計表"]
             },
             
@@ -699,56 +578,32 @@ class DocumentClassifierV5:
     def _check_highest_priority_conditions(self, text: str, filename: str) -> Optional[ClassificationResult]:
         """最優先条件（AND条件）をチェック"""
         combined_text = f"{text} {filename}"
-
+        
         self._log("最優先AND条件判定開始")
-
+        
         # 優先度順でチェック
-        sorted_rules = sorted(self.classification_rules_v5.items(),
+        sorted_rules = sorted(self.classification_rules_v5.items(), 
                             key=lambda x: x[1].get("priority", 0), reverse=True)
-
+        
         for doc_type, rules in sorted_rules:
-            # process_modeフィルタリング：ルールにprocess_modeが設定されている場合、一致する場合のみ処理
-            rule_process_mode = rules.get("process_mode", None)
-            if rule_process_mode and rule_process_mode != self.process_mode:
-                continue  # このルールは現在のprocess_modeでは適用しない
-
-            # 【追加】除外キーワードチェック（最優先フローでも実行）
-            exclude_keywords = rules.get("exclude_keywords", [])
-            is_excluded = False
-            excluded_keyword = None
-            for keyword in exclude_keywords:
-                if keyword in combined_text:
-                    is_excluded = True
-                    excluded_keyword = keyword
-                    break
-
-            if is_excluded:
-                self._log_debug(f"[EXCLUDE] {doc_type} を除外（キーワード: {excluded_keyword}）")
-                continue  # このルールをスキップ
-
             highest_priority_conditions = rules.get("highest_priority_conditions", [])
-
+            
             if not highest_priority_conditions:
                 continue
-
+            
             for i, condition in enumerate(highest_priority_conditions):
                 is_match, matched_keywords = condition.check_match(combined_text)
-
+                
                 if is_match:
                     self._log(f"最優先AND条件一致: {doc_type} (条件{i+1})")
                     self._log_debug(f"マッチしたキーワード: {matched_keywords}")
                     self._log_debug(f"マッチタイプ: {condition.match_type}")
-
+                    
                     # メタデータの取得
                     meta_data = rules.get("meta", {})
-
-                    # code_overrideがある場合は、それを使用（予定申告モード専用ルール対応）
-                    final_doc_type = rules.get("code_override", doc_type)
-                    if final_doc_type != doc_type:
-                        self._log(f"コードオーバーライド: {doc_type} → {final_doc_type}")
-
+                    
                     result = ClassificationResult(
-                        document_type=final_doc_type,
+                        document_type=doc_type,
                         confidence=1.0,  # 最優先なので信頼度100%
                         matched_keywords=matched_keywords,
                         classification_method="highest_priority_and_condition",
@@ -1125,22 +980,19 @@ class DocumentClassifierV5:
         return result
 
     def _preprocess_text(self, text: str) -> str:
-        """テキストの前処理（レイアウト起因ノイズ対応版）"""
+        """テキストの前処理"""
         if not text:
             return ""
-
-        # 【新規】CJK間スペース除去など、レイアウト起因のノイズを除去
-        text = normalize_text_for_matching(text)
-
-        # 不要な空白・改行を除去（連続スペースを1つに統一）
+        
+        # 不要な空白・改行を除去
         cleaned = re.sub(r'\s+', ' ', text)
-
+        
         # 全角英数字を半角に変換
         cleaned = cleaned.translate(str.maketrans(
             '０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ',
             '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         ))
-
+        
         return cleaned.strip()
 
     def _calculate_score(self, text: str, rules: Dict, source: str = "") -> Tuple[float, List[str]]:
@@ -1999,44 +1851,22 @@ class DocumentClassifierV5:
     
     def _is_payment_info(self, text_content: str, filename: str) -> bool:
         """
-        Phase 3 修正: 問題①対応 - 納付情報の判定強化
-
-        修正内容:
-        1. 受信通知を除外する条件を追加（最優先）
-        2. 「メール詳細」の誤判定を防止（完全一致のみ）
-
-        修正理由:
-        - 「メール詳細」が受信通知と納付情報の両方に含まれ、過剰マッチしていた
-        - 「送信されたデータを受け付けました」がある場合は受信通知として除外
+        修正指示書: 修正3 - 納付情報の判定強化
+        納付情報として必ず分類すべきキーワードをチェック
         """
-        # 【Phase 3 追加】受信通知の除外判定（最優先）
-        receipt_exclusion_keywords = [
-            '送信されたデータを受け付けました',
-            '申告データを受付けました'
-        ]
-
-        for exclusion in receipt_exclusion_keywords:
-            if exclusion in text_content:
-                self._log_debug(f"[納付情報除外] 受信通知検出: {exclusion}")
-                return False  # 受信通知なので納付情報ではない
-
-        # 【Phase 3 修正】「メール詳細（納付区分番号通知）」の完全一致判定
-        if 'メール詳細（納付区分番号通知）' in text_content:
-            self._log_debug("納付情報強制判定: メール詳細（納付区分番号通知）")
-            return True
-
-        # その他の納付情報キーワード判定
         payment_indicators = [
             '納付区分番号通知',
             '納付内容を確認し',
-            '以下のボタンより納付'
+            '以下のボタンより納付',
+            'メール詳細（納付区分番号通知）'
         ]
-
+        
+        # これらのキーワードが含まれる場合は必ず納付情報として分類
         for indicator in payment_indicators:
             if indicator in text_content:
                 self._log_debug(f"納付情報強制判定: {indicator}")
                 return True
-
+        
         return False
     
     def _is_receipt_notification(self, text_content: str, filename: str) -> bool:

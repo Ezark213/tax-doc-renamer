@@ -23,5 +23,9 @@
       "prefecture": "",
       "city": ""
     }
-  ]
+  ],
+  "process_type": "申請届出（国税のみ）",
+  "main_prefix": "01",
+  "receipt_prefix": "02",
+  "process_mode": "中間申告"
 }
