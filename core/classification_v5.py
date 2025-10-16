@@ -220,9 +220,7 @@ class DocumentClassifierV5:
                 "exact_keywords": [
                     "納付税額一覧表", "納税一覧", "税額一覧表"
                 ],
-                "partial_keywords": [
-                    "税額一覧", "納付税額", "申告納付額", "見込納付額", "差引納付額", "翌期納付額"
-                ],
+                "partial_keywords": [],
                 "exclude_keywords": [
                     # 【修正】確定申告を除外リストから削除（納付税額一覧表は確定申告時に使われるため）
                     # 他の明確に異なる書類のみ除外
@@ -232,7 +230,7 @@ class DocumentClassifierV5:
                     "県税事務所", "都税事務所", "市役所",
                     "一括償却", "少額減価償却", "固定資産台帳", "勘定科目別"
                 ],
-                "filename_keywords": ["納税一覧", "税額一覧"]
+                "filename_keywords": []
             },
             
             "0001_法人税等申告書_予定申告": {
@@ -245,8 +243,8 @@ class DocumentClassifierV5:
                     AndCondition(["法人税", "予定申告書", "納付すべき地方法人税額"], "all")
                 ],
                 "exact_keywords": [],
-                "partial_keywords": ["法人税", "予定申告書"],
-                "exclude_keywords": ["メール詳細", "受信通知", "納付区分番号通知"],
+                "partial_keywords": ["予定申告書"],
+                "exclude_keywords": ["メール詳細", "受信通知", "納付区分番号通知", "県税事務所", "都税事務所", "市役所", "都道府県"],
                 "filename_keywords": []
             },
 
@@ -266,7 +264,7 @@ class DocumentClassifierV5:
                 ],
                 "partial_keywords": ["法人税申告", "内国法人", "確定申告", "青色申告"],
                 "exclude_keywords": ["メール詳細", "受信通知", "納付区分番号通知", "添付資料", "イメージ添付"],
-                "filename_keywords": ["内国法人", "確定申告", "青色"]
+                "filename_keywords": []
             },
             
             "0002_添付資料_法人税": {
@@ -295,7 +293,7 @@ class DocumentClassifierV5:
                     # 【追加】納付税額一覧表を明確に除外
                     "納付税額一覧表", "税額一覧表", "納税一覧", "既納付額", "申告納付額", "見込納付額", "差引納付額"
                 ],
-                "filename_keywords": ["法人税申告", "法人税", "内国法人"]
+                "filename_keywords": []
             },
             
             "0003_受信通知": {
@@ -309,7 +307,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["法人税 受信通知", "受信通知 法人税"],
                 "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
                 "exclude_keywords": ["消費税申告書", "納付区分番号通知"],
-                "filename_keywords": ["受信通知", "法人税"]
+                "filename_keywords": []
             },
             
             "0004_納付情報": {
@@ -323,27 +321,24 @@ class DocumentClassifierV5:
                 "exact_keywords": ["法人税 納付情報", "納付情報 法人税", "納付区分番号通知"],
                 "partial_keywords": ["納付情報", "納付書", "国税 納付"],
                 "exclude_keywords": ["消費税及地方消費税", "受信通知"],
-                "filename_keywords": ["納付情報", "法人税"]
+                "filename_keywords": []
             },
             
             # ===== 1000番台 - 都道府県税関連 =====
             "1001_都道府県_都道府県申告書": {
-                "priority": 135,
+                "priority": 250,  # 決算書より優先
                 "highest_priority_conditions": [
-                    AndCondition(["都道府県申告書申告書", "年400万円以下"], "all"),
-                    AndCondition(["県税事務所", "法人事業税", "特別法人事業税"], "all"),
-                    AndCondition(["都税事務所", "道府県民税", "事業税"], "all"),
-                    AndCondition(["法人事業税申告書", "都道府県民税"], "all")
+                    # 空白がある場合にも機能するように正規表現モードで定義
+                    AndCondition([r"県\s*税\s*事\s*務\s*所", r"法\s*人\s*事\s*業\s*税", r"特\s*別\s*法\s*人\s*事\s*業\s*税"], "all", use_regex=True),
+                    AndCondition([r"都\s*税\s*事\s*務\s*所", r"道\s*府\s*県\s*民\s*税", r"事\s*業\s*税"], "all", use_regex=True),
+                    AndCondition([r"法\s*人\s*事\s*業\s*税\s*申\s*告\s*書", r"都\s*道\s*府\s*県\s*民\s*税"], "all", use_regex=True)
                 ],
                 "exact_keywords": [
-                    "都道府県申告書申告書", "法人事業税申告書", "都道府県民税申告書"
+                    "都道府県申告書", "法人事業税申告書", "都道府県民税申告書"
                 ],
-                "partial_keywords": [
-                    "都道府県民税", "法人事業税", "特別法人事業税", "道府県民税", "事業税",
-                    "県税事務所", "都税事務所", "年400万円以下", "年月日から年月日までの"
-                ],
+                "partial_keywords": [],
                 "exclude_keywords": ["市町村", "市民税", "市役所", "町役場", "村役場", "受信通知", "納付情報"],
-                "filename_keywords": ["県税事務所", "都税事務所"]
+                "filename_keywords": []
             },
             
             "1003_受信通知": {
@@ -356,7 +351,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["都道府県 受信通知"],
                 "partial_keywords": ["受信通知", "地方税電子申告"],
                 "exclude_keywords": ["市町村", "市民税", "国税電子申告"],
-                "filename_keywords": ["受信通知", "都道府県"]
+                "filename_keywords": []
             },
             
             "1004_納付情報": {
@@ -370,7 +365,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["都道府県 納付情報", "納付情報発行結果", "地方税共同機構"],
                 "partial_keywords": ["納付情報", "地方税 納付", "法人二税", "特別税"],
                 "exclude_keywords": ["市役所", "町役場", "村役場", "市町村申告書", "国税"],
-                "filename_keywords": ["納付情報", "都道府県"]
+                "filename_keywords": []
             },
             
             # ===== 2000番台 - 市町村税関連 =====
@@ -382,13 +377,11 @@ class DocumentClassifierV5:
                     AndCondition(["市町村民税の特定寄附金"], "any")
                 ],
                 "exact_keywords": ["市町村申告書申告書", "市民税申告書"],
-                "partial_keywords": ["市町村申告書", "市町村民税", "市役所", "町役場", "村役場"],
+                "partial_keywords": [],
                 "exclude_keywords": [
-                    "都道府県", "事業税", "県税事務所", "都税事務所", "受信通知", "納付情報",
-                    # バグ修正依頼書: C-1 除外条件の追加
-                    "内国法人", "確定申告(青色)", "事業年度分", "税額控除"
+                    "都道府県", "事業税", "県税事務所", "都税事務所", "受信通知", "納付情報"
                 ],
-                "filename_keywords": ["市役所", "市民税"]
+                "filename_keywords": []
             },
             
             "2003_受信通知": {
@@ -405,7 +398,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["市町村 受信通知", "申告受付完了通知"],
                 "partial_keywords": ["受信通知", "地方税電子申告", "市役所"],
                 "exclude_keywords": ["県税事務所", "都税事務所", "法人事業税", "国税電子申告"],
-                "filename_keywords": ["受信通知", "市町村"]
+                "filename_keywords": []
             },
             
             "2004_納付情報": {
@@ -418,7 +411,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["市町村 納付情報", "法人住民税 納付情報"],
                 "partial_keywords": ["納付情報", "地方税 納付", "法人住民税"],
                 "exclude_keywords": ["県税事務所", "都税事務所", "法人二税・特別税", "国税"],
-                "filename_keywords": ["納付情報", "市町村"]
+                "filename_keywords": []
             },
             
             # ===== 3000番台 - 消費税関連 =====
@@ -432,7 +425,7 @@ class DocumentClassifierV5:
                     AndCondition(["中間申告書", "消費税及び地方消費税"], "all")
                 ],
                 "exact_keywords": [],
-                "partial_keywords": ["中間申告書", "消費税及び地方消費税"],
+                "partial_keywords": ["中間申告書"],
                 "exclude_keywords": ["受信通知", "納付区分番号通知"],
                 "filename_keywords": []
             },
@@ -453,7 +446,7 @@ class DocumentClassifierV5:
                 ],
                 "partial_keywords": ["消費税申告", "地方消費税申告", "消費税申告書", "課税期間分", "基準期間"],
                 "exclude_keywords": ["添付資料", "イメージ添付", "資料", "受信通知", "納付区分番号通知"],
-                "filename_keywords": ["消費税及び地方消費税申告", "消費税申告", "地方消費税申告"]
+                "filename_keywords": []
             },
             
             "3002_添付資料_消費税": {
@@ -483,7 +476,7 @@ class DocumentClassifierV5:
                     "受信通知",
                     "納付区分番号通知"
                 ],
-                "filename_keywords": ["イメージ添付書類", "添付書類", "法人消費税"]
+                "filename_keywords": []
             },
             
             "3003_受信通知": {
@@ -497,7 +490,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["消費税 受信通知", "受信通知 消費税"],
                 "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
                 "exclude_keywords": ["法人税及び地方法人税申告書", "納付区分番号通知"],
-                "filename_keywords": ["受信通知", "消費税"]
+                "filename_keywords": []
             },
             
             "3004_納付情報": {
@@ -511,7 +504,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["消費税 納付情報", "納付情報 消費税", "消費税 納付区分番号通知"],
                 "partial_keywords": ["納付情報", "納付書", "納付区分番号通知"],
                 "exclude_keywords": ["法人税及地方法人税", "受信通知"],
-                "filename_keywords": ["納付情報", "消費税"]
+                "filename_keywords": []
             },
             
             # ===== 5000番台 - 会計書類（修正版） =====
@@ -523,8 +516,8 @@ class DocumentClassifierV5:
                 ],
                 "exact_keywords": ["決算書", "決算報告書", "貸借対照表", "損益計算書"],
                 "partial_keywords": ["決算", "B/S", "P/L"],
-                "exclude_keywords": ["残高試算表", "試算表", "残高試算"],  # 試算表関連を除外
-                "filename_keywords": ["決算書", "決算報告書"]
+                "exclude_keywords": ["残高試算表", "試算表", "残高試算", "県税事務所", "都税事務所", "市役所", "法人事業税", "法人住民税", "法人市民税"],  # 試算表と地方税を除外
+                "filename_keywords": []
             },
             
             "5002_総勘定元帳": {
@@ -535,7 +528,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["総勘定元帳"],
                 "partial_keywords": ["総勘定", "元帳"],
                 "exclude_keywords": ["補助元帳", "補助", "内国法人", "確定申告", "01_内国法人"],  # 法人税申告書を除外
-                "filename_keywords": ["総勘定元帳", "総勘定"]
+                "filename_keywords": []
             },
             
             "5003_補助元帳": {
@@ -546,7 +539,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["補助元帳"],
                 "partial_keywords": ["補助", "元帳"],
                 "exclude_keywords": ["総勘定"],
-                "filename_keywords": ["補助元帳", "補助"]
+                "filename_keywords": []
             },
             
             "5004_残高試算表": {
@@ -561,7 +554,7 @@ class DocumentClassifierV5:
                     "合計残高", "月次試算", "年次試算", "勘定残高"
                 ],
                 "exclude_keywords": [],
-                "filename_keywords": ["残高試算表", "試算表"]
+                "filename_keywords": []
             },
             
             "5005_仕訳帳": {
@@ -572,7 +565,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["仕訳帳"],
                 "partial_keywords": ["仕訳"],
                 "exclude_keywords": [],
-                "filename_keywords": ["仕訳帳", "仕訳"]
+                "filename_keywords": []
             },
             
             # ===== 6000番台 - 固定資産関連（修正版） =====
@@ -584,20 +577,18 @@ class DocumentClassifierV5:
                 "exact_keywords": ["固定資産台帳"],
                 "partial_keywords": ["固定資産", "資産台帳"],
                 "exclude_keywords": [],
-                "filename_keywords": ["固定資産台帳"]
+                "filename_keywords": []
             },
             
             "6002_一括償却資産明細表": {
                 "priority": 100,  # 最高優先度（100に変更）
                 "highest_priority_conditions": [
-                    AndCondition(["一括償却資産明細表"], "any"),
-                    AndCondition(["一括償却"], "any"),
-                    AndCondition(["償却資産明細"], "any")
+                    AndCondition(["一括償却資産明細表"], "any")
                 ],
                 "exact_keywords": ["一括償却資産明細表"],
-                "partial_keywords": ["一括償却", "償却資産明細", "一括償却資産", "償却明細"],
-                "exclude_keywords": ["少額"],
-                "filename_keywords": ["一括償却資産明細表", "一括償却", "償却資産明細"],
+                "partial_keywords": [],
+                "exclude_keywords": ["少額", "勘定科目別税区分"],
+                "filename_keywords": [],
                 "meta": {"no_split": True, "asset_document": True, "lock_layer": "C"}
             },
             
@@ -655,7 +646,7 @@ class DocumentClassifierV5:
                     "添付資料",
                     "法人消費税申告"
                 ],
-                "filename_keywords": ["勘定科目別税区分集計表"]
+                "filename_keywords": []
             },
             
             "7002_税区分集計表": {
@@ -666,7 +657,7 @@ class DocumentClassifierV5:
                 "exact_keywords": ["税区分集計表"],
                 "partial_keywords": ["税区分集計", "区分集計"],
                 "exclude_keywords": ["勘定科目別", "科目別"],
-                "filename_keywords": ["税区分集計表"]
+                "filename_keywords": []
             }
         }
 
@@ -1039,13 +1030,8 @@ class DocumentClassifierV5:
         for doc_type, rules in self.classification_rules_v5.items():
             self._log_debug(f"評価中: {doc_type} (優先度: {rules.get('priority', 5)})")
             
-            # テキストとファイル名を分けてスコア計算
-            text_score, text_keywords = self._calculate_score(text, rules, "テキスト")
-            filename_score, filename_keywords = self._calculate_filename_score(filename, rules)
-            
-            # 総合スコア（ファイル名を重視）
-            total_score = text_score + (filename_score * 1.5)
-            combined_keywords = text_keywords + filename_keywords
+            # テキストのみでスコア計算（ファイル名判定は削除）
+            total_score, combined_keywords = self._calculate_score(text, rules, "テキスト")
             
             # 除外判定チェック
             excluded = False
@@ -1081,10 +1067,6 @@ class DocumentClassifierV5:
                 self._log_debug(f"  → {doc_type}: 除外, キーワード:[なし] ({exclude_reason})")
             else:
                 self._log_debug(f"  → {doc_type}: スコア:{total_score:.1f}, キーワード:{combined_keywords}")
-                if text_score > 0:
-                    self._log_debug(f"    - テキストスコア: {text_score:.1f}")
-                if filename_score > 0:
-                    self._log_debug(f"    - ファイル名スコア: {filename_score:.1f} × 1.5 = {filename_score * 1.5:.1f}")
             
             # 最高スコア更新
             if not excluded and total_score > best_score:
@@ -1168,42 +1150,7 @@ class DocumentClassifierV5:
         
         return score, matched_keywords
 
-    def _calculate_filename_score(self, filename: str, rules: Dict) -> Tuple[float, List[str]]:
-        """ファイル名に基づいてスコアを計算"""
-        score = 0
-        matched_keywords = []
-        priority = rules.get("priority", 5)
-        
-        # 除外キーワードチェック（ファイル名でも重要）
-        for exclude_keyword in rules.get("exclude_keywords", []):
-            if exclude_keyword in filename:
-                self._log_debug(f"    除外: ファイル名除外キーワード検出: '{exclude_keyword}'")
-                return 0, []
-        
-        # ファイル名専用キーワードがある場合
-        filename_keywords = rules.get("filename_keywords", [])
-        for keyword in filename_keywords:
-            if keyword in filename:
-                # バグ修正依頼書: C-2 市役所ファイル名パターンの重み付け強化
-                multiplier = 3.0  # デフォルトの重み付け
-                if keyword == "市役所" and "市町村申告書" in str(rules.get("partial_keywords", [])):
-                    multiplier = 9.0  # 市役所 → ファイル名スコア × 3.0 の重み付け適用
-                    self._log_debug(f"    市役所パターン重み付け強化: 市民税関連で×{multiplier}")
-                
-                points = priority * multiplier
-                score += points
-                matched_keywords.append(f"[ファイル名]{keyword}")
-                self._log_debug(f"    ファイル名専用一致: '{keyword}' (+{points})")
-        
-        # 通常のキーワードもファイル名でチェック
-        for exact_keyword in rules.get("exact_keywords", []):
-            if exact_keyword in filename:
-                points = priority * 2
-                score += points
-                matched_keywords.append(f"[ファイル名]{exact_keyword}")
-                self._log_debug(f"    ファイル名完全一致: '{exact_keyword}' (+{points})")
-        
-        return score, matched_keywords
+    # _calculate_filename_score メソッドは削除 - ファイル名判定は使用しない
 
     def classify_with_municipality_info_v5(self, text: str, filename: str, 
                                          prefecture_code: Optional[int] = None,

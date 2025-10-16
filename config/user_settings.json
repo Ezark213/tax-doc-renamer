@@ -24,8 +24,8 @@
       "city": ""
     }
   ],
-  "process_type": "申請届出（国税のみ）",
+  "process_type": "源泉税",
   "main_prefix": "01",
   "receipt_prefix": "02",
-  "process_mode": "中間申告"
+  "process_mode": "確定申告"
 }

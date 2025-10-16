@@ -49,6 +49,7 @@ class UserSettingsManager:
             "process_type": "源泉税",  # v5.6.0: 処理種別の自動保存
             "main_prefix": "01",  # v5.6.0: 本票接尾辞の自動保存
             "receipt_prefix": "02",  # v5.6.0: 受信通知接尾辞の自動保存
+            "normalize_english": False,  # v8.5.1: 全角英語→半角変換の自動保存
             "process_mode": "確定申告",  # v5.6.0: 処理モードの自動保存
             "municipalities": [
                 {"prefecture": "東京都", "city": ""},

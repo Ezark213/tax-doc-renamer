@@ -296,9 +296,8 @@ class TaxDocumentRenamerV5:
             current_value = self.year_month_var.get()
             if not current_value:
                 self.yymm_status_var.set("📋 YYMM入力待ち")
-                self.yymm_status_label.config(style='Muted.TLabel')  # Phase 1: スタイル統一
                 return
-            
+
             # 正規化を試行
             normalized = _normalize_yymm(current_value)
             if normalized and _validate_yymm(normalized):
@@ -307,7 +306,6 @@ class TaxDocumentRenamerV5:
                     self.yymm_status_var.set(f"✓ 正常: {normalized}")
                 else:
                     self.yymm_status_var.set(f"✓ 正常: {current_value} → {normalized}")
-                self.yymm_status_label.config(style='Success.TLabel')  # Phase 1: スタイル統一
 
                 # 正規化された値を自動保存
                 try:
@@ -316,11 +314,9 @@ class TaxDocumentRenamerV5:
                     self.logger.warning(f"YYMM値保存エラー: {save_error}")
             else:
                 self.yymm_status_var.set(f"⚠️ 無効: {current_value} (例: 2508, 25/08, ２５０８)")
-                self.yymm_status_label.config(style='Error.TLabel')  # Phase 1: スタイル統一
-                
+
         except Exception as e:
             self.yymm_status_var.set(f"❌ エラー: {str(e)}")
-            self.yymm_status_label.config(style='Error.TLabel')  # Phase 1: スタイル統一
 
     def _save_municipality_settings(self, *args):
         """市町村設定の変更を自動保存"""
@@ -502,57 +498,48 @@ class TaxDocumentRenamerV5:
                       "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
 
     def _create_left_rename_panel(self, parent):
-        """左側フォルダリネームパネル作成（完全新規実装）"""
-        # LabelFrame作成
-        frame = ttk.LabelFrame(parent, text="📁 フォルダリネーム", padding=20)
-        frame.pack(fill='both', expand=True, pady=(0, 15))
+        """左側フォルダリネームパネル作成（右側と同じUI構造）"""
+        # === 設定エリア ===
+        settings_frame = ttk.LabelFrame(parent, text="⚙️ 設定", padding=20)
+        settings_frame.pack(fill='x', pady=(0, 15), padx=20)
 
-        # YYMM入力欄
-        yymm_frame = ttk.Frame(frame)
-        yymm_frame.pack(fill='x', pady=5)
+        # 年月設定（処理プロセスの上）
+        year_month_frame = ttk.Frame(settings_frame)
+        year_month_frame.pack(fill='x', pady=(0, 10))
 
-        ttk.Label(yymm_frame, text="年月 (YYMM):", font=('Yu Gothic UI', 9)).pack(side='left')
-        self.left_yymm_var = tk.StringVar()
-        
+        ttk.Label(year_month_frame, text="年月 (YYMM):").pack(side='left')
+
         # 前回設定を復元
         saved_yymm = self.user_settings.get_setting("left_yymm_value", "")
-        if saved_yymm:
-            self.left_yymm_var.set(saved_yymm)
-        
-        entry = ttk.Entry(yymm_frame, textvariable=self.left_yymm_var, width=10, font=('Yu Gothic UI', 10))
-        entry.pack(side='left', padx=(10, 5))
-        create_tooltip(entry, "年月を4桁で入力（例: 2501）\nフォルダリネーム時に使用されます")
+        self.left_yymm_var = tk.StringVar(value=saved_yymm)
 
-        # ステータス表示
+        yymm_entry = ttk.Entry(year_month_frame, textvariable=self.left_yymm_var, width=10)
+        yymm_entry.pack(side='left', padx=(10, 5))
+        create_tooltip(yymm_entry, "年月を4桁で入力（例: 2501）\nフォルダリネーム時に使用されます")
+
+        # YYMM設定状態表示
         self.left_yymm_status_var = tk.StringVar(value="📋 YYMM入力待ち" if not saved_yymm else f"✓ 正常: {saved_yymm}")
-        ttk.Label(
-            yymm_frame,
+        self.left_yymm_status_label = ttk.Label(
+            year_month_frame,
             textvariable=self.left_yymm_status_var,
             font=('Yu Gothic UI', 9)
-        ).pack(side='left', padx=(5, 0))
+        )
+        self.left_yymm_status_label.pack(side='left', padx=(5, 0))
 
-        # バリデーション設定
+        # YYMMバリデーション設定（リアルタイム更新）
         self.left_yymm_var.trace_add('write', self._left_validate_yymm)
+        self._left_validate_yymm()  # 初期バリデーション
 
-        # セクション区切り線
-        ttk.Separator(frame, orient='horizontal').pack(fill='x', pady=15)
+        # 処理プロセス選択（YYMMの下）
+        process_frame = ttk.Frame(settings_frame)
+        process_frame.pack(fill='x', pady=(15, 0))
 
-        # Phase 3: プロセスカテゴリー選択
-        process_frame = ttk.Frame(frame)
-        process_frame.pack(fill='x', pady=(0, 10))
+        ttk.Label(process_frame, text="処理プロセス:", font=('Yu Gothic UI', 10)).pack(side='left')
 
-        ttk.Label(
-            process_frame,
-            text="処理プロセス:",
-            font=('Yu Gothic UI', 9)
-        ).pack(side='left')
-
-        self.process_type_var = tk.StringVar()
-        
         # 前回設定を復元（デフォルトは源泉税）
         saved_process = self.user_settings.get_setting("process_type", "源泉税")
-        self.process_type_var.set(saved_process)
-        
+        self.process_type_var = tk.StringVar(value=saved_process)
+
         process_combo = ttk.Combobox(
             process_frame,
             textvariable=self.process_type_var,
@@ -567,18 +554,18 @@ class TaxDocumentRenamerV5:
             width=20,
             font=('Yu Gothic UI', 10)
         )
-        process_combo.pack(side='left', padx=(10, 0))
+        process_combo.pack(side='left', padx=(10, 5))
         create_tooltip(process_combo,
                       "処理プロセスを選択\n・源泉税: 01, 02\n・申請届出（国税のみ）: 01, 02\n・法定調書: 01, 02\n・給与支払報告書: 0001, 9001\n・償却資産申告書: 0001, 9001")
 
         # 接頭辞を内部変数として初期化（UIには表示しない）
         self.left_main_prefix_var = tk.StringVar()
         self.left_receipt_prefix_var = tk.StringVar()
-        
+
         # 処理プロセスに応じて接頭辞を自動設定する関数
         def update_prefixes_based_on_process():
             process = self.process_type_var.get()
-            
+
             # 処理プロセスに応じて接頭辞を自動設定
             if process in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
                 self.left_main_prefix_var.set("01")
@@ -586,41 +573,46 @@ class TaxDocumentRenamerV5:
             elif process in ["給与支払報告書", "償却資産申告書"]:
                 self.left_main_prefix_var.set("0001")
                 self.left_receipt_prefix_var.set("9001")
-            
+
             # 設定を保存
             self.user_settings.save_setting("process_type", process)
             self.user_settings.save_setting("main_prefix", self.left_main_prefix_var.get())
             self.user_settings.save_setting("receipt_prefix", self.left_receipt_prefix_var.get())
-        
+
         # 初期化時に接頭辞を設定
         update_prefixes_based_on_process()
 
-        # プロセス変更時に接頭辞を自動設定
+        # 選択後にフォーカスを外して背景色をリセット & 設定を保存
         def on_process_change(event):
             update_prefixes_based_on_process()
-            
-            # 選択後のフォーカス解除（選択状態の黒枠を消す）
-            process_combo.selection_clear()
+            event.widget.selection_clear()
             self.root.focus()
 
         process_combo.bind('<<ComboboxSelected>>', on_process_change)
 
         # 英語半角変換オプション
-        normalize_frame = ttk.Frame(frame)
-        normalize_frame.pack(fill='x', pady=(5, 5))
+        normalize_frame = ttk.Frame(settings_frame)
+        normalize_frame.pack(fill='x', pady=(15, 0))
 
-        self.normalize_english_var = tk.BooleanVar(value=False)
+        # 前回設定を復元
+        saved_normalize = self.user_settings.get_setting("normalize_english", False)
+        self.normalize_english_var = tk.BooleanVar(value=saved_normalize)
+
         normalize_checkbox = ttk.Checkbutton(
             normalize_frame,
             text="英語を半角に変換（例：Ｓｔａｎｄａｒｄ  →  Standard）",
-            variable=self.normalize_english_var
+            variable=self.normalize_english_var,
+            command=lambda: self.user_settings.save_setting("normalize_english", self.normalize_english_var.get())
         )
         normalize_checkbox.pack(side='left', padx=(0, 0))
         create_tooltip(normalize_checkbox, "会社名の全角英語を半角に変換します\n例：Ｓｔａｎｄａｒｄ  →  Standard")
 
-        # 実行ボタン
+        # リネーム実行ボタン（一番下）
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(fill='x', pady=(0, 0), padx=20)
+
         self.left_execute_btn = tk.Button(
-            frame,
+            button_frame,
             text="🔄 リネーム実行",
             command=self._left_execute,
             font=('Yu Gothic UI', 11, 'bold'),
@@ -634,25 +626,9 @@ class TaxDocumentRenamerV5:
             activebackground='#374151',
             activeforeground='white'
         )
-        self.left_execute_btn.pack(pady=(15, 10), fill='x')
+        self.left_execute_btn.pack(fill='x')
         create_tooltip(self.left_execute_btn,
                       "フォルダを選択してリネーム実行\nフォルダ名を自動で標準化されたファイル名に変換します")
-
-        # YYMMが保存されていて有効な場合はボタンを有効化
-        if saved_yymm:
-            self._left_validate_yymm()
-        else:
-            self.left_execute_btn.config(state='disabled')  # 初期状態は無効化
-
-        # 進捗表示
-        self.left_progress_var = tk.StringVar(value="")
-        ttk.Label(
-            frame,
-            textvariable=self.left_progress_var,
-            wraplength=220,
-            font=('Yu Gothic UI', 9),
-            foreground='#666666'
-        ).pack(pady=5)
 
     def _create_municipality_settings(self, parent):
         """自治体設定UIの作成"""
@@ -733,9 +709,6 @@ class TaxDocumentRenamerV5:
         ttk.Button(result_button_frame, text="出力フォルダを開く",
                   command=self._open_output_folder,
                   style='Secondary.TButton', width=18).pack(side='left', padx=(0, 8))
-        ttk.Button(result_button_frame, text="結果をエクスポート",
-                  command=self._export_results,
-                  style='Success.TButton', width=18).pack(side='left', padx=8)
         ttk.Button(result_button_frame, text="結果をクリア",
                   command=self._clear_results,
                   style='Danger.TButton', width=15).pack(side='left', padx=8)
@@ -779,9 +752,9 @@ class TaxDocumentRenamerV5:
         ttk.Button(log_button_frame, text="🗑️ ログクリア",
                   command=self._clear_log,
                   style='Danger.TButton', width=15).pack(side='left', padx=(0, 8))
-        ttk.Button(log_button_frame, text="💾 ログ保存",
-                  command=self._save_log,
-                  style='Success.TButton', width=15).pack(side='left', padx=8)
+        ttk.Button(log_button_frame, text="📋 ログ全体をコピー",
+                  command=self._copy_all_log,
+                  style='Success.TButton', width=18).pack(side='left', padx=8)
 
     def _create_municipality_settings(self, parent_frame):
         """自治体設定UIの作成"""
@@ -967,10 +940,13 @@ class TaxDocumentRenamerV5:
         """フォルダ選択"""
         folder = filedialog.askdirectory(title="フォルダを選択")
         if folder:
+            # 直近で処理したフォルダを記録
+            self._last_processed_folder = folder
+
             files = []
             for ext in ['.pdf', '.csv']:
                 files.extend(Path(folder).glob(f"*{ext}"))
-            
+
             if files:
                 self._on_files_dropped([str(f) for f in files])
             else:
@@ -2199,14 +2175,23 @@ class TaxDocumentRenamerV5:
                 print(f"[DEBUG] Failed to add error to tree: {e}")
 
     def _open_output_folder(self):
-        """出力フォルダを開く"""
-        # 実装省略
-        pass
-
-    def _export_results(self):
-        """結果をエクスポート"""
-        # 実装省略
-        pass
+        """直近で処理したフォルダを開く"""
+        if hasattr(self, '_last_processed_folder') and self._last_processed_folder:
+            import os
+            import subprocess
+            if os.path.exists(self._last_processed_folder):
+                try:
+                    if os.name == 'nt':  # Windows
+                        os.startfile(self._last_processed_folder)
+                    elif os.name == 'posix':  # macOS/Linux
+                        subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', self._last_processed_folder])
+                    self._log(f"出力フォルダを開きました: {self._last_processed_folder}")
+                except Exception as e:
+                    messagebox.showerror("エラー", f"フォルダを開けませんでした:\n{str(e)}")
+            else:
+                messagebox.showwarning("警告", "出力フォルダが見つかりません")
+        else:
+            messagebox.showinfo("情報", "まだ処理が実行されていません")
 
     def _clear_results(self):
         """結果をクリア"""
@@ -2238,10 +2223,16 @@ class TaxDocumentRenamerV5:
         if self.log_text and hasattr(self.log_text, 'delete'):
             self.log_text.delete(1.0, tk.END)
 
-    def _save_log(self):
-        """ログ保存"""
-        # 実装省略
-        pass
+    def _copy_all_log(self):
+        """ログ全体をクリップボードにコピー"""
+        if hasattr(self, 'log_text') and self.log_text:
+            log_content = self.log_text.get("1.0", tk.END)
+            self.root.clipboard_clear()
+            self.root.clipboard_append(log_content)
+            messagebox.showinfo("完了", "ログ全体をクリップボードにコピーしました")
+            self._log("ログをクリップボードにコピーしました")
+        else:
+            messagebox.showinfo("情報", "ログがありません")
 
 
     def _should_exclude_blank_page(self, ocr_text: str, filename: str) -> bool:
@@ -2295,11 +2286,20 @@ class TaxDocumentRenamerV5:
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="ファイル(F)", menu=file_menu)
 
-        # 左側処理
-        file_menu.add_command(label="左側（フォルダリネーム）", command=self._left_execute)
+        # 左側処理（5種類）
+        left_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="左側処理", menu=left_menu)
+        left_menu.add_command(label="源泉税", command=lambda: self._set_process_and_execute("源泉税"))
+        left_menu.add_command(label="申請届出（国税のみ）", command=lambda: self._set_process_and_execute("申請届出（国税のみ）"))
+        left_menu.add_command(label="法定調書", command=lambda: self._set_process_and_execute("法定調書"))
+        left_menu.add_command(label="給与支払報告書", command=lambda: self._set_process_and_execute("給与支払報告書"))
+        left_menu.add_command(label="償却資産申告書", command=lambda: self._set_process_and_execute("償却資産申告書"))
 
-        # 右側処理
-        file_menu.add_command(label="右側（AI分類・リネーム）", command=self._select_folder)
+        # 右側処理（2種類）
+        right_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="右側処理", menu=right_menu)
+        right_menu.add_command(label="確定申告", command=lambda: self._set_right_mode_and_execute("確定申告"))
+        right_menu.add_command(label="中間申告", command=lambda: self._set_right_mode_and_execute("中間申告"))
 
         file_menu.add_separator()
         file_menu.add_command(label="終了", command=self.root.quit)
@@ -2330,7 +2330,7 @@ class TaxDocumentRenamerV5:
         """使い方ダイアログ表示"""
         help_window = tk.Toplevel(self.root)
         help_window.title("使い方")
-        help_window.geometry("650x550")
+        help_window.geometry("700x650")
 
         text_widget = tk.Text(help_window, wrap='word', font=('Yu Gothic UI', 10), padx=15, pady=15)
         text_widget.pack(fill='both', expand=True)
@@ -2353,19 +2353,25 @@ class TaxDocumentRenamerV5:
 
 ステップ1: 年月を入力
 　→ 4桁の数字で入力（例：2025年1月 → 2501）
+　→ フォルダリネーム時に使用されます
 
-ステップ2: 本表の番号を選択
-　→ 通常は「01」を選択
+ステップ2: 処理プロセスを選択
+　→ 源泉税・申請届出・法定調書：01, 02
+　→ 給与支払報告書・償却資産申告書：0001, 9001
 
-ステップ3: 受信通知の番号を選択
-　→ 通常は「02」を選択
-
-ステップ4: 会社名の英語表記（オプション）
+ステップ3: 会社名の英語表記（オプション）
 　→ 全角の英語を半角にしたい場合はチェック
 　　（例：Ｓｔａｎｄａｒｄ  →  Standard）
 
-ステップ5: 実行ボタンをクリック
+ステップ4: 実行ボタンをクリック
 　→ フォルダを選ぶと自動で処理が始まります
+
+【対応処理タイプ】
+　・源泉税
+　・申請届出（国税のみ）
+　・法定調書
+　・給与支払報告書
+　・償却資産申告書
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ■ 右側の使い方（書類の自動分類）
@@ -2374,11 +2380,14 @@ class TaxDocumentRenamerV5:
 ステップ1: 年月を入力
 　→ 4桁の数字で入力（例：2025年1月 → 2501）
 
-ステップ2: 市区町村を設定（該当する場合のみ）
+ステップ2: 処理モードを選択
+　→ 確定申告 または 中間申告
+
+ステップ3: 市区町村を設定（該当する場合のみ）
 　→ セット1: 東京都特別区優先（あれば）
 　→ セット2～5: その他の市区町村
 
-ステップ3: 実行ボタンをクリック
+ステップ4: 実行ボタンをクリック
 　→ フォルダを選ぶと自動で分類が始まります
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2386,8 +2395,15 @@ class TaxDocumentRenamerV5:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ファイル(F)
-　・左側（フォルダリネーム）：源泉税フォルダの整理
-　・右側（AI分類・リネーム）：書類の自動分類
+　・左側処理：5種類の処理から選択
+　　- 源泉税
+　　- 申請届出（国税のみ）
+　　- 法定調書
+　　- 給与支払報告書
+　　- 償却資産申告書
+　・右側処理：2種類のモードから選択
+　　- 確定申告
+　　- 中間申告
 　・終了：アプリを閉じる
 
 表示(V)
@@ -2403,6 +2419,20 @@ class TaxDocumentRenamerV5:
 　・バージョン情報：アプリの情報を表示
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ 処理結果ウィンドウの機能
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+　・出力フォルダを開く：直近で処理したフォルダを開く
+　・結果をクリア：処理結果をクリアする
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+■ ログウィンドウの機能
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+　・ログクリア：ログを消去する
+　・ログ全体をコピー：すべてのログをクリップボードにコピー
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ■ ショートカットキー
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2414,6 +2444,23 @@ Ctrl+2：ログウィンドウを開く
         text_widget.configure(state='disabled')
 
         ttk.Button(help_window, text="閉じる", command=help_window.destroy).pack(pady=10)
+
+    def _set_process_and_execute(self, process_type):
+        """左側処理タイプを設定して実行"""
+        self.process_type_var.set(process_type)
+        # 接頭辞を自動設定
+        if process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+            self.left_main_prefix_var.set("01")
+            self.left_receipt_prefix_var.set("02")
+        elif process_type in ["給与支払報告書", "償却資産申告書"]:
+            self.left_main_prefix_var.set("0001")
+            self.left_receipt_prefix_var.set("9001")
+        self._left_execute()
+
+    def _set_right_mode_and_execute(self, mode):
+        """右側処理モードを設定して実行"""
+        self.process_mode_var.set(mode)
+        self._select_folder()
 
     def _show_about(self):
         """バージョン情報ダイアログ表示"""
@@ -2471,25 +2518,32 @@ Ctrl+2：ログウィンドウを開く
         # 空欄チェック
         if not yymm_value:
             self.left_yymm_status_var.set("📋 YYMM入力待ち")
-            self.left_execute_btn.config(state='disabled')
+            if hasattr(self, 'left_execute_btn'):
+                self.left_execute_btn.config(state='disabled')
             return
 
         # 4桁数字チェック
         if not re.match(r'^\d{4}$', yymm_value):
             self.left_yymm_status_var.set("⚠️ 無効: 4桁数字で入力してください")
-            self.left_execute_btn.config(state='disabled')
+            if hasattr(self, 'left_execute_btn'):
+                self.left_execute_btn.config(state='disabled')
             return
 
         # 月の妥当性チェック (01-12)
         month = int(yymm_value[2:4])
         if month < 1 or month > 12:
             self.left_yymm_status_var.set("⚠️ 無効: 月は01-12の範囲で入力してください")
-            self.left_execute_btn.config(state='disabled')
+            if hasattr(self, 'left_execute_btn'):
+                self.left_execute_btn.config(state='disabled')
             return
 
         # 正常
         self.left_yymm_status_var.set(f"✓ 正常: {yymm_value}")
-        self.left_execute_btn.config(state='normal')
+        if hasattr(self, 'left_execute_btn'):
+            self.left_execute_btn.config(state='normal')
+
+        # 設定を保存
+        self.user_settings.save_setting("left_yymm_value", yymm_value)
 
     def _left_execute(self):
         """左側フォルダリネーム実行（統一パラメータ + 個別処理）"""
@@ -2513,6 +2567,9 @@ Ctrl+2：ログウィンドウを開く
         folder_path = filedialog.askdirectory(title="リネーム対象フォルダを選択")
         if not folder_path:
             return
+
+        # 直近で処理したフォルダを記録
+        self._last_processed_folder = folder_path
 
         # 進捗表示更新
         self.left_progress_var.set("処理中...")
@@ -3308,7 +3365,7 @@ Ctrl+2：ログウィンドウを開く
             self._log("[申請届出] 処理完了")
 
             # 完了メッセージ表示
-            self.root.after(0, lambda: messagebox.showinfo("完了", "申請届出の処理が完了しました"))
+            self.root.after(0, lambda: messagebox.showinfo("完了", "処理が完了しました"))
 
         except Exception as e:
             self._log(f"[申請届出] エラー: {str(e)}")
@@ -3434,7 +3491,7 @@ Ctrl+2：ログウィンドウを開く
             self._log("[給与支払報告書] 処理完了")
 
             # 完了メッセージ表示
-            self.root.after(0, lambda: messagebox.showinfo("完了", "給与支払報告書の処理が完了しました"))
+            self.root.after(0, lambda: messagebox.showinfo("完了", "処理が完了しました"))
 
         except Exception as e:
             self._log(f"[給与支払報告書] エラー: {str(e)}")
@@ -3494,7 +3551,7 @@ Ctrl+2：ログウィンドウを開く
             self._log("[償却資産申告書] 処理完了")
 
             # 完了メッセージ表示
-            self.root.after(0, lambda: messagebox.showinfo("完了", "償却資産申告書の処理が完了しました"))
+            self.root.after(0, lambda: messagebox.showinfo("完了", "処理が完了しました"))
 
         except Exception as e:
             self._log(f"[償却資産申告書] エラー: {str(e)}")
@@ -4783,14 +4840,8 @@ Ctrl+2：ログウィンドウを開く
         else:
             self.left_progress_var.set(f"完了: {processed_count}/{total_count}フォルダ作成")
 
-            # 結果ダイアログ
-            message = f"処理完了:\n\n作成フォルダ: {processed_count}個\n本表ファイル: {total_count}件"
-            if errors:
-                message += f"\n\nエラー・警告 ({len(errors)}件):\n" + "\n".join(errors[:5])
-                if len(errors) > 5:
-                    message += f"\n... 他{len(errors)-5}件"
-
-            messagebox.showinfo("処理完了", message)
+            # 結果ダイアログ（処理件数は表示しない）
+            messagebox.showinfo("完了", "処理が完了しました")
 
     def run(self):
         """アプリケーション実行"""
