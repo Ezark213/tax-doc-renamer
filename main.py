@@ -63,6 +63,15 @@ class TaxDocumentRenamerV5:
         self.root.title("税務書類リネームシステム")
         self.root.geometry("1200x800")
 
+        # アプリケーションアイコン設定
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'app_icon.png')
+            if os.path.exists(icon_path):
+                icon_image = tk.PhotoImage(file=icon_path)
+                self.root.iconphoto(True, icon_image)
+        except Exception as e:
+            pass  # アイコン読み込みエラーは無視
+
         # パフォーマンス最適化: ダブルバッファリングとスムーズな再描画
         try:
             # Windowsでのちらつき防止

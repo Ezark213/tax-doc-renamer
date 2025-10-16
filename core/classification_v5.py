@@ -297,15 +297,12 @@ class DocumentClassifierV5:
             },
             
             "0003_受信通知": {
-                "priority": 130,
+                "priority": 150,  # 地方税受信通知より優先
                 "highest_priority_conditions": [
-                    AndCondition(["メール詳細", "種目 法人税及び地方法人税申告書"], "all"),
-                    AndCondition(["受付番号", "税目 法人税", "受付日時"], "all"),
-                    AndCondition(["提出先", "税務署", "法人税及び地方法人税申告書"], "all"),
-                    AndCondition(["送信されたデータを受け付けました", "法人税"], "all")
+                    AndCondition([r"法\s*人\s*税", r"デ\s*ー\s*タ\s*を\s*受\s*け\s*付\s*け", r"種\s*目"], "all", use_regex=True)
                 ],
                 "exact_keywords": ["法人税 受信通知", "受信通知 法人税"],
-                "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
+                "partial_keywords": ["受信通知", "国税電子申告"],
                 "exclude_keywords": ["消費税申告書", "納付区分番号通知"],
                 "filename_keywords": []
             },
@@ -318,8 +315,8 @@ class DocumentClassifierV5:
                     AndCondition(["納付先", "税務署", "法人税及地方法人税"], "all"),
                     AndCondition(["納付内容を確認し", "法人税"], "all")
                 ],
-                "exact_keywords": ["法人税 納付情報", "納付情報 法人税", "納付区分番号通知"],
-                "partial_keywords": ["納付情報", "納付書", "国税 納付"],
+                "exact_keywords": ["法人税 納付情報", "納付情報 法人税"],
+                "partial_keywords": [],
                 "exclude_keywords": ["消費税及地方消費税", "受信通知"],
                 "filename_keywords": []
             },
@@ -349,8 +346,8 @@ class DocumentClassifierV5:
                     AndCondition(["都税事務所", "受付完了通知", "特別法人事業税"], "all")
                 ],
                 "exact_keywords": ["都道府県 受信通知"],
-                "partial_keywords": ["受信通知", "地方税電子申告"],
-                "exclude_keywords": ["市町村", "市民税", "国税電子申告"],
+                "partial_keywords": ["地方税電子申告"],
+                "exclude_keywords": ["市町村", "市民税", "国税電子申告", "税務署"],
                 "filename_keywords": []
             },
             
@@ -396,8 +393,8 @@ class DocumentClassifierV5:
                     AndCondition(["福岡市", "市町村申告書", "受付番号"], "all")
                 ],
                 "exact_keywords": ["市町村 受信通知", "申告受付完了通知"],
-                "partial_keywords": ["受信通知", "地方税電子申告", "市役所"],
-                "exclude_keywords": ["県税事務所", "都税事務所", "法人事業税", "国税電子申告"],
+                "partial_keywords": ["地方税電子申告", "市役所"],
+                "exclude_keywords": ["県税事務所", "都税事務所", "法人事業税", "国税電子申告", "税務署"],
                 "filename_keywords": []
             },
             
@@ -480,15 +477,12 @@ class DocumentClassifierV5:
             },
             
             "3003_受信通知": {
-                "priority": 130,
+                "priority": 150,  # 地方税受信通知より優先
                 "highest_priority_conditions": [
-                    AndCondition(["メール詳細", "種目 消費税申告書"], "all"),
-                    AndCondition(["受付番号", "消費税及び地方消費税", "受付日時"], "all"),
-                    AndCondition(["提出先", "税務署", "消費税申告書"], "all"),
-                    AndCondition(["送信されたデータを受け付けました", "消費税"], "all")
+                    AndCondition([r"消\s*費\s*税", r"デ\s*ー\s*タ\s*を\s*受\s*け\s*付\s*け", r"種\s*目"], "all", use_regex=True)
                 ],
-                "exact_keywords": ["消費税 受信通知", "受信通知 消費税"],
-                "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
+                "exact_keywords": [],
+                "partial_keywords": [],
                 "exclude_keywords": ["法人税及び地方法人税申告書", "納付区分番号通知"],
                 "filename_keywords": []
             },
@@ -501,8 +495,8 @@ class DocumentClassifierV5:
                     AndCondition(["納付先", "税務署", "消費税及地方消費税"], "all"),
                     AndCondition(["納付内容を確認し", "消費税"], "all")
                 ],
-                "exact_keywords": ["消費税 納付情報", "納付情報 消費税", "消費税 納付区分番号通知"],
-                "partial_keywords": ["納付情報", "納付書", "納付区分番号通知"],
+                "exact_keywords": ["消費税 納付情報", "納付情報 消費税"],
+                "partial_keywords": [],
                 "exclude_keywords": ["法人税及地方法人税", "受信通知"],
                 "filename_keywords": []
             },
