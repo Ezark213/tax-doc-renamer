@@ -63,6 +63,13 @@ class TaxDocumentRenamerV5:
         self.root.title("税務書類リネームシステム")
         self.root.geometry("1200x800")
 
+        # パフォーマンス最適化: ダブルバッファリングとスムーズな再描画
+        try:
+            # Windowsでのちらつき防止
+            self.root.wm_attributes('-alpha', 0.0)  # 初期化中は非表示
+        except:
+            pass
+
         # カラースキーム定義
         self.colors = {
             'primary': '#4F46E5',      # メインの青紫
@@ -146,6 +153,9 @@ class TaxDocumentRenamerV5:
 
         # 自治体セットのデフォルト設定
         self._setup_default_municipalities()
+
+        # パフォーマンス最適化: フォーカスイベントの処理を最適化
+        self._setup_focus_optimization()
         
         # Bundle二重処理防止: 起動時の古い__split_ファイル一括クリーンアップ
         self._cleanup_old_split_files()
@@ -511,9 +521,10 @@ class TaxDocumentRenamerV5:
         
         entry = ttk.Entry(yymm_frame, textvariable=self.left_yymm_var, width=10, font=('Yu Gothic UI', 10))
         entry.pack(side='left', padx=(10, 5))
+        create_tooltip(entry, "年月を4桁で入力（例: 2501）\nフォルダリネーム時に使用されます")
 
         # ステータス表示
-        self.left_yymm_status_var = tk.StringVar(value="未入力" if not saved_yymm else "")
+        self.left_yymm_status_var = tk.StringVar(value="📋 YYMM入力待ち" if not saved_yymm else f"✓ 正常: {saved_yymm}")
         ttk.Label(
             yymm_frame,
             textvariable=self.left_yymm_status_var,
@@ -557,6 +568,8 @@ class TaxDocumentRenamerV5:
             font=('Yu Gothic UI', 10)
         )
         process_combo.pack(side='left', padx=(10, 0))
+        create_tooltip(process_combo,
+                      "処理プロセスを選択\n・源泉税: 01, 02\n・申請届出（国税のみ）: 01, 02\n・法定調書: 01, 02\n・給与支払報告書: 0001, 9001\n・償却資産申告書: 0001, 9001")
 
         # 接頭辞を内部変数として初期化（UIには表示しない）
         self.left_main_prefix_var = tk.StringVar()
@@ -597,11 +610,13 @@ class TaxDocumentRenamerV5:
         normalize_frame.pack(fill='x', pady=(5, 5))
 
         self.normalize_english_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
+        normalize_checkbox = ttk.Checkbutton(
             normalize_frame,
-            text="英語を半角に変換(Ｓｔａｎｄａｒｄ→Standard)",
+            text="英語を半角に変換（例：Ｓｔａｎｄａｒｄ  →  Standard）",
             variable=self.normalize_english_var
-        ).pack(side='left', padx=(0, 0))
+        )
+        normalize_checkbox.pack(side='left', padx=(0, 0))
+        create_tooltip(normalize_checkbox, "会社名の全角英語を半角に変換します\n例：Ｓｔａｎｄａｒｄ  →  Standard")
 
         # 実行ボタン
         self.left_execute_btn = tk.Button(
@@ -620,7 +635,9 @@ class TaxDocumentRenamerV5:
             activeforeground='white'
         )
         self.left_execute_btn.pack(pady=(15, 10), fill='x')
-        
+        create_tooltip(self.left_execute_btn,
+                      "フォルダを選択してリネーム実行\nフォルダ名を自動で標準化されたファイル名に変換します")
+
         # YYMMが保存されていて有効な場合はボタンを有効化
         if saved_yymm:
             self._left_validate_yymm()
@@ -628,7 +645,7 @@ class TaxDocumentRenamerV5:
             self.left_execute_btn.config(state='disabled')  # 初期状態は無効化
 
         # 進捗表示
-        self.left_progress_var = tk.StringVar(value="YYMMを入力してください" if not saved_yymm else "")
+        self.left_progress_var = tk.StringVar(value="")
         ttk.Label(
             frame,
             textvariable=self.left_progress_var,
@@ -809,9 +826,9 @@ class TaxDocumentRenamerV5:
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
 
-            # セット1のみ「（東京都優先）」の注釈を右側に表示
+            # セット1のみ「（東京都特別区優先）」の注釈を右側に表示
             if i == 1:
-                ttk.Label(set_frame, text="（東京都優先）", foreground='gray').pack(side='left', padx=(5, 0))
+                ttk.Label(set_frame, text="（東京都特別区優先）", foreground='gray').pack(side='left', padx=(5, 0))
 
             # セット1のみ動的制御：東京都の場合は無効化
             if i == 1:
@@ -863,7 +880,24 @@ class TaxDocumentRenamerV5:
                 if prefecture_var and city_var:
                     prefecture_var.set(municipality_data.get("prefecture", ""))
                     city_var.set(municipality_data.get("city", ""))
-    
+
+    def _setup_focus_optimization(self):
+        """フォーカスイベント時の再描画最適化"""
+        def on_focus_in(event):
+            """ウィンドウがフォーカスを取得した時の処理"""
+            # 一時的に再描画を抑制してからまとめて更新
+            self.root.update_idletasks()
+
+        def on_visibility(event):
+            """ウィンドウの可視性が変更された時の処理"""
+            if event.state == 'VisibilityUnobscured':
+                # ウィンドウが完全に表示される時のみ更新
+                self.root.update_idletasks()
+
+        # イベントバインディング
+        self.root.bind('<FocusIn>', on_focus_in)
+        self.root.bind('<Visibility>', on_visibility)
+
     def _cleanup_old_split_files(self):
         """Bundle二重処理防止: 古い__split_ファイルを一括クリーンアップ"""
         try:
@@ -2328,7 +2362,7 @@ class TaxDocumentRenamerV5:
 
 ステップ4: 会社名の英語表記（オプション）
 　→ 全角の英語を半角にしたい場合はチェック
-　　（例：Ｓｔａｎｄａｒｄ → Standard）
+　　（例：Ｓｔａｎｄａｒｄ  →  Standard）
 
 ステップ5: 実行ボタンをクリック
 　→ フォルダを選ぶと自動で処理が始まります
@@ -2341,7 +2375,7 @@ class TaxDocumentRenamerV5:
 　→ 4桁の数字で入力（例：2025年1月 → 2501）
 
 ステップ2: 市区町村を設定（該当する場合のみ）
-　→ セット1: 東京都優先（あれば）
+　→ セット1: 東京都特別区優先（あれば）
 　→ セット2～5: その他の市区町村
 
 ステップ3: 実行ボタンをクリック
@@ -2436,25 +2470,25 @@ Ctrl+2：ログウィンドウを開く
 
         # 空欄チェック
         if not yymm_value:
-            self.left_yymm_status_var.set("未入力")
+            self.left_yymm_status_var.set("📋 YYMM入力待ち")
             self.left_execute_btn.config(state='disabled')
             return
 
         # 4桁数字チェック
         if not re.match(r'^\d{4}$', yymm_value):
-            self.left_yymm_status_var.set("✗ 4桁数字")
+            self.left_yymm_status_var.set("⚠️ 無効: 4桁数字で入力してください")
             self.left_execute_btn.config(state='disabled')
             return
 
         # 月の妥当性チェック (01-12)
         month = int(yymm_value[2:4])
         if month < 1 or month > 12:
-            self.left_yymm_status_var.set("✗ 月は01-12")
+            self.left_yymm_status_var.set("⚠️ 無効: 月は01-12の範囲で入力してください")
             self.left_execute_btn.config(state='disabled')
             return
 
         # 正常
-        self.left_yymm_status_var.set("✓ 正常")
+        self.left_yymm_status_var.set(f"✓ 正常: {yymm_value}")
         self.left_execute_btn.config(state='normal')
 
     def _left_execute(self):
@@ -3788,7 +3822,7 @@ Ctrl+2：ログウィンドウを開く
 
                     # 処理結果を表示
                     self.root.after(0, lambda pn=page_num+1, fn=folder_name, rfn=receipt_filename:
-                        self._add_result_success(f"{receipt_type}受信通知", f"Page {pn}", f"{fn}/{rfn}"))
+                        self._add_result_success(f"Page {pn}", f"{fn}/{rfn}", f"{receipt_type}受信通知", "フォルダ名マッチ", "高"))
                 else:
                     self._log(f"[{receipt_type}受信通知] Page {page_num}: マッチするフォルダが見つかりません")
                 
@@ -4761,6 +4795,14 @@ Ctrl+2：ログウィンドウを開く
     def run(self):
         """アプリケーション実行"""
         self._log("税務書類リネームシステム v7.2.3-MULTI-PATTERN-RECEIPT 起動 (マルチパターン受信通知検出版)")
+
+        # パフォーマンス最適化: UI構築完了後にウィンドウを表示
+        try:
+            self.root.wm_attributes('-alpha', 1.0)  # 完全に表示
+            self.root.update_idletasks()  # 初回描画を完了
+        except:
+            pass
+
         self.root.mainloop()
 
 if __name__ == "__main__":
