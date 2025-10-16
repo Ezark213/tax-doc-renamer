@@ -337,7 +337,7 @@ class DocumentClassifierV5:
                     "都道府県申告書", "法人事業税申告書", "都道府県民税申告書"
                 ],
                 "partial_keywords": [],
-                "exclude_keywords": ["市町村", "市民税", "市役所", "町役場", "村役場", "受信通知", "納付情報"],
+                "exclude_keywords": ["市町村民税", "市民税", "市役所", "町役場", "村役場", "受信通知", "納付情報"],  # 「市町村」を「市町村民税」に変更
                 "filename_keywords": []
             },
             
@@ -523,11 +523,18 @@ class DocumentClassifierV5:
             "5002_総勘定元帳": {
                 "priority": 140,  # 最高優先度
                 "highest_priority_conditions": [
-                    AndCondition(["総勘定元帳"], "any")
+                    # タイトルが画像の場合に備えて表構造で判定
+                    AndCondition(["総勘定元帳"], "any"),
+                    # 総勘定元帳の表構造: 借方・貸方・残高の3列がある
+                    AndCondition(["借方", "貸方", "残高"], "all"),
+                    # 総勘定元帳の表構造: 相手科目・摘要がある
+                    AndCondition(["相手科目", "摘要", "借方"], "all"),
+                    # 総勘定元帳の表構造: 相手科目・摘要・残高がある
+                    AndCondition(["相手科目", "摘要", "残高"], "all")
                 ],
                 "exact_keywords": ["総勘定元帳"],
                 "partial_keywords": ["総勘定", "元帳"],
-                "exclude_keywords": ["補助元帳", "補助", "内国法人", "確定申告", "01_内国法人"],  # 法人税申告書を除外
+                "exclude_keywords": ["補助元帳", "内国法人", "確定申告", "01_内国法人", "貸借対照表", "残高試算表"],  # 貸借対照表と残高試算表を追加
                 "filename_keywords": []
             },
             
