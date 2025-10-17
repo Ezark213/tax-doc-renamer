@@ -1290,35 +1290,33 @@ class TaxDocumentRenamerV5:
             return False
 
     def _process_csv_file(self, file_path: str, output_folder: str) -> bool:
-        """【REQ-002】CSV ファイル処理（仕訳帳対応）"""
+        """【REQ-002】CSV ファイル処理（仕訳データ対応）
+
+        【修正】すべてのCSVファイルを5006_仕訳データとして処理
+        ファイル名や内容に関わらず、拡張子が.csvの場合は5006として固定分類
+        """
         try:
             filename = os.path.basename(file_path)
-            
-            # CSVファイル内容を読み込んで仕訳帳かどうか判定
-            is_journal = self._is_csv_journal(file_path)
-            
-            if is_journal:
-                # 5006_仕訳帳としてリネーム
-                yymm = self.year_month_var.get()
-                new_filename = f"5006_仕訳帳_{yymm}.csv"
-                output_path = os.path.join(output_folder, new_filename)
-                
-                # 重複回避処理
-                output_path = self._generate_unique_filename(output_path)
-                
-                # ファイルコピー
-                import shutil
-                # 【修正】shutil.copy()を使用して新しいファイルとして作成（タイムスタンプを現在時刻に）
-                # copy2はメタデータ（タイムスタンプ）を保持するが、copyは保持しない
-                shutil.copy(file_path, output_path)
-                
-                self.root.after(0, lambda f=filename, nf=os.path.basename(output_path): 
-                               self._log(f"[REQ-002] CSV仕訳帳処理完了: {f} → {nf}"))
-                return True
-            else:
-                self.root.after(0, lambda f=filename: self._log(f"[REQ-002] 仕訳帳以外のCSVファイル: {f}"))
-                return False
-                
+
+            # 【修正】すべてのCSVファイルを5006_仕訳データとして処理
+            # ファイル名や内容による判定を行わず、常に5006として処理
+            yymm = self.year_month_var.get()
+            new_filename = f"5006_仕訳データ_{yymm}.csv"
+            output_path = os.path.join(output_folder, new_filename)
+
+            # 重複回避処理
+            output_path = self._generate_unique_filename(output_path)
+
+            # ファイルコピー
+            import shutil
+            # 【修正】shutil.copy()を使用して新しいファイルとして作成（タイムスタンプを現在時刻に）
+            # copy2はメタデータ（タイムスタンプ）を保持するが、copyは保持しない
+            shutil.copy(file_path, output_path)
+
+            self.root.after(0, lambda f=filename, nf=os.path.basename(output_path):
+                           self._log(f"[CSV] 仕訳データ処理完了: {f} → {nf}"))
+            return True
+
         except Exception as e:
             filename = os.path.basename(file_path)
             error_msg = str(e)

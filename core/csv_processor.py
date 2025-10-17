@@ -253,13 +253,17 @@ class CSVProcessor:
         return "YYMM"  # デフォルト値
 
     def process_csv(self, file_path: str) -> CSVProcessResult:
-        """CSV処理のメイン処理"""
+        """CSV処理のメイン処理
+
+        【修正】すべてのCSVファイルを5006_仕訳データに固定分類
+        ファイル名や内容に関わらず、拡張子が.csvの場合は5006として処理
+        """
         filename = os.path.basename(file_path)
-        
+
         try:
             # CSV読み込み
             df, read_status = self.read_csv_safely(file_path)
-            
+
             if df is None:
                 return CSVProcessResult(
                     filename=filename,
@@ -268,18 +272,14 @@ class CSVProcessor:
                     success=False,
                     error_message=f"CSV読み込み失敗: {read_status}"
                 )
-            
-            # 書類分類
-            doc_type = self.classify_csv_by_filename(filename)
-            if not doc_type:
-                doc_type = self.classify_csv_by_content(df)
-            
-            if not doc_type:
-                doc_type = "5006_仕訳データ"  # デフォルト
-            
+
+            # 【修正】すべてのCSVファイルを5006_仕訳データに固定
+            # ファイル名や内容による分類を行わず、常に5006を返す
+            doc_type = "5006_仕訳データ"
+
             # 年月抽出
             year_month = self.extract_year_month_from_csv(file_path, df)
-            
+
             return CSVProcessResult(
                 filename=filename,
                 document_type=doc_type,
@@ -289,7 +289,7 @@ class CSVProcessor:
                 columns=list(df.columns),
                 error_message=None
             )
-            
+
         except Exception as e:
             return CSVProcessResult(
                 filename=filename,
