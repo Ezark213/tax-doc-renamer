@@ -297,13 +297,30 @@ class DocumentClassifierV5:
             },
             
             "0003_受信通知": {
-                "priority": 150,  # 地方税受信通知より優先
+                "priority": 280,  # Phase 2-1: 受信通知を最優先グループに変更（0001/0002より上位）
                 "highest_priority_conditions": [
+                    # Phase 2-2: 【新条件1】メール詳細 + 定型文 + 種目の完全値（最優先）
+                    AndCondition(["メール詳細", "送信されたデータを受け付けました", "法人税及び地方法人税申告書"], "all"),
+
+                    # 【新条件2】正規表現による空白許容マッチ（バックアップ）
+                    AndCondition([r"法\s*人\s*税\s*及\s*び\s*地\s*方\s*法\s*人\s*税\s*申\s*告\s*書"], "any", use_regex=True),
+                    AndCondition([r"メ\s*ー\s*ル\s*詳\s*細", r"受\s*け\s*付\s*け\s*ま\s*し\s*た"], "all", use_regex=True),
+
+                    # 【旧条件】後方互換性のため残す（優先度は下がる）
                     AndCondition([r"法\s*人\s*税", r"デ\s*ー\s*タ\s*を\s*受\s*け\s*付\s*け", r"種\s*目"], "all", use_regex=True)
                 ],
-                "exact_keywords": ["法人税 受信通知", "受信通知 法人税"],
-                "partial_keywords": ["受信通知", "国税電子申告"],
-                "exclude_keywords": ["消費税申告書", "納付区分番号通知"],
+                "exact_keywords": [
+                    "メール詳細",
+                    "送信されたデータを受け付けました",
+                    "法人税及び地方法人税申告書",
+                    "法人税 受信通知",
+                    "受信通知 法人税"
+                ],
+                "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
+                "exclude_keywords": [
+                    "メール詳細（納付区分番号通知）",  # Phase 2-2: 0004_納付情報との区別
+                    "消費税申告書"
+                ],
                 "filename_keywords": []
             },
             
@@ -477,13 +494,30 @@ class DocumentClassifierV5:
             },
             
             "3003_受信通知": {
-                "priority": 150,  # 地方税受信通知より優先
+                "priority": 280,  # Phase 2-1: 0003と対称的な優先度（受信通知最優先グループ）
                 "highest_priority_conditions": [
+                    # Phase 2-2: 【新条件1】メール詳細 + 定型文 + 種目の完全値（最優先）
+                    AndCondition(["メール詳細", "送信されたデータを受け付けました", "消費税申告書"], "all"),
+
+                    # 【新条件2】正規表現による空白許容マッチ（バックアップ）
+                    AndCondition([r"消\s*費\s*税\s*申\s*告\s*書"], "any", use_regex=True),
+                    AndCondition([r"メ\s*ー\s*ル\s*詳\s*細", r"受\s*け\s*付\s*け\s*ま\s*し\s*た"], "all", use_regex=True),
+
+                    # 【旧条件】後方互換性のため残す（優先度は下がる）
                     AndCondition([r"消\s*費\s*税", r"デ\s*ー\s*タ\s*を\s*受\s*け\s*付\s*け", r"種\s*目"], "all", use_regex=True)
                 ],
-                "exact_keywords": [],
-                "partial_keywords": [],
-                "exclude_keywords": ["法人税及び地方法人税申告書", "納付区分番号通知"],
+                "exact_keywords": [
+                    "メール詳細",
+                    "送信されたデータを受け付けました",
+                    "消費税申告書",
+                    "消費税 受信通知",
+                    "受信通知 消費税"
+                ],
+                "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
+                "exclude_keywords": [
+                    "メール詳細（納付区分番号通知）",  # Phase 2-2: 3004_納付情報との区別
+                    "法人税及び地方法人税申告書"
+                ],
                 "filename_keywords": []
             },
             
