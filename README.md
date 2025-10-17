@@ -1,17 +1,65 @@
-# 🧾 税務書類リネームシステム v8.5.4
+# 🧾 税務書類リネームシステム v8.5.5
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.4-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.5-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.17-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.4では、受信通知分類の改善とカスタムアイコンを追加しました。
+v8.5.5では、CSV分類を5006_仕訳データに統一し、ヘルプメッセージを改善しました。
 
 ---
 
-## 🚀 **v8.5.4 - 最新版（2025年10月17日）**
+## 🚀 **v8.5.5 - 最新版（2025年10月17日）**
+
+### 🆕 **CSV分類の統一化（v8.5.5）**
+
+#### 🎯 **実装内容**
+
+**1. すべてのCSVファイルを5006_仕訳データに固定分類**
+- ✅ **問題**: CSVファイルが「5002_総勘定元帳」として誤分類されるケースがあった
+- ✅ **修正**: ファイル名や内容に関わらず、拡張子が`.csv`の場合は常に`5006_仕訳データ`に分類
+- ✅ **影響範囲**:
+  - `core/csv_processor.py`: `process_csv()`メソッドを修正
+  - `main.py`: `_process_csv_file()`メソッドを修正
+
+**2. ヘルプメッセージの改善**
+- ✅ **セット1の説明を明確化**: 「23区内に本店がある場合のみ使用」と明記
+- ✅ **23区外の対処法を追加**: セット1を空白にしてセット2以降に入力することを説明
+- ✅ **セット2～5の説明拡充**: 「23区外を含む」と明示
+
+#### 📊 **修正詳細**
+
+**変更前:**
+```python
+# csv_processor.py
+doc_type = self.classify_csv_by_filename(filename)
+if not doc_type:
+    doc_type = self.classify_csv_by_content(df)
+if not doc_type:
+    doc_type = "5006_仕訳データ"  # デフォルト
+```
+
+**変更後:**
+```python
+# csv_processor.py
+# すべてのCSVファイルを5006_仕訳データに固定
+doc_type = "5006_仕訳データ"
+```
+
+#### 🧪 **テスト結果**
+
+すべてのCSVファイルが正しく`5006_仕訳データ_YYMM.csv`にリネームされます:
+
+- ✅ `5002_総勘定元帳_2511.csv` → `5006_仕訳データ_2511.csv`
+- ✅ `仕訳帳_20251012_1342.csv` → `5006_仕訳データ_YYMM.csv`
+- ✅ `test_data.csv` → `5006_仕訳データ_YYMM.csv`
+- ✅ `未分類.csv` → `5006_仕訳データ_YYMM.csv`
+
+---
+
+## 🚀 **v8.5.4 - 受信通知分類精度改善（2025年10月17日）**
 
 ### 🆕 **受信通知分類精度の大幅改善（v8.5.4）**
 
@@ -936,6 +984,18 @@ tax-doc-renamer/
 
 ## 📝 変更履歴
 
+### v8.5.5 (2025-10-17)
+- ✅ **FIX**: CSV分類を5006_仕訳データに統一
+  - 問題: CSVファイルが「5002_総勘定元帳」として誤分類されるケースがあった
+  - 修正: ファイル名や内容に関わらず、拡張子が`.csv`の場合は常に`5006_仕訳データ`に分類
+  - `core/csv_processor.py`: ファイル名・内容による分類ロジックを削除
+  - `main.py`: `_is_csv_journal()`による判定を削除
+  - テスト: すべてのCSVファイルが`5006_仕訳データ_YYMM.csv`にリネーム
+- ✅ **IMPROVE**: ヘルプメッセージの改善
+  - セット1: 「23区内に本店がある場合のみ使用」と明記
+  - 23区外のみの場合: セット1を空白にしてセット2以降に入力
+  - セット2～5: 「23区外を含む」と明示
+
 ### v8.5.4 (2025-10-17)
 - ✅ **FIX**: 受信通知（0003/3003）の分類精度を大幅改善
   - 問題: 国税.pdfから分割された受信通知が9999_未分類に誤分類
@@ -1135,13 +1195,13 @@ tax-doc-renamer/
 
 ---
 
-**🎯 税務書類リネームシステム v8.5.4**
-**受信通知分類改善・カスタムアイコン追加**
+**🎯 税務書類リネームシステム v8.5.5**
+**CSV分類統一・ヘルプメッセージ改善**
 
-🚀 **Latest Version!** 受信通知AND条件最適化、カスタムアイコン、納付情報クリーンアップ
+🚀 **Latest Version!** CSV分類を5006_仕訳データに統一、セット1使用方法の明確化
 
 **📅 最終更新: 2025年10月17日**
-**🚀 v8.5.4: 受信通知分類精度大幅改善+カスタムアイコン追加**
+**🚀 v8.5.5: CSV分類統一+ヘルプメッセージ改善**
 
 ---
 
