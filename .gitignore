@@ -66,6 +66,9 @@ error.log
 # Archive directories (moved old versions)
 archive/
 
+# Documentation with sensitive information
+docs/
+
 # Current active files preserved:
 # - main.py (latest version)
 # - core/ (modular architecture)
