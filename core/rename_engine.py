@@ -27,7 +27,7 @@ class RenameEngine:
 
     def __init__(self, logger: Optional[logging.Logger] = None, process_mode: str = "確定申告"):
         self.logger = logger or logging.getLogger(__name__)
-        self.process_mode = process_mode  # "確定申告" または "予定申告"
+        self.process_mode = process_mode  # "確定申告" または "中間申告"
 
         # 書類コードと名称のマッピング（既存システムから移植）
         self.code_titles = {

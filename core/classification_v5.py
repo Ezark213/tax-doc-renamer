@@ -127,7 +127,7 @@ class DocumentClassifierV5:
         Args:
             debug_mode: デバッグモードの有効化
             log_callback: ログ出力のコールバック関数
-            process_mode: 処理モード（"確定申告" または "予定申告"）
+            process_mode: 処理モード（"確定申告" または "中間申告"）
         """
         self.debug_mode = debug_mode
         self.log_callback = log_callback
@@ -235,7 +235,7 @@ class DocumentClassifierV5:
             
             "0001_法人税等申告書_予定申告": {
                 "priority": 250,  # 確定申告より高い優先度
-                "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
+                "process_mode": "中間申告",  # このルールは中間申告モードでのみ有効
                 "code_override": "0001_法人税等申告書",  # 実際に使用するコードは0001_法人税等申告書
                 "highest_priority_conditions": [
                     # 法人税 AND 予定申告書 AND (納付すべき法人税額 OR 納付すべき地方法人税額)
@@ -430,10 +430,10 @@ class DocumentClassifierV5:
             },
             
             # ===== 3000番台 - 消費税関連 =====
-            # 予定申告モード専用ルール - 最優先度250
+            # 中間申告モード専用ルール - 最優先度250
             "3001_消費税等申告書_予定申告": {
                 "priority": 250,  # 確定申告より高い優先度
-                "process_mode": "予定申告",  # このルールは予定申告モードでのみ有効
+                "process_mode": "中間申告",  # このルールは中間申告モードでのみ有効
                 "code_override": "3001_消費税等申告書",  # 実際に使用するコードは3001_消費税等申告書
                 "highest_priority_conditions": [
                     # 中間申告書 AND 消費税及び地方消費税
@@ -765,7 +765,7 @@ class DocumentClassifierV5:
                     # メタデータの取得
                     meta_data = rules.get("meta", {})
 
-                    # code_overrideがある場合は、それを使用（予定申告モード専用ルール対応）
+                    # code_overrideがある場合は、それを使用（中間申告モード専用ルール対応）
                     final_doc_type = rules.get("code_override", doc_type)
                     if final_doc_type != doc_type:
                         self._log(f"コードオーバーライド: {doc_type} → {final_doc_type}")
@@ -1437,28 +1437,29 @@ class DocumentClassifierV5:
         """
         # 東京都チェック（存在する場合のみ）
         tokyo_set_id = None
+        tokyo_has_city = False
         for set_id, info in set_settings.items():
             if info.get("prefecture") == "東京都":
                 tokyo_set_id = set_id
-                # 東京都は必ずセット1でなければならない
+                # 東京都特別区（23区）は必ずセット1でなければならない
                 if set_id != 1:
-                    raise ValueError(f"東京都は必ずセット1に入力してください。現在の位置: セット{set_id}")
-                # 東京都にcityが設定されている場合はエラー
-                if info.get("city", "").strip():
-                    raise ValueError(f"東京都（セット{set_id}）にcityが設定されています: {info.get('city')}")
+                    raise ValueError(f"東京都特別区（23区）は必ずセット1に入力してください。現在の位置: セット{set_id}")
+                # 東京都の市区町村設定を確認
+                tokyo_has_city = bool(info.get("city", "").strip())
                 break
-        
+
         # 都道府県連番マップ
         pref_order_map = {}
         sorted_set_ids = sorted(set_settings.keys())
-        
-        if tokyo_set_id is not None:
-            # 東京都がある場合：論理的に先頭に移動
+
+        # 東京都23区（市区町村空欄）の場合のみ、先頭に移動（繰り上がり）
+        if tokyo_set_id is not None and not tokyo_has_city:
+            # 東京都23区の場合：論理的に先頭に移動
             ordered_sets = [tokyo_set_id] + [sid for sid in sorted_set_ids if sid != tokyo_set_id]
         else:
-            # 東京都がない場合：入力順のまま
+            # 東京都がない場合、または東京都の市町村がある場合：入力順のまま
             ordered_sets = sorted_set_ids
-        
+
         for rank, set_id in enumerate(ordered_sets):
             pref_order_map[set_id] = 1001 + rank * 10
         
@@ -1489,26 +1490,27 @@ class DocumentClassifierV5:
         """
         # 東京都チェック（存在する場合のみ）
         tokyo_set_id = None
+        tokyo_has_city = False
         for set_id, info in set_settings.items():
             if info.get("prefecture") == "東京都":
                 tokyo_set_id = set_id
-                # 東京都は必ずセット1でなければならない
+                # 東京都特別区（23区）は必ずセット1でなければならない
                 if set_id != 1:
-                    raise ValueError(f"東京都は必ずセット1に入力してください。現在の位置: セット{set_id}")
-                # 東京都にcityが設定されている場合はエラー
-                if info.get("city", "").strip():
-                    raise ValueError(f"東京都（セット{set_id}）にcityが設定されています: {info.get('city')}")
+                    raise ValueError(f"東京都特別区（23区）は必ずセット1に入力してください。現在の位置: セット{set_id}")
+                # 東京都の市区町村設定を確認
+                tokyo_has_city = bool(info.get("city", "").strip())
                 break
 
         # 都道府県連番マップ
         pref_order_map = {}
         sorted_set_ids = sorted(set_settings.keys())
 
-        if tokyo_set_id is not None:
-            # 東京都がある場合：論理的に先頭に移動
+        # 東京都23区（市区町村空欄）の場合のみ、先頭に移動（繰り上がり）
+        if tokyo_set_id is not None and not tokyo_has_city:
+            # 東京都23区の場合：論理的に先頭に移動
             ordered_sets = [tokyo_set_id] + [sid for sid in sorted_set_ids if sid != tokyo_set_id]
         else:
-            # 東京都がない場合：入力順のまま
+            # 東京都がない場合、または東京都の市町村がある場合：入力順のまま
             ordered_sets = sorted_set_ids
 
         for rank, set_id in enumerate(ordered_sets):

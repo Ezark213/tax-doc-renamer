@@ -830,11 +830,11 @@ class TaxDocumentRenamerV5:
         content_frame.pack(fill='x', padx=10, pady=8)
 
         # 案内テキスト
-        info_text_1 = tk.Label(content_frame, text="• 東京都: セット1に優先して設定してください",
+        info_text_1 = tk.Label(content_frame, text="• 東京都特別区（23区）: セット1に優先して設定してください",
                                bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
         info_text_1.pack(fill='x')
 
-        info_text_2 = tk.Label(content_frame, text="• 東京都特別区(23区)の場合: 市区町村欄は空白にしてください",
+        info_text_2 = tk.Label(content_frame, text="• 東京都特別区(23区): 市区町村欄は空白にしてください",
                                bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
         info_text_2.pack(fill='x')
 
