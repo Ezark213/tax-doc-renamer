@@ -1,13 +1,42 @@
-# 🧾 税務書類リネームシステム v8.5.11
+# 🧾 税務書類リネームシステム v8.5.12
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.11-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.12-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.11では、UIテーマをアイコンカラーに統一しました。
+v8.5.12では、東京都の市町村入力を可能にしました。
+
+---
+
+## 🚀 **v8.5.12 - 東京都市町村対応（2025年10月18日）**
+
+### 🆕 **東京都の市町村入力を可能に（v8.5.12）**
+
+#### 🎯 **改善内容**
+
+**セット1で東京都を選択した場合でも市町村を入力可能に**
+
+**修正前の仕様:**
+- セット1で東京都を選択すると、市町村入力欄が自動的に無効化
+- 特別区（23区）のみを前提とした仕様
+
+**修正後の仕様:**
+- セット1で東京都を選択しても、市町村入力欄が有効なまま
+- 23区（千代田区、新宿区など）も市町村（八王子市、町田市など）も入力可能
+
+**変更内容:**
+- 注釈: `（東京都特別区優先）` → `（東京都は23区または市町村名）`
+- 市町村入力欄の無効化処理を削除
+- ヘルプメッセージを更新
+
+**効果:**
+- ✅ 東京都の特別区以外（八王子市、町田市、武蔵野市など）にも対応
+- ✅ より柔軟な市町村設定が可能
+
+**実装箇所:** `main.py` 811-823行目、2354-2357行目
 
 ---
 

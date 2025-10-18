@@ -808,18 +808,9 @@ class TaxDocumentRenamerV5:
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
 
-            # セット1のみ「（東京都特別区優先）」の注釈を右側に表示
+            # セット1のみ「（東京都は23区または市町村名）」の注釈を右側に表示
             if i == 1:
-                ttk.Label(set_frame, text="（東京都特別区優先）", foreground='gray').pack(side='left', padx=(5, 0))
-
-            # セット1のみ動的制御：東京都の場合は無効化
-            if i == 1:
-                # 市区町村入力欄への参照を保存
-                setattr(self, f'city_entry_{i}', city_entry)
-                # 都道府県変更時に市区町村欄を制御
-                prefecture_var.trace_add('write', lambda *args, idx=i: self._update_city_field_state(idx))
-                # 初期状態を設定
-                self._update_city_field_state(i)
+                ttk.Label(set_frame, text="（東京都は23区または市町村名）", foreground='gray').pack(side='left', padx=(5, 0))
 
             # 市町村設定の変更監視を追加
             prefecture_var.trace_add('write', self._save_municipality_settings)
@@ -829,27 +820,7 @@ class TaxDocumentRenamerV5:
                 # セット1も保存監視（東京都以外の場合に必要）
                 city_var.trace_add('write', self._save_municipality_settings)
 
-    def _update_city_field_state(self, set_index):
-        """セット1の市区町村欄の有効/無効を動的に切り替え"""
-        if set_index != 1:
-            return
-
-        prefecture_var = getattr(self, f'prefecture_var_{set_index}')
-        city_entry = getattr(self, f'city_entry_{set_index}', None)
-        city_var = getattr(self, f'city_var_{set_index}')
-
-        if city_entry is None:
-            return
-
-        prefecture_value = prefecture_var.get().strip()
-
-        # 東京都の場合は無効化、それ以外は有効化
-        if prefecture_value == "東京都":
-            city_entry.config(state='disabled')
-            # 東京都の場合は市区町村欄をクリア
-            city_var.set("")
-        else:
-            city_entry.config(state='normal')
+    # v8.5.12: 東京都でも市町村入力可能にするため、_update_city_field_stateメソッドを削除
 
     def _setup_default_municipalities(self):
         """ユーザー設定から自治体設定を復元"""
@@ -2381,9 +2352,9 @@ class TaxDocumentRenamerV5:
 　→ 確定申告 または 中間申告
 
 ステップ3: 市区町村を設定（該当する場合のみ）
-　→ セット1: 東京都特別区優先（23区内に本店がある場合のみ）
-　　　　　　 ※23区外のみの場合はセット1を空白にしてセット2以降に入力
-　→ セット2～5: その他の市区町村（23区外を含む）
+　→ セット1: 東京都（23区または市町村名を入力）
+　　　　　　 例: 千代田区、八王子市、町田市など
+　→ セット2～5: その他の市区町村
 
 ステップ4: 実行ボタンをクリック
 　→ フォルダを選ぶと自動で分類が始まります
