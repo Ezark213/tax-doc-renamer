@@ -1,13 +1,49 @@
-# 🧾 税務書類リネームシステム v8.5.12
+# 🧾 税務書類リネームシステム v8.2.0
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.12-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.2.0-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.12では、東京都の市町村入力を可能にしました。
+v8.2.0では、東京都設定のUI改善と案内ボックスを追加しました。
+
+---
+
+## 🚀 **v8.2.0 - 東京都設定UI改善（2025年10月18日）**
+
+### 🆕 **東京都設定の案内ボックス追加（v8.2.0）**
+
+#### 🎯 **改善内容**
+
+**市区町村入力に関する分かりやすい案内ボックスを追加**
+
+**追加内容:**
+- 東京都設定に関する案内ボックスを新設
+- 市区町村名の入力形式を明確化
+- アプリ全体のカラースキームに統一されたデザイン
+
+**案内メッセージ:**
+- 東京都: セット1に優先して設定
+- 東京都特別区（23区）: 市区町村欄は空白
+- 市区町村の入力形式（23区以外）: 「横浜市」「大阪市」「八王子市」「白川村」など
+
+**デザイン改善:**
+- 背景色: アプリに馴染んだ薄いグレー（#F9FAFB）
+- テキスト色: サブテキスト色（#6B7280）
+- ボーダー: アプリのボーダー色（#E5E7EB）
+
+**アイコン更新:**
+- アプリアイコンの背景色を変更
+
+**効果:**
+- ✅ 市区町村の入力方法が一目で分かる
+- ✅ 東京都特別区と市町村の違いが明確
+- ✅ 全国の市区町村の入力例を表示
+- ✅ アプリ全体のデザインに統一
+
+**実装箇所:** `main.py` 819-843行目、1-8行目、59行目、2468-2492行目
 
 ---
 
