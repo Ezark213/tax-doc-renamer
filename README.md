@@ -1,13 +1,62 @@
-# 🧾 税務書類リネームシステム v8.5.13
+# 🧾 税務書類リネームシステム v8.5.14
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.13-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.14-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.13では、Bundle PDF自動分割機能の国税・地方税統合対応を実装しました。
+v8.5.14では、中間申告モード対応と東京都特別区（23区）の処理改善を実装しました。
+
+---
+
+## 🚀 **v8.5.14 - 中間申告モード対応と東京都特別区処理改善（2025年10月18日）**
+
+### 🆕 **process_mode統一と東京都繰り上がりロジック改善（v8.5.14）**
+
+#### 🎯 **主な変更内容**
+
+**1. 中間申告モードの正式対応**
+- ✅ process_modeを「予定申告」から「中間申告」に統一
+- ✅ UIの「中間申告」選択が内部処理に正しく反映されるように修正
+- ✅ 消費税中間申告書が正しく`3001_消費税等申告書`として分類されるように改善
+- ✅ 法人税中間申告書の分類精度向上
+
+**2. 東京都特別区（23区）の処理改善**
+- ✅ 東京都の繰り上がりロジックを改善：市区町村が空欄（23区）の場合のみ繰り上がり適用
+- ✅ 東京都に市区町村（例：八王子市）が設定されている場合は通常の順序で処理
+- ✅ UIメッセージを「東京都特別区（23区）」に変更して23区専用であることを明確化
+- ✅ エラーメッセージの改善
+
+**3. UI/UXの改善**
+- ✅ 自治体設定の案内テキストを簡潔化
+  - 「東京都特別区（23区）: セット1に優先して設定してください」
+  - 「東京都特別区(23区): 市区町村欄は空白にしてください」
+- ✅ エラーメッセージ：「東京都特別区（23区）は必ずセット1に入力してください」
+
+#### 🎯 **技術詳細**
+
+**classification_v5.py の変更:**
+- process_modeを「予定申告」→「中間申告」に統一（130, 238, 436, 768行目）
+- 東京都の繰り上がり条件に`tokyo_has_city`チェックを追加（1447-1448, 1500-1501行目）
+- 市区町村が空欄の場合のみ繰り上がりを適用（1456, 1509行目）
+
+**rename_engine.py の変更:**
+- process_modeコメントを「予定申告」→「中間申告」に更新（30行目）
+
+**main.py の変更:**
+- UIメッセージを「東京都特別区（23区）」に統一（833, 837行目）
+
+**効果:**
+- ✅ 中間申告書の処理が正確に動作
+- ✅ 東京都23区と市町村（八王子市など）の処理が正しく区別される
+- ✅ より直感的なUI表示
+
+**実装箇所:**
+- `core/classification_v5.py` 130, 238, 436, 768, 1444-1462, 1497-1515行目
+- `core/rename_engine.py` 30行目
+- `main.py` 833, 837行目
 
 ---
 
