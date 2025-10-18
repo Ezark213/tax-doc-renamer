@@ -831,15 +831,15 @@ class TaxDocumentRenamerV5:
 
         # 案内テキスト
         info_text_1 = tk.Label(content_frame, text="• 東京都: セット1に優先して設定してください",
-                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
+                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
         info_text_1.pack(fill='x')
 
-        info_text_2 = tk.Label(content_frame, text="• 東京都特別区（23区）の場合: 市区町村欄は空白にしてください",
-                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
+        info_text_2 = tk.Label(content_frame, text="• 東京都特別区(23区)の場合: 市区町村欄は空白にしてください",
+                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
         info_text_2.pack(fill='x')
 
-        info_text_3 = tk.Label(content_frame, text="• 市区町村の入力形式（23区以外）: 「横浜市」「大阪市」「八王子市」「白川村」など市町村名で入力してください",
-                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
+        info_text_3 = tk.Label(content_frame, text="• 市区町村の入力形式(23区以外): 「八王子市」「横浜市」「大阪市」「白川村」など",
+                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
         info_text_3.pack(fill='x')
 
     # v8.5.12: 東京都でも市町村入力可能にするため、_update_city_field_stateメソッドを削除
@@ -1217,6 +1217,10 @@ class TaxDocumentRenamerV5:
             
             # ファイル処理（Bundle分割含む）
             # まず分割を試行（Bundleファイルの場合）
+            # Phase 1 診断: Bundle分割チェックのログ追加
+            filename_for_log = os.path.basename(file_path)
+            self.root.after(0, lambda f=filename_for_log: self._log(f"[DEBUG] Bundle分割チェック開始: {f}"))
+            
             split_result = self.pdf_processor.maybe_split_pdf(
                 input_pdf_path=file_path,
                 out_dir=output_folder,
@@ -1227,6 +1231,7 @@ class TaxDocumentRenamerV5:
             if split_result['success']:
                 # Bundle分割が成功した場合
                 filename = os.path.basename(file_path)
+                self.root.after(0, lambda f=filename: self._log(f"[DEBUG] Bundle分割成功: {f}"))
                 self.root.after(0, lambda f=filename: self._log(f"Bundle分割完了: {f}"))
                 
                 # Bundle分割後の各ファイルをリネーム処理
@@ -1271,6 +1276,9 @@ class TaxDocumentRenamerV5:
                 
                 return True
             else:
+                # Bundle分割不要またはスキップ
+                filename = os.path.basename(file_path)
+                self.root.after(0, lambda f=filename: self._log(f"[DEBUG] Bundle分割スキップ（通常ファイル処理）: {f}"))
                 # 通常の単一ファイル処理 - スナップショットを作成してから処理
                 user_yymm = self._resolve_yymm_with_policy(file_path, None)
                 snapshot = self.pre_extract_engine.build_snapshot(file_path, user_provided_yymm=user_yymm, ui_context=ui_context.to_dict())
@@ -2457,8 +2465,8 @@ Ctrl+2：ログウィンドウを開く
         """バージョン情報ダイアログ表示"""
         about_window = tk.Toplevel(self.root)
         about_window.title("バージョン情報")
-        about_window.geometry("550x450")
-        about_window.resizable(False, False)
+        about_window.geometry("700x600")
+        about_window.resizable(True, True)
 
         content_frame = ttk.Frame(about_window, padding=20)
         content_frame.pack(fill='both', expand=True)
@@ -2466,35 +2474,83 @@ Ctrl+2：ログウィンドウを開く
         ttk.Label(content_frame, text="📄", font=('Arial', 48)).pack()
         ttk.Label(content_frame, text="税務書類リネームシステム",
                  font=('Yu Gothic UI', 14, 'bold')).pack(pady=5)
-        ttk.Label(content_frame, text="Version 8.2.0",
+        ttk.Label(content_frame, text="Version 8.5.13",
                  font=('Yu Gothic UI', 10, 'bold')).pack()
 
-        # 更新内容
-        update_info = ttk.LabelFrame(content_frame, text="v8.2.0の更新内容", padding=10)
-        update_info.pack(pady=10, fill='both', expand=True)
+        # 更新内容（スクロール可能）
+        update_frame = ttk.LabelFrame(content_frame, text="更新履歴", padding=10)
+        update_frame.pack(pady=10, fill='both', expand=True)
 
-        updates = [
-            "【v8.2.0: 東京都設定UI改善】",
-            "• 東京都設定の案内ボックスを追加（市区町村名の入力形式を明確化）",
-            "• 案内ボックスのデザインをアプリに統一",
-            "• アプリアイコンの背景色を変更",
-            "",
-            "【v8.1.0: UI改善とユーザビリティ向上】",
-            "• 設定の自動保存機能(YYMM/処理種別/接尾辞/処理モード)",
-            "• 処理種別による接尾辞の自動選択",
-            "• 給与支払報告書/償却資産の受信通知を9001に変更",
-            "• 「申請届出」→「申請届出(国税のみ)」に変更",
-            "• 「予定申告」→「中間申告」に用語変更",
-            "• 処理モードによるフォルダ名自動生成",
-            "",
-            "【v8.0.0: アーキテクチャリファクタリング】",
-            "• プロセッサの分離とモジュール化",
-            "• 受信通知検出の独立モジュール化",
-            "• テストカバレッジの向上"
-        ]
+        # スクロールバー付きテキストウィジェット
+        text_widget = tk.Text(update_frame, wrap='word', height=20, width=80, font=('Yu Gothic UI', 8))
+        scrollbar = ttk.Scrollbar(update_frame, orient='vertical', command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
         
-        for update in updates:
-            ttk.Label(update_info, text=update, font=('Yu Gothic UI', 8)).pack(anchor='w', pady=1)
+        scrollbar.pack(side='right', fill='y')
+        text_widget.pack(side='left', fill='both', expand=True)
+
+        updates = """【v8.5.13: 自治体設定UI表示改善】
+• 市区町村の入力形式の説明文を短縮し、表示切れを解消
+
+【v8.5.12: 東京都市町村入力対応】
+• 東京都の市町村入力を有効化
+
+【v8.5.11: UIテーマ統一】
+• UIテーマとアイコン色の統一（背景色を#E3F2FDに変更）
+
+【v8.5.10: 完了メッセージ簡素化】
+• リネーム完了メッセージをシンプルに改善
+• メッセージボックスの表示タイミングを最適化
+
+【v8.5.8: UI統一改善】
+• YYMM無効時メッセージの左右統一
+• ユーザー入力値を表示して修正方法を明確化
+
+【v8.5.7: 中間申告mode 3003誤検出修正】
+• 消費税中間申告の受信通知が0003として誤検出される問題を修正
+• exclude_keywordsを強化（"消費税中間申告書"、"納付すべき法人税額"を追加）
+
+【v8.5.6: 地方税バンドル検出修正】
+• 地方税.pdfから1003（受信通知）が失われる問題を修正
+• "法人税"が"法人事業税"に誤マッチしないよう地方税除外ロジックを追加
+• バンドル検出デバッグログとツールを追加
+
+【v8.5.5: CSV分類統一】
+• すべてのCSVファイルを5006_仕訳データに固定分類
+• セット1のヘルプメッセージを改善（23区内の説明を明確化）
+
+【v8.5.4: 受信通知分類精度改善】
+• 国税受信通知（0003/3003）の優先度を150→280に大幅向上
+• AND条件の階層的設計による高精度判定を実装
+• カスタムアプリケーションアイコンを追加
+
+【v8.5.0-3: コア機能強化】
+• Tesseract/OCR依存の完全削除
+• コンテンツベース分類への完全移行
+• 自動接頭辞判定機能の実装
+• 少額減価償却資産明細表の判定精度向上
+• 分類精度の大幅向上とパフォーマンス最適化
+
+【v8.2.0: 東京都設定UI改善】
+• 東京都設定の案内ボックスを追加（市区町村名の入力形式を明確化）
+• 案内ボックスのデザインをアプリに統一
+• アプリアイコンの背景色を変更
+
+【v8.1.0: UI改善とユーザビリティ向上】
+• 設定の自動保存機能(YYMM/処理種別/接尾辞/処理モード)
+• 処理種別による接尾辞の自動選択
+• 給与支払報告書/償却資産の受信通知を9001に変更
+• 「申請届出」→「申請届出(国税のみ)」に変更
+• 「予定申告」→「中間申告」に用語変更
+• 処理モードによるフォルダ名自動生成
+
+【v8.0.0: アーキテクチャリファクタリング】
+• プロセッサの分離とモジュール化
+• 受信通知検出の独立モジュール化
+• テストカバレッジの向上"""
+
+        text_widget.insert('1.0', updates)
+        text_widget.configure(state='disabled')
 
         import sys
         ttk.Label(content_frame, text=f"Python {sys.version.split()[0]}",
