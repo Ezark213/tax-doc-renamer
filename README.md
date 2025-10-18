@@ -1,13 +1,50 @@
-# 🧾 税務書類リネームシステム v8.5.8
+# 🧾 税務書類リネームシステム v8.5.9
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.8-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.9-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.8では、YYMM入力バリデーションメッセージを左右で統一しました。
+v8.5.9では、右側リネーム完了メッセージを改善し、処理件数の詳細を表示するようにしました。
+
+---
+
+## 🚀 **v8.5.9 - 右側リネーム完了メッセージ改善（2025年10月18日）**
+
+### 🆕 **リネーム完了メッセージの改善（v8.5.9）**
+
+#### 🎯 **問題の特定**
+
+**右側（AI分類・リネーム）の完了メッセージが表示されにくい問題**
+
+**問題の内容:**
+- リネーム処理完了時に完了メッセージが表示されていたが、気づきにくかった
+- 原因: タブ切り替え後にメッセージボックスを表示していたため、ウィンドウが後ろに隠れる可能性
+- 処理件数などの詳細情報が表示されていなかった
+
+#### 🎯 **改善内容**
+
+**1. メッセージボックスの表示タイミング変更**
+- ✅ **修正前**: 結果タブに切り替え → メッセージボックス表示
+- ✅ **修正後**: メッセージボックス表示 → 結果タブに切り替え
+- ✅ **効果**: メッセージボックスが必ず前面に表示される
+
+**2. 処理件数の詳細表示**
+- ✅ **修正前**: `"処理が完了しました"` のみ
+- ✅ **修正後**: 処理対象件数、成功件数、エラー件数、スキップ件数を表示
+- ✅ **表示例**:
+  ```
+  処理が完了しました
+
+  処理対象: 10件
+  成功: 8件
+  エラー: 1件
+  スキップ: 1件
+  ```
+
+**実装箇所:** `main.py` 2076-2105行目
 
 ---
 

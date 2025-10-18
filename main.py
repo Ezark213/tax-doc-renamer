@@ -2083,14 +2083,26 @@ class TaxDocumentRenamerV5:
         # 保存された処理統計を取得
         stats = getattr(self, '_last_processing_stats', None)
 
-        # 【修正】画面に完了メッセージをポップアップ表示（件数表示なし）
+        # 【修正】処理件数を含む詳細メッセージを表示
         if stats:
-            message = "処理が完了しました"
+            total = stats.get('total', 0)
+            success = stats.get('success', 0)
+            error = stats.get('error', 0)
+            skip = stats.get('skip', 0)
+
+            message = f"処理が完了しました\n\n"
+            message += f"処理対象: {total}件\n"
+            message += f"成功: {success}件\n"
+            if error > 0:
+                message += f"エラー: {error}件\n"
+            if skip > 0:
+                message += f"スキップ: {skip}件"
         else:
             message = "処理が完了しました"
 
-        self.notebook.select(1)  # 結果タブに切り替え
+        # メッセージボックスをタブ切り替えの前に表示（ウィンドウが隠れないように）
         messagebox.showinfo("完了", message)
+        self.notebook.select(1)  # 結果タブに切り替え
 
     def _is_already_renamed(self, filename):
         """ファイルが既にリネーム済みかチェック（無限リネーム防止）"""
