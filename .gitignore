@@ -47,6 +47,8 @@ desktop.ini
 *.swp
 *.swo
 *~
+.claude/
+.serena/
 
 # Output files
 output/
@@ -62,9 +64,15 @@ error.log
 # Backup files
 *.bak
 *.backup
+*.backup_*
+main.py.backup_*
 
 # Archive directories (moved old versions)
 archive/
+old/
+
+# User settings (should not be committed)
+config/user_settings.json
 
 # Documentation with sensitive information
 docs/
