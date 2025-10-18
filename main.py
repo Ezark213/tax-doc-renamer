@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v8.0.0-REFACTORED メインアプリケーション
+税務書類リネームシステム v8.2.0 メインアプリケーション
 Phase D-1〜D-5リファクタリング完了版
 - 受信通知検出分離 (Phase D-1)
 - 左側・右側処理分離 (Phase D-2, D-3)
 - アーキテクチャ改善 (Phase D-5)
+- 東京都設定UI改善 (v8.2.0)
 """
 
 import tkinter as tk
@@ -55,7 +56,7 @@ from core.thread_manager import ThreadManager
 
 
 class TaxDocumentRenamerV5:
-    """税務書類リネームシステム v8.0.0-REFACTORED メインクラス (Phase D-1〜D-5完了)"""
+    """税務書類リネームシステム v8.2.0 メインクラス (Phase D-1〜D-5完了, UI改善)"""
     
     def __init__(self):
         """初期化"""
@@ -808,10 +809,6 @@ class TaxDocumentRenamerV5:
             city_entry = ttk.Entry(set_frame, textvariable=city_var, width=12)
             city_entry.pack(side='left', padx=2)
 
-            # セット1のみ「（東京都は23区または市町村名）」の注釈を右側に表示
-            if i == 1:
-                ttk.Label(set_frame, text="（東京都は23区または市町村名）", foreground='gray').pack(side='left', padx=(5, 0))
-
             # 市町村設定の変更監視を追加
             prefecture_var.trace_add('write', self._save_municipality_settings)
             if i != 1:
@@ -819,6 +816,31 @@ class TaxDocumentRenamerV5:
             else:
                 # セット1も保存監視（東京都以外の場合に必要）
                 city_var.trace_add('write', self._save_municipality_settings)
+
+        # 東京都の設定に関する案内ボックスを追加
+        info_frame = ttk.Frame(parent_frame)
+        info_frame.pack(fill='x', pady=(10, 5))
+
+        # 背景色付きの案内ボックス（アプリに馴染んだ色）
+        info_box = tk.Frame(info_frame, bg=self.colors['bg_light'], relief='solid', borderwidth=1, highlightthickness=1, highlightbackground=self.colors['border'])
+        info_box.pack(fill='x', padx=5)
+
+        # テキストを含む内部フレーム
+        content_frame = tk.Frame(info_box, bg=self.colors['bg_light'])
+        content_frame.pack(fill='x', padx=10, pady=8)
+
+        # 案内テキスト
+        info_text_1 = tk.Label(content_frame, text="• 東京都: セット1に優先して設定してください",
+                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
+        info_text_1.pack(fill='x')
+
+        info_text_2 = tk.Label(content_frame, text="• 東京都特別区（23区）の場合: 市区町村欄は空白にしてください",
+                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
+        info_text_2.pack(fill='x')
+
+        info_text_3 = tk.Label(content_frame, text="• 市区町村名の入力形式: 「千代田区」「新宿区」「八王子市」など市区町村名で入力してください",
+                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
+        info_text_3.pack(fill='x')
 
     # v8.5.12: 東京都でも市町村入力可能にするため、_update_city_field_stateメソッドを削除
 
@@ -2444,14 +2466,19 @@ Ctrl+2：ログウィンドウを開く
         ttk.Label(content_frame, text="📄", font=('Arial', 48)).pack()
         ttk.Label(content_frame, text="税務書類リネームシステム",
                  font=('Yu Gothic UI', 14, 'bold')).pack(pady=5)
-        ttk.Label(content_frame, text="Version 8.1.0-ENHANCED",
+        ttk.Label(content_frame, text="Version 8.2.0",
                  font=('Yu Gothic UI', 10, 'bold')).pack()
 
         # 更新内容
-        update_info = ttk.LabelFrame(content_frame, text="v8.1.0の更新内容", padding=10)
+        update_info = ttk.LabelFrame(content_frame, text="v8.2.0の更新内容", padding=10)
         update_info.pack(pady=10, fill='both', expand=True)
-        
+
         updates = [
+            "【v8.2.0: 東京都設定UI改善】",
+            "• 東京都設定の案内ボックスを追加（市区町村名の入力形式を明確化）",
+            "• 案内ボックスのデザインをアプリに統一",
+            "• アプリアイコンの背景色を変更",
+            "",
             "【v8.1.0: UI改善とユーザビリティ向上】",
             "• 設定の自動保存機能(YYMM/処理種別/接尾辞/処理モード)",
             "• 処理種別による接尾辞の自動選択",
