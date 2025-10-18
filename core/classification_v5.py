@@ -2345,15 +2345,42 @@ class DocumentClassifierV5:
         # 補助パターン: キーワード組み合わせ判定
         is_receipt = any(kw in text for kw in ["受信通知", "申告受付完了通知", "申告受付完了", "受付完了通知"])
         is_payment = any(kw in text for kw in ["納付情報", "納付区分番号通知", "納付書", "納付情報発行結果"])
-        
+
         # 税目別キーワード
-        has_corporation_tax = any(kw in text for kw in ["法人税", "内国法人", "法人税及び地方法人税"])
+        # v7.3.1 FIX: "法人税"が"法人事業税"や"法人県民税"に誤マッチしないよう、地方税キーワードを除外
+        has_local_tax_keywords = any(kw in text for kw in ["法人事業税", "特別法人事業税", "法人県民税", "法人道府県民税", "法人都民税", "法人市民税"])
+        has_corporation_tax = any(kw in text for kw in ["法人税", "内国法人", "法人税及び地方法人税"]) and not has_local_tax_keywords
         has_consumption_tax = any(kw in text for kw in ["消費税", "地方消費税", "消費税及び地方消費税"])
-        has_prefecture = any(kw in text for kw in ["都道府県", "県税事務所", "都税事務所", "法人事業税", "特別法人事業税"])
-        has_municipality = any(kw in text for kw in ["市町村", "市役所", "市町村申告書", "市町村民税"])
-        
+
+        # v7.3: 地方税PDFの1003検出条件改善（Candidate A実装）
+        # 都道府県キーワードを大幅拡充 - 法人県民税等の具体的な税目名を追加
+        has_prefecture = any(kw in text for kw in [
+            "都道府県", "県税事務所", "都税事務所",
+            "法人事業税", "特別法人事業税",
+            # Candidate A: 具体的な税目名追加
+            "法人県民税", "法人道府県民税", "法人都民税",
+            "県民税", "道府県民税", "都民税",
+            # 税目の詳細名
+            "法人税割", "所得割", "付加価値割", "資本割",
+            # 都道府県関連の一般的な表現
+            "県知事", "都知事", "道知事", "府知事"
+        ])
+
+        # v7.3: 市町村キーワードも拡充
+        has_municipality = any(kw in text for kw in [
+            "市町村", "市役所", "市町村申告書", "市町村民税",
+            # Candidate A: 具体的な税目名追加
+            "法人市民税", "市民税",
+            # 市町村関連の一般的な表現
+            "市長", "町長", "村長"
+        ])
+
         # 自治体特定キーワード
-        has_specific_local = any(kw in text for kw in ["東京都", "愛知県", "福岡県", "蒲郡市", "福岡市"])
+        has_specific_local = any(kw in text for kw in [
+            "東京都", "愛知県", "福岡県", "蒲郡市", "福岡市",
+            # v7.3: eLTAX/地方税ポータル関連キーワード追加
+            "地方税ポータル", "eLTAX", "eltax", "エルタックス"
+        ])
         
         # 国税系の判定
         if is_receipt and has_corporation_tax:

@@ -1066,28 +1066,52 @@ class PDFProcessor:
     def _is_bundle_local(self, texts: List[str], matched_elements: Dict, debug_info: List[str]) -> bool:
         """地方税束ね判定 - OCR内容ベースの書類判定"""
         from .classification_v5 import DocumentClassifierV5
-        
+
         try:
-            classifier = DocumentClassifierV5(debug_mode=False)
+            classifier = DocumentClassifierV5(debug_mode=True)  # デバッグモード有効化
             local_target_codes = ["1003", "1013", "1023", "1004", "2003", "2013", "2023", "2004"]  # 地方税対象コード
             detected_pages = []
-            
+
             debug_info.append(f"OCR-based local bundle detection started for {len(texts)} pages")
-            
+            self.logger.info(f"[LOCAL_BUNDLE] Starting detection for {len(texts)} pages")
+
             # 各ページを個別にOCR分析して書類判定
             for i, page_text in enumerate(texts):
+                # ページテキストの先頭200文字をログ出力
+                text_preview = page_text[:200].replace('\n', ' ').replace('\r', ' ')
+                self.logger.info(f"[LOCAL_BUNDLE] Page {i+1} text preview: {text_preview}...")
+                self.logger.info(f"[LOCAL_BUNDLE] Page {i+1} text length: {len(page_text)} chars")
+                debug_info.append(f"Page {i+1} text: {text_preview[:100]}... (len={len(page_text)})")
+
                 if len(page_text.strip()) < 50:  # 空白ページスキップ
+                    self.logger.info(f"[LOCAL_BUNDLE] Page {i+1}: SKIPPED (blank page, {len(page_text.strip())} chars)")
+                    debug_info.append(f"Page {i+1}: SKIPPED (blank)")
                     continue
-                
+
+                # キーワードチェック（デバッグ用）
+                receipt_keywords = ["受信通知", "申告受付完了通知", "申告受付完了", "受付完了通知"]
+                payment_keywords = ["納付情報", "納付区分番号通知", "納付書", "納付情報発行結果"]
+                pref_keywords = ["都道府県", "県税事務所", "都税事務所", "法人事業税", "特別法人事業税"]
+
+                found_receipt = [kw for kw in receipt_keywords if kw in page_text]
+                found_payment = [kw for kw in payment_keywords if kw in page_text]
+                found_pref = [kw for kw in pref_keywords if kw in page_text]
+
+                self.logger.info(f"[LOCAL_BUNDLE] Page {i+1} keywords - Receipt:{found_receipt}, Payment:{found_payment}, Prefecture:{found_pref}")
+
                 # ページごとの書類コード推定
+                self.logger.info(f"[LOCAL_BUNDLE] Page {i+1}: Calling detect_page_doc_code...")
                 detected_code = classifier.detect_page_doc_code(page_text, prefer_bundle="local")
-                
+                self.logger.info(f"[LOCAL_BUNDLE] Page {i+1}: detect_page_doc_code returned: {detected_code}")
+
                 if detected_code in local_target_codes:
                     detected_pages.append((i+1, detected_code))
                     matched_elements["codes"].append(f"Page{i+1}:{detected_code}")
                     debug_info.append(f"Page {i+1}: detected target code {detected_code}")
+                    self.logger.info(f"[LOCAL_BUNDLE] Page {i+1}: ✓ MATCHED target code {detected_code}")
                 else:
                     debug_info.append(f"Page {i+1}: no target code (detected: {detected_code})")
+                    self.logger.warning(f"[LOCAL_BUNDLE] Page {i+1}: ✗ NO MATCH (detected: {detected_code}, expected one of {local_target_codes})")
             
             # Bundle判定: 2枚以上の対象書類が含まれている場合
             is_bundle = len(detected_pages) >= 2
@@ -1114,28 +1138,52 @@ class PDFProcessor:
     def _is_bundle_national(self, texts: List[str], matched_elements: Dict, debug_info: List[str]) -> bool:
         """国税束ね判定 - OCR内容ベースの書類判定"""
         from .classification_v5 import DocumentClassifierV5
-        
+
         try:
-            classifier = DocumentClassifierV5(debug_mode=False)
+            classifier = DocumentClassifierV5(debug_mode=True)  # デバッグモード有効化
             national_target_codes = ["0003", "3003", "0004", "3004"]  # 国税対象コード
             detected_pages = []
-            
+
             debug_info.append(f"OCR-based national bundle detection started for {len(texts)} pages")
-            
+            self.logger.info(f"[NATIONAL_BUNDLE] Starting detection for {len(texts)} pages")
+
             # 各ページを個別にOCR分析して書類判定
             for i, page_text in enumerate(texts):
+                # ページテキストの先頭200文字をログ出力
+                text_preview = page_text[:200].replace('\n', ' ').replace('\r', ' ')
+                self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1} text preview: {text_preview}...")
+                self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1} text length: {len(page_text)} chars")
+                debug_info.append(f"Page {i+1} text: {text_preview[:100]}... (len={len(page_text)})")
+
                 if len(page_text.strip()) < 50:  # 空白ページスキップ
+                    self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1}: SKIPPED (blank page, {len(page_text.strip())} chars)")
+                    debug_info.append(f"Page {i+1}: SKIPPED (blank)")
                     continue
-                
+
+                # キーワードチェック（デバッグ用）
+                receipt_keywords = ["受信通知", "申告受付完了通知", "申告受付", "受付通知"]
+                payment_keywords = ["納付情報", "納付区分番号通知", "納付書", "納付情報発行結果"]
+                national_keywords = ["法人税", "消費税", "国税電子申告", "e-Tax", "イータックス"]
+
+                found_receipt = [kw for kw in receipt_keywords if kw in page_text]
+                found_payment = [kw for kw in payment_keywords if kw in page_text]
+                found_national = [kw for kw in national_keywords if kw in page_text]
+
+                self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1} keywords - Receipt:{found_receipt}, Payment:{found_payment}, National:{found_national}")
+
                 # ページごとの書類コード推定
+                self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1}: Calling detect_page_doc_code...")
                 detected_code = classifier.detect_page_doc_code(page_text, prefer_bundle="national")
-                
+                self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1}: detect_page_doc_code returned: {detected_code}")
+
                 if detected_code in national_target_codes:
                     detected_pages.append((i+1, detected_code))
                     matched_elements["codes"].append(f"Page{i+1}:{detected_code}")
                     debug_info.append(f"Page {i+1}: detected target code {detected_code}")
+                    self.logger.info(f"[NATIONAL_BUNDLE] Page {i+1}: ✓ MATCHED target code {detected_code}")
                 else:
                     debug_info.append(f"Page {i+1}: no target code (detected: {detected_code})")
+                    self.logger.warning(f"[NATIONAL_BUNDLE] Page {i+1}: ✗ NO MATCH (detected: {detected_code}, expected one of {national_target_codes})")
             
             # Bundle判定: 2枚以上の対象書類が含まれている場合
             is_bundle = len(detected_pages) >= 2
