@@ -838,7 +838,7 @@ class TaxDocumentRenamerV5:
                                bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
         info_text_2.pack(fill='x')
 
-        info_text_3 = tk.Label(content_frame, text="• 市区町村名の入力形式: 「千代田区」「新宿区」「八王子市」など市区町村名で入力してください",
+        info_text_3 = tk.Label(content_frame, text="• 東京都の市町村（23区以外）: 「八王子市」「町田市」「府中市」など市町村名で入力してください",
                                bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9))
         info_text_3.pack(fill='x')
 
