@@ -1,13 +1,33 @@
-# 🧾 税務書類リネームシステム v8.5.10
+# 🧾 税務書類リネームシステム v8.5.11
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.10-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.11-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.10では、右側リネーム完了メッセージをシンプルに改善しました。
+v8.5.11では、UIテーマをアイコンカラーに統一しました。
+
+---
+
+## 🚀 **v8.5.11 - アイコンカラー統一（2025年10月18日）**
+
+### 🆕 **背景色をアイコンに合わせて変更（v8.5.11）**
+
+#### 🎯 **改善内容**
+
+**ウィンドウ背景色をアイコンのメインカラーに統一**
+
+**変更内容:**
+- ウィンドウ背景色: `#F5F7FA`（グレー系）→ `#E3F2FD`（薄いライトブルー）
+- アイコンのメインカラー（ライトブルー）に調和する配色に変更
+
+**効果:**
+- ✅ アイコンとUIの一体感が向上
+- ✅ 爽やかで視認性の高い配色
+
+**実装箇所:** `main.py` 83-93行目
 
 ---
 

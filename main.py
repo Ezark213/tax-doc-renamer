@@ -86,7 +86,7 @@ class TaxDocumentRenamerV5:
             'danger': '#EF4444',       # エラーの赤
             'bg_card': '#FFFFFF',      # カード背景
             'bg_light': '#F9FAFB',     # 薄い背景
-            'bg_window': '#F5F7FA',    # ウィンドウ背景
+            'bg_window': '#E3F2FD',    # ウィンドウ背景（アイコンに合わせた薄いライトブルー）
             'text_dark': '#1F2937',    # メインテキスト
             'text_medium': '#6B7280',  # サブテキスト
             'border': '#E5E7EB'        # ボーダー
