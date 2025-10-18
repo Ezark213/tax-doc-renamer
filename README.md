@@ -1,13 +1,49 @@
-# 🧾 税務書類リネームシステム v8.5.6
+# 🧾 税務書類リネームシステム v8.5.7
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.6-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.7-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.6では、地方税PDFのバンドル検出問題を修正し、1003受信通知の保存漏れを解消しました。
+v8.5.7では、中間申告モードにおける消費税受信通知(3003)の誤検出問題を修正しました。
+
+---
+
+## 🚀 **v8.5.7 - 中間申告mode 3003誤検出修正（2025年10月18日）**
+
+### 🆕 **中間申告mode 3003/0003 相互誤検出の修正（v8.5.7）**
+
+#### 🎯 **問題の特定**
+
+**中間申告モードで消費税受信通知(3003)が法人税受信通知(0003)として誤検出される問題**
+
+**問題の内容:**
+- 中間申告モードで処理すると、消費税中間申告の受信通知が3003ではなく0003として分類される
+- 逆に、法人税の受信通知が3003として分類される可能性もある
+- 原因: exclude_keywordsが部分一致にのみ対応しており、「消費税申告書」が「消費税中間申告書」を除外できない
+
+**根本原因:**
+1. **0003のexclude_keywords不足**: "消費税申告書"だけでは"消費税中間申告書"を除外できない
+2. **3003のexclude_keywords不足**: "法人税及び地方法人税申告書"だけでは"納付すべき法人税額"等を除外できない
+3. **確定申告modeでは問題なし**: 確定申告では"消費税申告書"が完全一致するため正常動作
+
+#### 🎯 **実装内容 - Phase 1**
+
+**1. 0003_受信通知のexclude_keywords強化**
+- ✅ **追加キーワード**: "消費税中間申告書"
+- ✅ **実装場所**: `core/classification_v5.py` 320-324行目
+- ✅ **効果**: 消費税中間申告の受信通知を0003から除外し、3003として正しく分類
+
+**2. 3003_受信通知のexclude_keywords強化**
+- ✅ **追加キーワード**: "納付すべき法人税額"
+- ✅ **実装場所**: `core/classification_v5.py` 518-522行目
+- ✅ **効果**: 法人税関連の受信通知を3003から除外し、0003として正しく分類
+
+**3. テストケース**
+- ✅ **テストケース1**: 消費税中間申告受信通知 → 3003（修正前: 0003 ❌）
+- ✅ **テストケース2**: 法人税受信通知 → 0003（修正前: 3003の可能性あり ❌）
 
 ---
 

@@ -319,7 +319,8 @@ class DocumentClassifierV5:
                 "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
                 "exclude_keywords": [
                     "メール詳細（納付区分番号通知）",  # Phase 2-2: 0004_納付情報との区別
-                    "消費税申告書"
+                    "消費税申告書",
+                    "消費税中間申告書"  # v8.5.7: 中間申告mode 3003誤検出防止
                 ],
                 "filename_keywords": []
             },
@@ -516,7 +517,8 @@ class DocumentClassifierV5:
                 "partial_keywords": ["受信通知", "国税電子申告", "メール詳細"],
                 "exclude_keywords": [
                     "メール詳細（納付区分番号通知）",  # Phase 2-2: 3004_納付情報との区別
-                    "法人税及び地方法人税申告書"
+                    "法人税及び地方法人税申告書",
+                    "納付すべき法人税額"  # v8.5.7: 中間申告mode 0003誤検出防止
                 ],
                 "filename_keywords": []
             },
