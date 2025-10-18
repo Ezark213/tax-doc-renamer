@@ -2532,7 +2532,7 @@ Ctrl+2：ログウィンドウを開く
 
         # 4桁数字チェック
         if not re.match(r'^\d{4}$', yymm_value):
-            self.left_yymm_status_var.set("⚠️ 無効: 4桁数字で入力してください")
+            self.left_yymm_status_var.set(f"⚠️ 無効: {yymm_value} (例: 2508, 25/08, ２５０８)")
             if hasattr(self, 'left_execute_btn'):
                 self.left_execute_btn.config(state='disabled')
             return
@@ -2540,7 +2540,7 @@ Ctrl+2：ログウィンドウを開く
         # 月の妥当性チェック (01-12)
         month = int(yymm_value[2:4])
         if month < 1 or month > 12:
-            self.left_yymm_status_var.set("⚠️ 無効: 月は01-12の範囲で入力してください")
+            self.left_yymm_status_var.set(f"⚠️ 無効: {yymm_value} (例: 2508, 25/08, ２５０８)")
             if hasattr(self, 'left_execute_btn'):
                 self.left_execute_btn.config(state='disabled')
             return

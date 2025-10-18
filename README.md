@@ -1,13 +1,37 @@
-# 🧾 税務書類リネームシステム v8.5.7
+# 🧾 税務書類リネームシステム v8.5.8
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.7-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.8-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.7では、中間申告モードにおける消費税受信通知(3003)の誤検出問題を修正しました。
+v8.5.8では、YYMM入力バリデーションメッセージを左右で統一しました。
+
+---
+
+## 🚀 **v8.5.8 - UI統一改善（2025年10月18日）**
+
+### 🆕 **YYMM無効時メッセージの統一（v8.5.8）**
+
+#### 🎯 **改善内容**
+
+**左側と右側のYYMM入力バリデーションメッセージを統一**
+
+**修正前:**
+- 左側（フォルダリネーム）: `"⚠️ 無効: 4桁数字で入力してください"`
+- 右側（AI分類・リネーム）: `f"⚠️ 無効: {current_value} (例: 2508, 25/08, ２５０８)"`
+
+**修正後（統一）:**
+- 左側・右側共通: `f"⚠️ 無効: {入力値} (例: 2508, 25/08, ２５０８)"`
+
+**効果:**
+- ✅ ユーザーが入力した値を表示することで、何が間違っているか明確に
+- ✅ 正しい入力例を表示することで、修正方法が一目瞭然
+- ✅ 左右で一貫したUX
+
+**実装箇所:** `main.py` 2535行目、2543行目
 
 ---
 
