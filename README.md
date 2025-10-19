@@ -1,13 +1,48 @@
-# 🧾 税務書類リネームシステム v8.5.14
+# 🧾 税務書類リネームシステム v8.6.0
 
-[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.5.14-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
+[![税務書類](https://img.shields.io/badge/%E7%A8%8E%E5%8B%99%E6%9B%B8%E9%A1%9E-v8.6.0-brightgreen.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://www.python.org)
 [![Enterprise](https://img.shields.io/badge/Enterprise-Production%20Ready-blue.svg)](https://github.com/Ezark213/tax-doc-renamer)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Integrated-purple.svg)](https://claude.ai/code)
 [![最新更新](https://img.shields.io/badge/%E6%9C%80%E6%96%B0%E6%9B%B4%E6%96%B0-2025.10.18-red.svg)](https://github.com/Ezark213/tax-doc-renamer)
 
 **エンタープライズ本番環境対応の日本税務書類自動分類・リネームシステムです。**
-v8.5.14では、中間申告モード対応と東京都特別区（23区）の処理改善を実装しました。
+v8.6.0では、接頭辞UI独立化・完了表示統一などユーザビリティを大幅に改善しました。
+
+---
+
+## 🚀 **v8.6.0 - UI改善: 接頭辞設定独立化と完了表示統一（2025年10月19日）**
+
+### 🆕 **ユーザビリティの大幅改善（v8.6.0）**
+
+#### 🎯 **主な変更内容**
+
+**1. 接頭辞設定の独立化とオプション入力**
+- ✅ 左側機能の接頭辞設定を独立したフレームに分離
+- ✅ 本票・受信通知の接頭辞をオプション入力可能に
+  - 入力した値を優先使用、空欄時は処理プロセスに応じた既定値を使用
+  - ユーザー設定の自動保存機能
+- ✅ ラベル表記を「本票接頭辞」→「本票」、「受信通知接頭辞」→「受信通知」に簡素化
+
+**2. 進捗表示の統一**
+- ✅ 右側（フォルダ一括処理）に完了メッセージ表示を追加
+- ✅ 処理中は「処理中...」、完了時は「完了」と表示
+- ✅ 左右両側の進捗表示UIを統一
+
+**3. UI表示の改善**
+- ✅ 右側の市区町村案内テキストを1行に簡素化
+- ✅ Windows ビルド設定の改善（アイコン適用の強化）
+
+#### 🎯 **技術詳細**
+
+**main.py の変更:**
+- 接頭辞設定フレームの独立化（517-661行目）
+- オプション入力フィールドの追加とユーザー設定保存
+- 右側進捗表示変数とラベルの追加（495-532行目）
+- 完了時の進捗更新処理（2137-2145行目）
+
+**build_app.spec の変更:**
+- Windows アイコン設定の明確化とコメント追加
 
 ---
 

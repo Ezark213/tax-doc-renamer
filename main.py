@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v8.2.0 メインアプリケーション
+税務書類リネームシステム v8.6.0 メインアプリケーション
 Phase D-1〜D-5リファクタリング完了版
 - 受信通知検出分離 (Phase D-1)
 - 左側・右側処理分離 (Phase D-2, D-3)
 - アーキテクチャ改善 (Phase D-5)
 - 東京都設定UI改善 (v8.2.0)
+- 処理モード統一・中間申告対応 (v8.5.14)
+- 接頭辞UI独立化・完了表示改善 (v8.6.0)
 """
 
 import tkinter as tk
@@ -66,10 +68,17 @@ class TaxDocumentRenamerV5:
 
         # アプリケーションアイコン設定
         try:
-            icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'app_icon.png')
+            # PyInstallerでビルドされた場合のパス取得
+            if getattr(sys, 'frozen', False):
+                # PyInstallerでビルドされた場合
+                base_path = sys._MEIPASS
+            else:
+                # 開発環境の場合
+                base_path = os.path.dirname(__file__)
+
+            icon_path = os.path.join(base_path, 'app_icon.ico')
             if os.path.exists(icon_path):
-                icon_image = tk.PhotoImage(file=icon_path)
-                self.root.iconphoto(True, icon_image)
+                self.root.iconbitmap(icon_path)
         except Exception as e:
             pass  # アイコン読み込みエラーは無視
 
@@ -506,6 +515,19 @@ class TaxDocumentRenamerV5:
         self.right_execute_btn.pack(fill='x')
         create_tooltip(self.right_execute_btn,
                       "フォルダを選択してAI分類・リネーム実行\n税務書類を自動分類して適切なファイル名に変換します")
+        
+        # 進捗表示ラベル（右側）
+        right_progress_frame = ttk.Frame(right_frame)
+        right_progress_frame.pack(fill='x', pady=(10, 0), padx=20)
+        
+        self.right_progress_var = tk.StringVar(value="")
+        self.right_progress_label = ttk.Label(
+            right_progress_frame,
+            textvariable=self.right_progress_var,
+            font=('Yu Gothic UI', 9),
+            foreground='#6B7280'
+        )
+        self.right_progress_label.pack(side='left')
 
     def _create_left_rename_panel(self, parent):
         """左側フォルダリネームパネル作成（右側と同じUI構造）"""
@@ -568,29 +590,74 @@ class TaxDocumentRenamerV5:
         create_tooltip(process_combo,
                       "処理プロセスを選択\n・源泉税: 01, 02\n・申請届出（国税のみ）: 01, 02\n・法定調書: 01, 02\n・給与支払報告書: 0001, 9001\n・償却資産申告書: 0001, 9001")
 
-        # 接頭辞を内部変数として初期化（UIには表示しない）
-        self.left_main_prefix_var = tk.StringVar()
-        self.left_receipt_prefix_var = tk.StringVar()
+        # 英語半角変換オプション（settings_frame内の最後）
+        normalize_frame_in_settings = ttk.Frame(settings_frame)
+        normalize_frame_in_settings.pack(fill='x', pady=(15, 0))
+
+        # 前回設定を復元
+        saved_normalize = self.user_settings.get_setting("normalize_english", False)
+        self.normalize_english_var = tk.BooleanVar(value=saved_normalize)
+
+        normalize_checkbox = ttk.Checkbutton(
+            normalize_frame_in_settings,
+            text="英語を半角に変換（例：Ｓｔａｎｄａｒｄ  →  Standard）",
+            variable=self.normalize_english_var,
+            command=lambda: self.user_settings.save_setting("normalize_english", self.normalize_english_var.get())
+        )
+        normalize_checkbox.pack(side='left', padx=(0, 0))
+        create_tooltip(normalize_checkbox, "会社名の全角英語を半角に変換します\n例：Ｓｔａｎｄａｒｄ  →  Standard")
+
+        # === 接頭辞設定エリア（独立） ===
+        prefix_frame = ttk.LabelFrame(parent, text="📝 接頭辞設定（オプション）", padding=15)
+        prefix_frame.pack(fill='x', pady=(15, 15), padx=20)
+        
+        # 本票
+        main_prefix_row = ttk.Frame(prefix_frame)
+        main_prefix_row.pack(fill='x', pady=(0, 8))
+        
+        ttk.Label(main_prefix_row, text="本票:", width=8).pack(side='left')
+        
+        # 前回設定を復元（デフォルトは空欄）
+        saved_main_prefix = self.user_settings.get_setting("left_main_prefix_override", "")
+        self.left_main_prefix_var = tk.StringVar(value=saved_main_prefix)
+        
+        main_prefix_entry = ttk.Entry(main_prefix_row, textvariable=self.left_main_prefix_var, width=12)
+        main_prefix_entry.pack(side='left', padx=(5, 5))
+        create_tooltip(main_prefix_entry, "本票ファイルの接頭辞を指定\n空欄の場合は処理プロセスに応じた既定値を使用\n例: 01, 0001")
+        
+        ttk.Label(main_prefix_row, text="（空欄で既定値）", font=('Yu Gothic UI', 8), foreground='#6B7280').pack(side='left')
+        
+        # 受信通知
+        receipt_prefix_row = ttk.Frame(prefix_frame)
+        receipt_prefix_row.pack(fill='x', pady=(0, 0))
+        
+        ttk.Label(receipt_prefix_row, text="受信通知:", width=8).pack(side='left')
+        
+        # 前回設定を復元（デフォルトは空欄）
+        saved_receipt_prefix = self.user_settings.get_setting("left_receipt_prefix_override", "")
+        self.left_receipt_prefix_var = tk.StringVar(value=saved_receipt_prefix)
+        
+        receipt_prefix_entry = ttk.Entry(receipt_prefix_row, textvariable=self.left_receipt_prefix_var, width=12)
+        receipt_prefix_entry.pack(side='left', padx=(5, 5))
+        create_tooltip(receipt_prefix_entry, "受信通知ファイルの接頭辞を指定\n空欄の場合は処理プロセスに応じた既定値を使用\n例: 02, 9001")
+        
+        ttk.Label(receipt_prefix_row, text="（空欄で既定値）", font=('Yu Gothic UI', 8), foreground='#6B7280').pack(side='left')
+        
+        # 入力値を保存
+        def save_prefix_settings(*args):
+            self.user_settings.save_setting("left_main_prefix_override", self.left_main_prefix_var.get())
+            self.user_settings.save_setting("left_receipt_prefix_override", self.left_receipt_prefix_var.get())
+        
+        self.left_main_prefix_var.trace_add('write', save_prefix_settings)
+        self.left_receipt_prefix_var.trace_add('write', save_prefix_settings)
 
         # 処理プロセスに応じて接頭辞を自動設定する関数
         def update_prefixes_based_on_process():
             process = self.process_type_var.get()
-
-            # 処理プロセスに応じて接頭辞を自動設定
-            if process in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
-                self.left_main_prefix_var.set("01")
-                self.left_receipt_prefix_var.set("02")
-            elif process in ["給与支払報告書", "償却資産申告書"]:
-                self.left_main_prefix_var.set("0001")
-                self.left_receipt_prefix_var.set("9001")
-
-            # 設定を保存
+            # 設定を保存（接頭辞はユーザー入力を優先）
             self.user_settings.save_setting("process_type", process)
-            self.user_settings.save_setting("main_prefix", self.left_main_prefix_var.get())
-            self.user_settings.save_setting("receipt_prefix", self.left_receipt_prefix_var.get())
 
-        # 初期化時に接頭辞を設定
-        update_prefixes_based_on_process()
+        # 初期化（接頭辞はユーザー入力値を保持）
 
         # 選択後にフォーカスを外して背景色をリセット & 設定を保存
         def on_process_change(event):
@@ -600,22 +667,7 @@ class TaxDocumentRenamerV5:
 
         process_combo.bind('<<ComboboxSelected>>', on_process_change)
 
-        # 英語半角変換オプション
-        normalize_frame = ttk.Frame(settings_frame)
-        normalize_frame.pack(fill='x', pady=(15, 0))
 
-        # 前回設定を復元
-        saved_normalize = self.user_settings.get_setting("normalize_english", False)
-        self.normalize_english_var = tk.BooleanVar(value=saved_normalize)
-
-        normalize_checkbox = ttk.Checkbutton(
-            normalize_frame,
-            text="英語を半角に変換（例：Ｓｔａｎｄａｒｄ  →  Standard）",
-            variable=self.normalize_english_var,
-            command=lambda: self.user_settings.save_setting("normalize_english", self.normalize_english_var.get())
-        )
-        normalize_checkbox.pack(side='left', padx=(0, 0))
-        create_tooltip(normalize_checkbox, "会社名の全角英語を半角に変換します\n例：Ｓｔａｎｄａｒｄ  →  Standard")
 
         # リネーム実行ボタン（一番下）
         button_frame = ttk.Frame(parent)
@@ -639,6 +691,19 @@ class TaxDocumentRenamerV5:
         self.left_execute_btn.pack(fill='x')
         create_tooltip(self.left_execute_btn,
                       "フォルダを選択してリネーム実行\nフォルダ名を自動で標準化されたファイル名に変換します")
+        
+        # 進捗表示ラベル
+        progress_frame = ttk.Frame(parent)
+        progress_frame.pack(fill='x', pady=(10, 0), padx=20)
+        
+        self.left_progress_var = tk.StringVar(value="")
+        self.left_progress_label = ttk.Label(
+            progress_frame,
+            textvariable=self.left_progress_var,
+            font=('Yu Gothic UI', 9),
+            foreground='#6B7280'
+        )
+        self.left_progress_label.pack(side='left')
 
     def _create_municipality_settings(self, parent):
         """自治体設定UIの作成"""
@@ -830,13 +895,9 @@ class TaxDocumentRenamerV5:
         content_frame.pack(fill='x', padx=10, pady=8)
 
         # 案内テキスト
-        info_text_1 = tk.Label(content_frame, text="• 東京都特別区（23区）: セット1に優先して設定してください",
+        info_text_1 = tk.Label(content_frame, text="• 東京都特別区（23区）: セット1に優先して設定し、市町村欄は空欄にして下さい",
                                bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
         info_text_1.pack(fill='x')
-
-        info_text_2 = tk.Label(content_frame, text="• 東京都特別区(23区): 市区町村欄は空白にしてください",
-                               bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
-        info_text_2.pack(fill='x')
 
         info_text_3 = tk.Label(content_frame, text="• 市区町村の入力形式(23区以外): 「八王子市」「横浜市」「大阪市」「白川村」など",
                                bg=self.colors['bg_light'], fg=self.colors['text_medium'], anchor='w', font=('', 9), wraplength=550, justify='left')
@@ -1100,6 +1161,9 @@ class TaxDocumentRenamerV5:
         # バックグラウンド処理開始
         self.rename_processing = True
         self._update_button_states()
+        
+        # 右側の進捗表示を更新
+        self.right_progress_var.set("処理中...")
         
         pdf_count = len([f for f in target_files if f.lower().endswith('.pdf')])
         csv_count = len([f for f in target_files if f.lower().endswith('.csv')])
@@ -2078,6 +2142,9 @@ class TaxDocumentRenamerV5:
         """リネーム処理完了時の処理"""
         self.rename_processing = False
         self._update_button_states()
+        
+        # 右側の進捗表示を更新
+        self.right_progress_var.set("完了")
 
         # メッセージボックスをタブ切り替えの前に表示（ウィンドウが隠れないように）
         messagebox.showinfo("完了", "処理が完了しました")
@@ -2477,7 +2544,7 @@ Ctrl+2：ログウィンドウを開く
         ttk.Label(content_frame, text="📄", font=('Arial', 48)).pack()
         ttk.Label(content_frame, text="税務書類リネームシステム",
                  font=('Yu Gothic UI', 14, 'bold')).pack(pady=5)
-        ttk.Label(content_frame, text="Version 8.5.14",
+        ttk.Label(content_frame, text="Version 8.6.0",
                  font=('Yu Gothic UI', 10, 'bold')).pack()
 
         # 更新内容（スクロール可能）
@@ -2492,7 +2559,18 @@ Ctrl+2：ログウィンドウを開く
         scrollbar.pack(side='right', fill='y')
         text_widget.pack(side='left', fill='both', expand=True)
 
-        updates = """【v8.5.14: 中間申告モード対応と東京都特別区処理改善】
+        updates = """【v8.6.0: UI改善 - 接頭辞設定独立化と完了表示統一】
+• 左側機能の接頭辞設定を独立したフレームに分離
+• 本票・受信通知の接頭辞をオプション入力可能に
+  - 入力した値を優先使用、空欄時は処理プロセスに応じた既定値を使用
+  - ユーザー設定の自動保存機能
+• 右側（フォルダ一括処理）に完了メッセージ表示を追加
+• 右側の市区町村案内テキストを簡素化
+• ラベル表記を「本票接頭辞」→「本票」、「受信通知接頭辞」→「受信通知」に変更
+• 左右両側の進捗表示を統一
+• Windows ビルド設定の改善（アイコン適用の強化）
+
+【v8.5.14: 中間申告モード対応と東京都特別区処理改善】
 • 処理モードを「予定申告」から「中間申告」に統一
 • 東京都特別区（23区）の繰り上がりロジック改善
   - 市区町村が空欄の場合のみ繰り上がりを発動
@@ -2640,8 +2718,23 @@ Ctrl+2：ログウィンドウを開く
         self.left_execute_btn.config(state='disabled')
 
         # 🆕 統一パラメータ: 接頭辞、YYMM、全角半角変換（全機能共通）
+        # ユーザー入力があればそれを使用、なければプロセスタイプに応じたデフォルト値
         main_prefix = self.left_main_prefix_var.get()
         receipt_prefix = self.left_receipt_prefix_var.get()
+        
+        # 空欄の場合は処理プロセスに応じたデフォルト値を設定
+        if not main_prefix:
+            if process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+                main_prefix = "01"
+            elif process_type in ["給与支払報告書", "償却資産申告書"]:
+                main_prefix = "0001"
+        
+        if not receipt_prefix:
+            if process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+                receipt_prefix = "02"
+            elif process_type in ["給与支払報告書", "償却資産申告書"]:
+                receipt_prefix = "9001"
+        
         normalize_english = self.normalize_english_var.get()
 
         # 🆕 各機能の個別処理を呼び出し（統一パラメータを渡す）
