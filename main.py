@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-税務書類リネームシステム v8.6.0 メインアプリケーション
+税務書類リネームシステム v8.6.1 メインアプリケーション
 Phase D-1〜D-5リファクタリング完了版
 - 受信通知検出分離 (Phase D-1)
 - 左側・右側処理分離 (Phase D-2, D-3)
@@ -8,6 +8,7 @@ Phase D-1〜D-5リファクタリング完了版
 - 東京都設定UI改善 (v8.2.0)
 - 処理モード統一・中間申告対応 (v8.5.14)
 - 接頭辞UI独立化・完了表示改善 (v8.6.0)
+- 受信通知検出ロジック改善 (v8.6.1)
 """
 
 import tkinter as tk
@@ -58,7 +59,7 @@ from core.thread_manager import ThreadManager
 
 
 class TaxDocumentRenamerV5:
-    """税務書類リネームシステム v8.2.0 メインクラス (Phase D-1〜D-5完了, UI改善)"""
+    """税務書類リネームシステム v8.6.1 メインクラス (Phase D-1〜D-5完了, UI改善, 受信通知検出改善)"""
     
     def __init__(self):
         """初期化"""
@@ -474,7 +475,7 @@ class TaxDocumentRenamerV5:
             textvariable=self.process_mode_var,
             values=["確定申告", "中間申告"],
             state='readonly',
-            width=15,
+            width=25,
             font=('Yu Gothic UI', 10)
         )
         mode_combo.pack(side='left', padx=(10, 5))
@@ -569,26 +570,36 @@ class TaxDocumentRenamerV5:
         ttk.Label(process_frame, text="処理プロセス:", font=('Yu Gothic UI', 10)).pack(side='left')
 
         # 前回設定を復元（デフォルトは源泉税）
-        saved_process = self.user_settings.get_setting("process_type", "源泉税")
+        saved_process = self.user_settings.get_setting("process_type", "源泉税(帳票:複数、顧客:複数)")
+        # 旧設定との互換性を保つ
+        process_mapping = {
+            "源泉税": "源泉税(帳票:複数、顧客:複数)",
+            "申請届出（国税のみ）": "申請届出(帳票:複数、顧客:単一)※国税のみ対応",
+            "法定調書": "法定調書(帳票:単一、顧客:複数)",
+            "給与支払報告書": "給与支払報告書(帳票:単一、顧客:複数)",
+            "償却資産申告書": "償却資産申告書(帳票:単一、顧客:複数)"
+        }
+        if saved_process in process_mapping:
+            saved_process = process_mapping[saved_process]
         self.process_type_var = tk.StringVar(value=saved_process)
 
         process_combo = ttk.Combobox(
             process_frame,
             textvariable=self.process_type_var,
             values=[
-                "源泉税",
-                "申請届出（国税のみ）",
-                "法定調書",
-                "給与支払報告書",
-                "償却資産申告書"
+                "源泉税(帳票:複数、顧客:複数)",
+                "申請届出(帳票:複数、顧客:単一)※国税のみ対応",
+                "法定調書(帳票:単一、顧客:複数)",
+                "給与支払報告書(帳票:単一、顧客:複数)",
+                "償却資産申告書(帳票:単一、顧客:複数)"
             ],
             state='readonly',
-            width=20,
+            width=35,
             font=('Yu Gothic UI', 10)
         )
         process_combo.pack(side='left', padx=(10, 5))
         create_tooltip(process_combo,
-                      "処理プロセスを選択\n・源泉税: 01, 02\n・申請届出（国税のみ）: 01, 02\n・法定調書: 01, 02\n・給与支払報告書: 0001, 9001\n・償却資産申告書: 0001, 9001")
+                      "処理プロセスを選択\n・源泉税(帳票:複数、顧客:複数)\n・申請届出(帳票:複数、顧客:単一)※国税のみ対応\n・法定調書(帳票:単一、顧客:複数)\n・給与支払報告書(帳票:単一、顧客:複数)\n・償却資産申告書(帳票:単一、顧客:複数)")
 
         # 英語半角変換オプション（settings_frame内の最後）
         normalize_frame_in_settings = ttk.Frame(settings_frame)
@@ -2354,11 +2365,11 @@ class TaxDocumentRenamerV5:
         # 左側処理（5種類）
         left_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="左側処理", menu=left_menu)
-        left_menu.add_command(label="源泉税", command=lambda: self._set_process_and_execute("源泉税"))
-        left_menu.add_command(label="申請届出（国税のみ）", command=lambda: self._set_process_and_execute("申請届出（国税のみ）"))
-        left_menu.add_command(label="法定調書", command=lambda: self._set_process_and_execute("法定調書"))
-        left_menu.add_command(label="給与支払報告書", command=lambda: self._set_process_and_execute("給与支払報告書"))
-        left_menu.add_command(label="償却資産申告書", command=lambda: self._set_process_and_execute("償却資産申告書"))
+        left_menu.add_command(label="源泉税(帳票:複数、顧客:複数)", command=lambda: self._set_process_and_execute("源泉税(帳票:複数、顧客:複数)"))
+        left_menu.add_command(label="申請届出(帳票:複数、顧客:単一)※国税のみ対応", command=lambda: self._set_process_and_execute("申請届出(帳票:複数、顧客:単一)※国税のみ対応"))
+        left_menu.add_command(label="法定調書(帳票:単一、顧客:複数)", command=lambda: self._set_process_and_execute("法定調書(帳票:単一、顧客:複数)"))
+        left_menu.add_command(label="給与支払報告書(帳票:単一、顧客:複数)", command=lambda: self._set_process_and_execute("給与支払報告書(帳票:単一、顧客:複数)"))
+        left_menu.add_command(label="償却資産申告書(帳票:単一、顧客:複数)", command=lambda: self._set_process_and_execute("償却資産申告書(帳票:単一、顧客:複数)"))
 
         # 右側処理（2種類）
         right_menu = tk.Menu(file_menu, tearoff=0)
@@ -2406,14 +2417,14 @@ class TaxDocumentRenamerV5:
 ■ 画面の使い分け
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-【左側】源泉税などのフォルダ整理
+【左側】源泉税(帳票:複数、顧客:複数)などのフォルダ整理
 　受信通知を自動で分割して、正しいフォルダに振り分けます
 
 【右側】税務書類の自動分類・ファイル名変更
 　PDFを読み取って、書類の種類を自動判定します
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-■ 左側の使い方（源泉税フォルダ整理）
+■ 左側の使い方(源泉税(帳票:複数、顧客:複数)フォルダ整理)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ステップ1: 年月を入力
@@ -2421,8 +2432,8 @@ class TaxDocumentRenamerV5:
 　→ フォルダリネーム時に使用されます
 
 ステップ2: 処理プロセスを選択
-　→ 源泉税・申請届出・法定調書：01, 02
-　→ 給与支払報告書・償却資産申告書：0001, 9001
+　→ 源泉税(帳票:複数、顧客:複数)・申請届出(帳票:複数、顧客:単一)※国税のみ対応・法定調書(帳票:単一、顧客:複数)：01, 02
+　→ 給与支払報告書(帳票:単一、顧客:複数)・償却資産申告書(帳票:単一、顧客:複数)：0001, 9001
 
 ステップ3: 会社名の英語表記（オプション）
 　→ 全角の英語を半角にしたい場合はチェック
@@ -2432,11 +2443,11 @@ class TaxDocumentRenamerV5:
 　→ フォルダを選ぶと自動で処理が始まります
 
 【対応処理タイプ】
-　・源泉税
-　・申請届出（国税のみ）
-　・法定調書
-　・給与支払報告書
-　・償却資産申告書
+　・源泉税(帳票:複数、顧客:複数)
+　・申請届出(帳票:複数、顧客:単一)※国税のみ対応
+　・法定調書(帳票:単一、顧客:複数)
+　・給与支払報告書(帳票:単一、顧客:複数)
+　・償却資産申告書(帳票:単一、顧客:複数)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ■ 右側の使い方（書類の自動分類）
@@ -2465,11 +2476,11 @@ class TaxDocumentRenamerV5:
 
 ファイル(F)
 　・左側処理：5種類の処理から選択
-　　- 源泉税
-　　- 申請届出（国税のみ）
-　　- 法定調書
-　　- 給与支払報告書
-　　- 償却資産申告書
+　　- 源泉税(帳票:複数、顧客:複数)
+　　- 申請届出(帳票:複数、顧客:単一)※国税のみ対応
+　　- 法定調書(帳票:単一、顧客:複数)
+　　- 給与支払報告書(帳票:単一、顧客:複数)
+　　- 償却資産申告書(帳票:単一、顧客:複数)
 　・右側処理：2種類のモードから選択
 　　- 確定申告
 　　- 中間申告
@@ -2517,11 +2528,13 @@ Ctrl+2：ログウィンドウを開く
     def _set_process_and_execute(self, process_type):
         """左側処理タイプを設定して実行"""
         self.process_type_var.set(process_type)
-        # 接頭辞を自動設定
-        if process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+        # 接頭辞を自動設定（旧名称との互換性を保つ）
+        if (process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"] or
+            process_type in ["源泉税(帳票:複数、顧客:複数)", "申請届出(帳票:複数、顧客:単一)※国税のみ対応", "法定調書(帳票:単一、顧客:複数)"]):
             self.left_main_prefix_var.set("01")
             self.left_receipt_prefix_var.set("02")
-        elif process_type in ["給与支払報告書", "償却資産申告書"]:
+        elif (process_type in ["給与支払報告書", "償却資産申告書"] or
+              process_type in ["給与支払報告書(帳票:単一、顧客:複数)", "償却資産申告書(帳票:単一、顧客:複数)"]):
             self.left_main_prefix_var.set("0001")
             self.left_receipt_prefix_var.set("9001")
         self._left_execute()
@@ -2559,7 +2572,15 @@ Ctrl+2：ログウィンドウを開く
         scrollbar.pack(side='right', fill='y')
         text_widget.pack(side='left', fill='both', expand=True)
 
-        updates = """【v8.6.0: UI改善 - 接頭辞設定独立化と完了表示統一】
+        updates = """【v8.6.1: 受信通知検出ロジック改善】
+• 源泉税受信通知の検出精度を向上
+  - PDF内の空白・改行を正規化して判定
+  - 判定条件を緩和（「メール詳細」+「送信された」で検出）
+  - 様々な形式の受信通知PDFに対応
+• 「受信.pdf」「jusi.pdf」「受信通知.pdf」など異なるファイル名でも確実に検出
+• 法定調書・給与支払報告書・償却資産申告書の処理には影響なし
+
+【v8.6.0: UI改善 - 接頭辞設定独立化と完了表示統一】
 • 左側機能の接頭辞設定を独立したフレームに分離
 • 本票・受信通知の接頭辞をオプション入力可能に
   - 入力した値を優先使用、空欄時は処理プロセスに応じた既定値を使用
@@ -2724,33 +2745,37 @@ Ctrl+2：ログウィンドウを開く
         
         # 空欄の場合は処理プロセスに応じたデフォルト値を設定
         if not main_prefix:
-            if process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+            if (process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"] or
+                process_type in ["源泉税(帳票:複数、顧客:複数)", "申請届出(帳票:複数、顧客:単一)※国税のみ対応", "法定調書(帳票:単一、顧客:複数)"]):
                 main_prefix = "01"
-            elif process_type in ["給与支払報告書", "償却資産申告書"]:
+            elif (process_type in ["給与支払報告書", "償却資産申告書"] or
+                  process_type in ["給与支払報告書(帳票:単一、顧客:複数)", "償却資産申告書(帳票:単一、顧客:複数)"]):
                 main_prefix = "0001"
-        
+
         if not receipt_prefix:
-            if process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"]:
+            if (process_type in ["源泉税", "申請届出（国税のみ）", "法定調書"] or
+                process_type in ["源泉税(帳票:複数、顧客:複数)", "申請届出(帳票:複数、顧客:単一)※国税のみ対応", "法定調書(帳票:単一、顧客:複数)"]):
                 receipt_prefix = "02"
-            elif process_type in ["給与支払報告書", "償却資産申告書"]:
+            elif (process_type in ["給与支払報告書", "償却資産申告書"] or
+                  process_type in ["給与支払報告書(帳票:単一、顧客:複数)", "償却資産申告書(帳票:単一、顧客:複数)"]):
                 receipt_prefix = "9001"
         
         normalize_english = self.normalize_english_var.get()
 
         # 🆕 各機能の個別処理を呼び出し（統一パラメータを渡す）
-        if process_type == "源泉税":
+        if process_type in ["源泉税", "源泉税(帳票:複数、顧客:複数)"]:
             target_method = self._process_gensen
             args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
-        elif process_type == "法定調書":
+        elif process_type in ["法定調書", "法定調書(帳票:単一、顧客:複数)"]:
             target_method = self._process_hoteichosho
             args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
-        elif process_type == "申請届出（国税のみ）":
+        elif process_type in ["申請届出（国税のみ）", "申請届出(帳票:複数、顧客:単一)※国税のみ対応"]:
             target_method = self._process_application
             args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
-        elif process_type == "給与支払報告書":
+        elif process_type in ["給与支払報告書", "給与支払報告書(帳票:単一、顧客:複数)"]:
             target_method = self._process_payroll_report
             args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
-        elif process_type == "償却資産申告書":
+        elif process_type in ["償却資産申告書", "償却資産申告書(帳票:単一、顧客:複数)"]:
             target_method = self._process_depreciable_assets
             args = (folder_path, yymm_value, main_prefix, receipt_prefix, normalize_english)
         else:
@@ -5002,7 +5027,7 @@ Ctrl+2：ログウィンドウを開く
 
     def run(self):
         """アプリケーション実行"""
-        self._log("税務書類リネームシステム v7.2.3-MULTI-PATTERN-RECEIPT 起動 (マルチパターン受信通知検出版)")
+        self._log("税務書類リネームシステム v8.6.1 起動 (受信通知検出改善版)")
 
         # パフォーマンス最適化: UI構築完了後にウィンドウを表示
         try:

@@ -46,7 +46,7 @@ class UserSettingsManager:
             "version": "1.0.0",
             "yymm_value": "2508",
             "left_yymm_value": "2508",  # 左側機能用
-            "process_type": "源泉税",  # v5.6.0: 処理種別の自動保存
+            "process_type": "源泉税(帳票:複数、顧客:複数)",  # v5.6.0: 処理種別の自動保存
             "main_prefix": "01",  # v5.6.0: 本票接尾辞の自動保存
             "receipt_prefix": "02",  # v5.6.0: 受信通知接尾辞の自動保存
             "normalize_english": False,  # v8.5.1: 全角英語→半角変換の自動保存

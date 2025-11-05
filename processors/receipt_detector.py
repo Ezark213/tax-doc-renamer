@@ -46,7 +46,7 @@ class ReceiptDetector:
 
         判定条件:
         1. 給与支払報告/償却資産: 「申告受付完了通知」かつ「送信された申告データを受付けました」
-        2. 源泉税: 「メール詳細」かつ「送信されたデータを受け付けました」
+        2. 源泉税: 「メール詳細」かつ「送信された」（空白・改行・表記ゆれ対応）
 
         Args:
             file_path: PDF完全パス
@@ -63,12 +63,17 @@ class ReceiptDetector:
                 first_page_text = doc[0].get_text()
                 doc.close()
 
+                # 空白・改行を正規化（全て削除）
+                import re
+                normalized_text = re.sub(r'\s+', '', first_page_text)
+
                 # パターン1: 給与支払報告/償却資産の受信通知
-                if "申告受付完了通知" in first_page_text and "送信された申告データを受付けました" in first_page_text:
+                if "申告受付完了通知" in normalized_text and "送信された申告データを受付けました" in normalized_text:
                     return True
 
-                # パターン2: 源泉税の受信通知
-                if "メール詳細" in first_page_text and "送信されたデータを受け付けました" in first_page_text:
+                # パターン2: 源泉税の受信通知（条件緩和）
+                # 「メール詳細」かつ「送信された」が含まれていればOK
+                if "メール詳細" in normalized_text and "送信された" in normalized_text:
                     return True
             else:
                 doc.close()
@@ -102,12 +107,16 @@ class ReceiptDetector:
                 first_page_text = doc[0].get_text()
                 doc.close()
 
+                # 空白・改行を正規化（全て削除）
+                import re
+                normalized_text = re.sub(r'\s+', '', first_page_text)
+
                 # パターン1: 給与支払報告/償却資産の受信通知
-                if "申告受付完了通知" in first_page_text and "送信された申告データを受付けました" in first_page_text:
+                if "申告受付完了通知" in normalized_text and "送信された申告データを受付けました" in normalized_text:
                     return "payroll_depreciation"
 
-                # パターン2: 源泉税の受信通知
-                if "メール詳細" in first_page_text and "送信されたデータを受け付けました" in first_page_text:
+                # パターン2: 源泉税の受信通知（条件緩和）
+                if "メール詳細" in normalized_text and "送信された" in normalized_text:
                     return "gensen"
             else:
                 doc.close()
@@ -148,28 +157,32 @@ class ReceiptDetector:
 
                 result["first_page_text_length"] = len(first_page_text)
 
+                # 空白・改行を正規化（全て削除）
+                import re
+                normalized_text = re.sub(r'\s+', '', first_page_text)
+
                 # キーワード検出
                 keywords_found = []
 
                 # パターン1チェック
-                if "申告受付完了通知" in first_page_text:
+                if "申告受付完了通知" in normalized_text:
                     keywords_found.append("申告受付完了通知")
-                if "送信された申告データを受付けました" in first_page_text:
+                if "送信された申告データを受付けました" in normalized_text:
                     keywords_found.append("送信された申告データを受付けました")
 
                 # パターン2チェック
-                if "メール詳細" in first_page_text:
+                if "メール詳細" in normalized_text:
                     keywords_found.append("メール詳細")
-                if "送信されたデータを受け付けました" in first_page_text:
-                    keywords_found.append("送信されたデータを受け付けました")
+                if "送信された" in normalized_text:
+                    keywords_found.append("送信された")
 
                 result["detected_keywords"] = keywords_found
 
                 # パターン判定
-                if "申告受付完了通知" in first_page_text and "送信された申告データを受付けました" in first_page_text:
+                if "申告受付完了通知" in normalized_text and "送信された申告データを受付けました" in normalized_text:
                     result["is_receipt"] = True
                     result["receipt_type"] = "payroll_depreciation"
-                elif "メール詳細" in first_page_text and "送信されたデータを受け付けました" in first_page_text:
+                elif "メール詳細" in normalized_text and "送信された" in normalized_text:
                     result["is_receipt"] = True
                     result["receipt_type"] = "gensen"
             else:
